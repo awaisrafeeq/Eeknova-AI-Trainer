@@ -1,0 +1,99 @@
+KRO Project - Documentation Validation Report
+=============================================
+
+Total Validations: 19
+Valid: 14
+Partial: 1
+Invalid: 1
+Errors: 3
+Documentation Accuracy: 73.7%
+
+File main.py: VALID
+  Expected: main.py
+  Actual: main.py
+  Details: Size: 3,526 bytes
+
+File feedback_processor.py: VALID
+  Expected: feedback_processor.py
+  Actual: src/feedback_processor.py
+  Details: Size: 47,332 bytes
+
+File skeleton_processor.py: VALID
+  Expected: skeleton_processor.py
+  Actual: src/skeleton_processor.py
+  Details: Size: 7,667 bytes
+
+File data/improved_automatic_references.json: VALID
+  Expected: data/improved_automatic_references.json
+  Actual: src/improved_automatic_references.json
+  Details: Size: 112,321 bytes
+
+File models/yolo11x-pose.pt: VALID
+  Expected: models/yolo11x-pose.pt
+  Actual: yolo11x-pose.pt
+  Details: Size: 118,481,010 bytes
+
+Dance Moves Count: VALID
+  Expected: 21 moves
+  Actual: 21 moves
+  Details: Count matches documentation
+
+Keypoints Count: VALID
+  Expected: 17 keypoints
+  Actual: 17 keypoints
+  Details: COCO-17 format confirmed
+
+Confidence Threshold: ERROR
+  Details: 'charmap' codec can't decode byte 0x9d in position 3098: character maps to <undefined>
+
+Joint elbows: INVALID
+  Expected: ['left_elbow_angle', 'right_elbow_angle']
+  Actual: NOT FOUND
+  Details: Joint angles missing
+
+Joint shoulders: VALID
+  Expected: ['left_shoulder_lift', 'right_shoulder_lift']
+  Actual: ['left_shoulder_lift', 'right_shoulder_lift']
+  Details: Found 2/2 angles
+
+Joint hips: VALID
+  Expected: ['left_hip_flex', 'right_hip_flex']
+  Actual: ['left_hip_flex', 'right_hip_flex']
+  Details: Found 2/2 angles
+
+Joint knees: VALID
+  Expected: ['left_leg_angle', 'right_leg_angle']
+  Actual: ['left_leg_angle', 'right_leg_angle']
+  Details: Found 2/2 angles
+
+Command Arguments: ERROR
+  Details: 'charmap' codec can't decode byte 0x9d in position 1408: character maps to <undefined>
+
+YOLO Model: PARTIAL
+  Expected: yolo11x-pose.pt
+  Actual: Unknown model (113.0MB)
+  Details: Model loads but type unclear
+
+Operating Modes: ERROR
+  Details: 'charmap' codec can't decode byte 0x9d in position 1408: character maps to <undefined>
+
+Dependency opencv: VALID
+  Expected: opencv
+  Actual: FOUND
+  Details: Listed in requirements.txt
+
+Dependency numpy: VALID
+  Expected: numpy
+  Actual: FOUND
+  Details: Listed in requirements.txt
+
+Dependency ultralytics: VALID
+  Expected: ultralytics
+  Actual: FOUND
+  Details: Listed in requirements.txt
+
+Dependency pyttsx3: VALID
+  Expected: pyttsx3
+  Actual: FOUND
+  Details: Listed in requirements.txt
+
