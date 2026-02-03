@@ -89,3 +89,9 @@ tests/
 # Backup files
 *.bak
 *.backup
+
+# Large files (optional - uncomment if needed)
+# frontend/public/T_Body_N.PNG
+# frontend/public/T_Body_SRMF.PNG
+# *.PNG
+# *.png
