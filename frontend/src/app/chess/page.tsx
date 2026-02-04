@@ -108,48 +108,33 @@ export default function ChessPage() {
   useEffect(() => {
     const loadChessProgress = async () => {
       try {
-        console.log('🔍 DEBUG: Starting chess progress load...');
         
-        // Step 1: Get current logged-in user token from existing auth system
-        console.log('🔍 DEBUG: Getting auth token...');
         const token = localStorage.getItem('access_token');
         
         if (!token) {
-          console.error('🔍 DEBUG: No auth token found, user not logged in');
           setModuleProgress({});
           return;
         }
         
-        console.log('🔍 DEBUG: Token found:', token ? '✅' : '❌');
-
-        // Step 2: Get username from token using existing auth system
-        console.log('🔍 DEBUG: Getting user profile...');
         const profileResponse = await fetch('http://localhost:8000/api/auth/me', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         });
-        console.log('🔍 DEBUG: Profile response status:', profileResponse.status);
 
         if (!profileResponse.ok) {
-          console.error('🔍 DEBUG: Failed to get user profile');
           setModuleProgress({});
           return;
         }
 
         const profile = await profileResponse.json();
-        console.log('🔍 DEBUG: Profile received:', profile.username ? '✅' : '❌');
         const username = profile.username;
 
         if (!username) {
-          console.error('🔍 DEBUG: No username found in profile');
           setModuleProgress({});
           return;
         }
-
-        // Step 3: Get chess progress using available endpoint
-        console.log('🔍 DEBUG: Getting chess progress for user:', username);
         
         // First try module progress endpoint (where we actually save the data)
         const progressResponse = await fetch(`http://localhost:8000/api/module/progress/${username}`, {
@@ -158,57 +143,43 @@ export default function ChessPage() {
             'Content-Type': 'application/json'
           }
         });
-        console.log('🔍 DEBUG: Module progress response status:', progressResponse.status);
         
         if (!progressResponse.ok) {
           // Try chess progress endpoint as fallback
-          console.log('🔍 DEBUG: Module progress endpoint failed, trying chess endpoint...');
           const chessProgressResponse = await fetch(`http://localhost:8000/api/chess/progress/${username}`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
             }
           });
-          console.log('🔍 DEBUG: Chess progress response status:', chessProgressResponse.status);
-          
+         
           if (!chessProgressResponse.ok) {
-            console.log('🔍 DEBUG: No progress data found, starting with empty progress');
             setModuleProgress({});
             return;
           }
           
           const chessData = await chessProgressResponse.json();
-          console.log('🔍 DEBUG: Chess progress data received:', chessData.data ? '✅' : '❌');
-          console.log('🔍 DEBUG: Full chess data structure:', JSON.stringify(chessData, null, 2));
-          
+         
           // Process chess progress data
           const progressData: Record<string, number> = {};
           
           if (chessData.data) {
-            console.log('🔍 DEBUG: Processing chessData.data:', chessData.data);
             
             if (Array.isArray(chessData.data)) {
-              console.log('🔍 DEBUG: chessData.data is an array');
               chessData.data.forEach((item: any, index: number) => {
-                console.log(`🔍 DEBUG: Item ${index}:`, item);
                 if (item.module_id && item.progress !== undefined) {
                   progressData[item.module_id] = Math.min(100, item.progress);
-                  console.log(`🔍 DEBUG: Added progress for ${item.module_id}: ${item.progress}`);
                 } else {
                   console.log(`🔍 DEBUG: Item missing module_id or progress:`, item);
                 }
               });
             } else if (typeof chessData.data === 'object') {
-              console.log('🔍 DEBUG: chessData.data is an object');
               Object.keys(chessData.data).forEach(key => {
                 const value = chessData.data[key];
-                console.log(`🔍 DEBUG: Object key ${key}:`, value);
                 if (typeof value === 'object' && value.module_id && value.progress !== undefined) {
                   progressData[value.module_id] = Math.min(100, value.progress);
-                  console.log(`🔍 DEBUG: Added progress for ${value.module_id}: ${value.progress}`);
                 } else if (typeof value === 'number') {
                   progressData[key] = Math.min(100, value);
-                  console.log(`🔍 DEBUG: Added progress for ${key}: ${value}`);
                 }
               });
             }
@@ -216,41 +187,31 @@ export default function ChessPage() {
             console.log('🔍 DEBUG: No chessData.data found');
           }
           
-          console.log('🔍 DEBUG: Final progress data:', progressData);
           setModuleProgress(progressData);
         } else {
           const moduleData = await progressResponse.json();
-          console.log('🔍 DEBUG: Module progress data received:', moduleData.data ? '✅' : '❌');
-          console.log('🔍 DEBUG: Full module data structure:', JSON.stringify(moduleData, null, 2));
           
           // Process module progress data
           const progressData: Record<string, number> = {};
           
           if (moduleData.data) {
-            console.log('🔍 DEBUG: Processing moduleData.data:', moduleData.data);
             
             if (Array.isArray(moduleData.data)) {
-              console.log('🔍 DEBUG: moduleData.data is an array');
               moduleData.data.forEach((item: any, index: number) => {
-                console.log(`🔍 DEBUG: Item ${index}:`, item);
                 if (item.module_id && item.progress_percentage !== undefined) {
                   progressData[item.module_id] = Math.min(100, item.progress_percentage);
-                  console.log(`🔍 DEBUG: Added progress for ${item.module_id}: ${item.progress_percentage}`);
-                } else {
+                  } else {
                   console.log(`🔍 DEBUG: Item missing module_id or progress_percentage:`, item);
                 }
               });
             } else if (typeof moduleData.data === 'object') {
-              console.log('🔍 DEBUG: moduleData.data is an object');
               Object.keys(moduleData.data).forEach(key => {
                 const value = moduleData.data[key];
                 console.log(`🔍 DEBUG: Object key ${key}:`, value);
                 if (typeof value === 'object' && value.module_id && value.progress_percentage !== undefined) {
                   progressData[value.module_id] = Math.min(100, value.progress_percentage);
-                  console.log(`🔍 DEBUG: Added progress for ${value.module_id}: ${value.progress_percentage}`);
                 } else if (typeof value === 'number') {
                   progressData[key] = Math.min(100, value);
-                  console.log(`🔍 DEBUG: Added progress for ${key}: ${value}`);
                 }
               });
             }
@@ -258,15 +219,11 @@ export default function ChessPage() {
             console.log('🔍 DEBUG: No moduleData.data found');
           }
           
-          console.log('🔍 DEBUG: Final progress data:', progressData);
           setModuleProgress(progressData);
         }
         
-        console.log('🔍 DEBUG: ✅ Chess progress loaded successfully!');
         
       } catch (error) {
-        console.error('🔍 DEBUG: ❌ Error loading chess progress:', error);
-        console.error('🔍 DEBUG: Error details:', (error as Error).message, (error as Error).stack);
         setModuleProgress({});
       }
     };
@@ -287,40 +244,17 @@ export default function ChessPage() {
     const actualCurrent = Math.max(0, current);
     let percent = total > 0 ? Math.min(100, Math.round((actualCurrent / total) * 100)) : 0;
     
-    console.log('🔍 DEBUG: Exercise state:', {
-      module_id: state.module_id,
-      exercise_type: state.exercise_type,
-      exercise_completed: state.exercise_completed,
-      module_completed: state.module_completed,
-      progress_total: total,
-      progress_current: current,
-      actualCurrent: actualCurrent,
-      calculated_percent: percent
-    });
-    
     // Special debug for Board Setup
     if (state.exercise_type === 'board_setup') {
-      console.log('🔍 DEBUG: Board Setup specific:', {
-        placed_pieces_count: state.placed_pieces ? Object.keys(state.placed_pieces).length : 0,
-        current_piece_type: state.current_piece_type,
-        pieces_inventory_exists: !!state.pieces_inventory
-      });
       
       // For Board Setup, ensure progress is based on placed pieces
       if (state.placed_pieces) {
         const placedCount = Object.keys(state.placed_pieces).length;
         const boardSetupPercent = total > 0 ? Math.min(100, Math.round((placedCount / total) * 100)) : 0;
-        console.log('🔍 DEBUG: Board Setup calculated progress:', {
-          placedCount,
-          total,
-          boardSetupPercent,
-          backendProgress: percent
-        });
+        
         
         // Use the calculated progress from placed pieces
         if (boardSetupPercent !== percent) {
-          console.log('🔍 DEBUG: Using Board Setup calculated progress instead of backend');
-          // Update the percent to use the actual calculated value
           percent = boardSetupPercent;
         }
       }
@@ -329,21 +263,13 @@ export default function ChessPage() {
     setModuleProgress((prev) => {
       const currentProgress = prev[state.module_id] || 0;
       
-      console.log('🔍 DEBUG: Progress comparison:', {
-        currentProgress,
-        newProgress: percent,
-        shouldUpdate: percent > currentProgress || (state.exercise_type === 'board_setup' && percent >= currentProgress)
-      });
-      
       // Don't update progress if module is already completed locally (100%)
       if (currentProgress >= 100) {
-        console.log('🔍 DEBUG: Module already completed locally, skipping update');
         return prev;
       }
       
       // Special case for Board Setup: Allow equal progress updates to ensure UI sync
       if (state.exercise_type === 'board_setup' && percent === currentProgress) {
-        console.log('🔍 DEBUG: Board Setup equal progress, forcing UI update');
         const next = { ...prev, [state.module_id]: percent };
         
         // Save progress to database
@@ -356,18 +282,14 @@ export default function ChessPage() {
       // Special case: If this is a new exercise (progress_current = -1), allow database progress to be used as starting point
       if (percent < currentProgress && currentProgress > 0) {
         if (state.progress_current === -1) {
-          console.log('🔍 DEBUG: New exercise detected, using database progress as starting point');
           // Don't update for new exercises, keep database progress
           return prev;
         } else {
-          console.log('🔍 DEBUG: New progress lower than current, skipping update');
           return prev;
         }
       }
       
       const next = { ...prev, [state.module_id]: percent };
-      
-      console.log('🔍 DEBUG: Updating progress to:', percent);
       
       // Save progress to database
       saveProgressToDatabase(state.module_id, percent);
@@ -387,7 +309,6 @@ export default function ChessPage() {
       const token = localStorage.getItem('access_token');
       
       if (!token) {
-        console.error('🔍 DEBUG: No auth token found for progress saving');
         return;
       }
       
@@ -400,7 +321,6 @@ export default function ChessPage() {
       });
       
       if (!profileResponse.ok) {
-        console.error('🔍 DEBUG: Failed to get user profile for progress saving');
         return;
       }
       
@@ -408,11 +328,8 @@ export default function ChessPage() {
       const username = profile.username;
       
       if (!username) {
-        console.error('🔍 DEBUG: No username found in profile for progress saving');
         return;
       }
-      
-      console.log('🔍 DEBUG: Saving progress for user:', username);
       
       // Use the working endpoint with minimal data to avoid backend bug
       const queryParams = new URLSearchParams({
@@ -424,9 +341,6 @@ export default function ChessPage() {
         progress: progress
       };
       
-      console.log('🔍 DEBUG: Final request - URL:', `http://localhost:8000/api/module/progress/${username}?${queryParams.toString()}`);
-      console.log('🔍 DEBUG: Final request - Body:', JSON.stringify(requestBody));
-      
       const moduleProgressResponse = await fetch(`http://localhost:8000/api/module/progress/${username}?${queryParams}`, {
         method: 'POST',
         headers: {
@@ -436,12 +350,9 @@ export default function ChessPage() {
         body: JSON.stringify(requestBody)
       });
       
-      console.log('🔍 DEBUG: Final response status:', moduleProgressResponse.status);
-      
+     
       if (moduleProgressResponse.ok) {
         const responseText = await moduleProgressResponse.text();
-        console.log('🔍 DEBUG: Final response body:', responseText);
-        
         try {
           const responseJson = JSON.parse(responseText);
           if (responseJson.success) {
@@ -469,11 +380,9 @@ export default function ChessPage() {
     setSessionId(null);
     setExercise(null);
     
-    console.log('Starting gameplay mode:', gameMode);
     
     try {
       const state = await createChessSession('gameplay');
-      console.log('Created gameplay session:', state);
       
       // Update the exercise to use the specific game mode
       const updatedState = await sendChessAction(state.session_id, 'set_game_mode', { game_mode: gameMode });
@@ -484,7 +393,6 @@ export default function ChessPage() {
       updateModuleProgressForExercise(updatedState);
       setView('lesson');
     } catch (e: any) {
-      console.error('Error starting gameplay mode:', e);
       setError(e.message || 'Failed to start gameplay mode');
     } finally {
       setLoading(false);
@@ -497,11 +405,9 @@ export default function ChessPage() {
     setSessionId(null);
     setExercise(null);
     
-    console.log('Starting gameplay mode:', gameMode, 'with difficulty:', difficulty);
     
     try {
       const state = await createChessSession('gameplay');
-      console.log('Created gameplay session:', state);
       
       // Start gameplay with specific difficulty
       const updatedState = await sendChessAction(state.session_id, 'start_gameplay', { 
@@ -515,7 +421,6 @@ export default function ChessPage() {
       updateModuleProgressForExercise(updatedState);
       setView('lesson');
     } catch (e: any) {
-      console.error('Error starting gameplay with difficulty:', e);
       setError(e.message || 'Failed to start gameplay mode');
     } finally {
       setLoading(false);
@@ -528,14 +433,9 @@ export default function ChessPage() {
     setSessionId(null);
     setExercise(null);
     
-    console.log('Starting lesson for module:', moduleId);
     
     try {
       const state = await createChessSession(moduleId);
-      console.log('Created session state:', state);
-      console.log('Session ID:', state.session_id);
-      console.log('Exercise ID:', state.exercise_id);
-      console.log('Exercise type:', state.exercise_type);
       
       setSelectedModuleId(moduleId);
       setSessionId(state.session_id);
@@ -543,7 +443,6 @@ export default function ChessPage() {
       updateModuleProgressForExercise(state);
       setView('lesson');
     } catch (e: any) {
-      console.error('Error starting lesson:', e);
       setError(e.message || 'Failed to start lesson');
     } finally {
       setLoading(false);
@@ -552,25 +451,17 @@ export default function ChessPage() {
 
   const handleSquareClick = async (square: string) => {
     if (!sessionId) {
-      console.error('No session ID available');
       return;
     }
     
     // Don't allow clicks if module is already completed
     if (exercise?.module_completed) {
-      console.log('Module already completed, ignoring click');
       return;
     }
     
-    console.log('Sending action for square:', square);
-    console.log('Session ID:', sessionId);
     
     try {
       const state = await sendChessAction(sessionId, 'select_square', { square });
-      console.log('Received state:', state);
-      console.log('Exercise completed:', state.exercise_completed);
-      console.log('Is correct:', state.is_correct);
-      console.log('Feedback:', state.feedback_message);
       setExercise(state);
       updateModuleProgressForExercise(state);
       
@@ -581,9 +472,6 @@ export default function ChessPage() {
         }, 1500); // Small delay before next exercise
       }
     } catch (e: any) {
-      console.error('Error in handleSquareClick:', e);
-      console.error('Error details:', e.message);
-      console.error('Error stack:', e.stack);
       setError(e.message || 'Failed to apply move');
     }
   };
@@ -599,13 +487,7 @@ export default function ChessPage() {
     
     try {
       const state = await sendChessAction(sessionId, type, payload);
-      console.log('🔍 DEBUG: Received state from sendChessAction:', {
-        module_id: state.module_id,
-        exercise_type: state.exercise_type,
-        progress_current: state.progress_current,
-        progress_total: state.progress_total,
-        placed_pieces_count: state.placed_pieces ? Object.keys(state.placed_pieces).length : 0
-      });
+      
       setExercise(state);
       updateModuleProgressForExercise(state);
       
@@ -708,12 +590,10 @@ export default function ChessPage() {
                 </p>
                 <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {(() => {
-                    console.log('🔍 DEBUG: Rendering modules with progress:', moduleProgress);
                     return null;
                   })()}
                   {modules.map((m) => {
                     const progress = moduleProgress[m.id] || 0;
-                    console.log('🔍 DEBUG: Module', m.id, 'progress:', progress);
                     return (
                       <button
                         key={`${m.id}-${progressUpdateKey}`} // Force re-render on progress update
@@ -740,7 +620,6 @@ export default function ChessPage() {
                           </div>
                         </div>
                         {(() => {
-                          console.log('🔍 DEBUG: Progress bar rendered for', m.id, 'with width:', `${progress}%`);
                           return null;
                         })()}
                       </button>

@@ -561,8 +561,6 @@ class LessonEngine:
     
     def handle_board_setup_placement(self, exercise: ExerciseState, square: str) -> ExerciseState:
         """Handle piece placement for board setup"""
-        print(f"🔍 DEBUG: handle_board_setup_placement called with square: {square}")
-        print(f"🔍 DEBUG: Current placed_pieces count: {len(exercise.placed_pieces)}")
         
         if not exercise.current_piece_type:
             exercise.feedback_message = "Please select a piece to place first."
@@ -589,8 +587,7 @@ class LessonEngine:
         # Check if this position is correct for this piece type
         is_correct_position = (col, row) in piece_info['positions']
         
-        print(f"🔍 DEBUG: Position check - square: {square}, col: {col}, row: {row}, is_correct: {is_correct_position}")
-        
+            
         # Check if square is already occupied
         if square in exercise.placed_pieces:
             exercise.feedback_message = "This square is already occupied!"
@@ -620,13 +617,8 @@ class LessonEngine:
             'correct': is_correct_position
         }
         
-        print(f"🔍 DEBUG: Before progress update - progress_current: {exercise.progress_current}")
-        
         # Update progress
         exercise.progress_current = len(exercise.placed_pieces)
-        
-        # DEBUG: Log progress update
-        print(f"🔍 DEBUG: Updated progress_current to {exercise.progress_current} (placed_pieces: {len(exercise.placed_pieces)})")
         
         # Provide feedback
         if is_correct_position:
@@ -788,16 +780,10 @@ class LessonEngine:
     def check_answer(self, exercise: ExerciseState, answer: str) -> bool:
         """Check answer for identification exercises"""
         if exercise.exercise_type == "identify_pieces":
-            # Get the correct answer from the third part of instructions
             parts = exercise.instructions.split("|")
-            print(f"DEBUG: Instructions: {exercise.instructions}")
-            print(f"DEBUG: Parts: {parts}")
             if len(parts) >= 3:
                 correct_answer = parts[2].strip()
-                print(f"DEBUG: Correct answer: '{correct_answer}'")
-                print(f"DEBUG: User answer: '{answer}'")
                 result = answer.strip().lower() == correct_answer.lower()
-                print(f"DEBUG: Result: {result}")
                 return result
         return False
     
@@ -809,7 +795,6 @@ class LessonEngine:
         exercise_id = f"knight_{exercise_type}_{exercise_number}"
         
         if exercise_type == "basic":
-            # Place knight in center
             knight_file = random.randint(2, 5)
             knight_rank = random.randint(2, 5)
             knight_square = chess.square(knight_file, knight_rank)
@@ -841,7 +826,6 @@ class LessonEngine:
                 module_completed=False
             )
         elif exercise_type == "capture":
-            # Place knight and enemy piece for capture
             knight_file = random.randint(2, 5)
             knight_rank = random.randint(2, 5)
             knight_square = chess.square(knight_file, knight_rank)
@@ -886,7 +870,6 @@ class LessonEngine:
         exercise_id = f"rook_{exercise_type}_{exercise_number}"
         
         if exercise_type == "basic":
-            # Place rook in center
             rook_file = random.randint(2, 5)
             rook_rank = random.randint(2, 5)
             rook_square = chess.square(rook_file, rook_rank)
@@ -928,7 +911,6 @@ class LessonEngine:
         exercise_id = f"bishop_{exercise_type}_{exercise_number}"
         
         if exercise_type == "basic":
-            # Place bishop in center
             bishop_file = random.randint(2, 5)
             bishop_rank = random.randint(2, 5)
             bishop_square = chess.square(bishop_file, bishop_rank)
@@ -970,7 +952,6 @@ class LessonEngine:
         exercise_id = f"queen_{exercise_type}_{exercise_number}"
         
         if exercise_type == "basic":
-            # Place queen in center
             queen_file = random.randint(2, 5)
             queen_rank = random.randint(2, 5)
             queen_square = chess.square(queen_file, queen_rank)
@@ -1012,7 +993,6 @@ class LessonEngine:
         exercise_id = f"king_{exercise_type}_{exercise_number}"
         
         if exercise_type == "basic":
-            # Place king in center
             king_file = random.randint(2, 5)
             king_rank = random.randint(2, 5)
             king_square = chess.square(king_file, king_rank)

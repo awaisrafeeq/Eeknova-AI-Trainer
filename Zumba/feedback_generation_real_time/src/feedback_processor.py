@@ -863,9 +863,9 @@ class GuidedZumbaAnalyzer:
                     print("   - Wrong camera index (try 1, 2, or -1)")
                 break
             
-            # Debug: Confirm frame is not empty
-            if frame_count % 180 == 0:  # Even less frequent prints for performance
-                print(f"  Frame #{frame_count} read successfully. Shape: {frm.shape}")
+            # # Debug: Confirm frame is not empty
+            # if frame_count % 180 == 0:  # Even less frequent prints for performance
+            #     print(f"  Frame #{frame_count} read successfully. Shape: {frm.shape}")
 
             frm = cv2.flip(frm, 1)
             frame_count += 1
