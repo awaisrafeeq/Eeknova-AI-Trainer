@@ -540,8 +540,6 @@ def get_module_progress(username: str, module_id: str) -> Optional[Dict[str, Any
                 ModuleProgress.module_id == module_id
             ).first()
             
-            print(f"DEBUG: get_module_progress for {username}, {module_id}: {progress}")
-            
             if not progress:
                 return None
             
@@ -560,8 +558,6 @@ def get_module_progress(username: str, module_id: str) -> Optional[Dict[str, Any
             progress_list = db.query(ModuleProgress).filter(
                 ModuleProgress.username == username
             ).all()
-            
-            print(f"DEBUG: get_module_progress for {username}, all modules: {progress_list}")
             
             if not progress_list:
                 return []
@@ -591,8 +587,6 @@ def update_module_progress(username: str, module_id: str, progress_percentage: f
             ModuleProgress.module_id == module_id
         ).first()
         
-        print(f"DEBUG: Found existing progress: {progress}")
-        
         if not progress:
             # Create new progress record
             progress = ModuleProgress(
@@ -602,7 +596,6 @@ def update_module_progress(username: str, module_id: str, progress_percentage: f
                 total_lessons=total_lessons or 0
             )
             db.add(progress)
-            print(f"DEBUG: Created new progress with {progress_percentage}%")
         else:
             # Update fields - allow progress to increase
             old_progress = progress.progress_percentage
@@ -611,7 +604,6 @@ def update_module_progress(username: str, module_id: str, progress_percentage: f
                 progress.progress_percentage = progress_percentage
             else:
                 progress.progress_percentage = progress_percentage
-            print(f"DEBUG: Updated progress from {old_progress}% to {progress.progress_percentage}%")
         
         progress.last_accessed_date = datetime.utcnow()
         
@@ -627,8 +619,6 @@ def update_module_progress(username: str, module_id: str, progress_percentage: f
         
         db.commit()
         db.refresh(progress)
-        
-        print(f"DEBUG: Committed progress: {progress.progress_percentage}% for {username}")
         
         return get_module_progress(username, module_id)
         

@@ -126,18 +126,12 @@ class ChessSessionManager:
         module_id = session["module_id"]
         exercise_num = session["current_exercise"]
         
-        # DEBUG: Log exercise creation attempt
-        print(f"🔍 DEBUG: _create_next_exercise called - module_id: {module_id}, exercise_num: {exercise_num}")
-        print(f"🔍 DEBUG: _create_next_exercise - completed_exercises: {session.get('completed_exercises', 0)}, completed: {session.get('completed', False)}")
-        
         # Stop creating exercises if module is completed
         if session.get("completed", False):
-            print(f"🔍 DEBUG: Module already completed, not creating new exercise")
             return
         
         # Stop creating exercises when completed
         if session.get("completed_exercises", 0) >= session.get("total_exercises", 0):
-            print(f"🔍 DEBUG: Module reached 100% progress, not creating new exercise")
             session["completed"] = True
             return
         
@@ -145,7 +139,6 @@ class ChessSessionManager:
             if module_id == "identify_pieces":
                 # Stop after 12 exercises (0-11)
                 if exercise_num >= 12:
-                    print(f"🔍 DEBUG: All 12 exercises completed, marking module as completed")
                     session["completed"] = True
                     return
                 exercise = self.lesson_engine.create_identify_pieces_exercise(exercise_num)
@@ -203,7 +196,6 @@ class ChessSessionManager:
             session["current_exercise_state"] = exercise
             
         except Exception as e:
-            # Create fallback exercise
             print(f"Error creating exercise for module {module_id}: {e}")
             import traceback
             traceback.print_exc()
@@ -356,79 +348,42 @@ class ChessSessionManager:
                                         exercise.is_correct = False
                                         exercise.feedback_message = "Illegal capture!"
                 
-                # Special handling for special_moves module
                 elif exercise.module_id == "special_moves":
-                    # Handle castling exercises
                     if exercise.exercise_type == "castling":
                         from_square = exercise.selected_square
                         if from_square:
-                            # Check if this is a castling move
                             if from_square == "e1" and square in ["g1", "c1"]:
-                                # Create castling move
                                 move = chess.Move.from_uci(f"{from_square}{square}")
                                 
-                                # DEBUG: Log castling attempt
-                                print(f"🔍 DEBUG: Castling attempt - from: {from_square}, to: {square}")
-                                print(f"🔍 DEBUG: Castling move: {move}")
-                                print(f"🔍 DEBUG: Legal moves: {list(self.lesson_engine.engine.board.legal_moves)}")
-                                print(f"🔍 DEBUG: Is castling legal: {move in self.lesson_engine.engine.board.legal_moves}")
-                                
                                 if move in self.lesson_engine.engine.board.legal_moves:
-                                    # DEBUG: Entering success block
-                                    print(f"🔍 DEBUG: Castling success - entering execution block")
                                     
-                                    # Make the castling move
                                     self.lesson_engine.engine.board.push(move)
-                                    print(f"🔍 DEBUG: Castling move pushed to board")
                                     
                                     exercise.board_position = self.lesson_engine.engine.get_board_position()
-                                    print(f"🔍 DEBUG: Board position updated")
                                     
                                     exercise.selected_square = None
-                                    print(f"🔍 DEBUG: Selected square cleared")
                                     
                                     exercise.is_correct = True
-                                    print(f"🔍 DEBUG: Exercise marked as correct")
                                     
                                     exercise.feedback_message = "Castling successful! 🏰 King and rook moved to safety!"
-                                    print(f"🔍 DEBUG: Feedback message set")
                                     
                                     exercise.exercise_completed = True
-                                    print(f"🔍 DEBUG: Exercise marked as completed")
                                     
                                     exercise.progress_current = exercise.progress_total
-                                    print(f"🔍 DEBUG: Progress updated to {exercise.progress_total}")
                                     
-                                    # Move to next exercise
                                     session["completed_exercises"] += 1
-                                    print(f"🔍 DEBUG: Completed exercises incremented to {session['completed_exercises']}")
                                     
-                                    # Increment current exercise BEFORE creating next exercise
                                     session["current_exercise"] += 1
-                                    print(f"🔍 DEBUG: Current exercise incremented to {session['current_exercise']}")
                                     
-                                    # DEBUG: Check session state
-                                    print(f"🔍 DEBUG: Session state - completed_exercises: {session['completed_exercises']}, total_exercises: {session['total_exercises']}")
-                                    print(f"🔍 DEBUG: Session state - completed: {session.get('completed', False)}")
-                                    
-                                    # FIXED: Stop creating exercises when progress reaches 100%
-                                    # Each exercise sets progress_current = progress_total = 5, so we should stop after 5 exercises
-                                    if session["completed_exercises"] >= 5:  # Stop after 5 exercises (100% progress)
+                                    if session["completed_exercises"] >= 5:  
                                         exercise.module_completed = True
                                         session["completed"] = True
-                                        # IMPORTANT: Update session state to ensure completion is returned in API response
                                         session["current_exercise_state"].module_completed = True
-                                        print(f"🔍 DEBUG: Module completed - reached 100% progress after 5 exercises")
                                     else:
-                                        print(f"🔍 DEBUG: Creating next exercise - not yet at 100% progress")
                                         self._create_next_exercise(session_id)
-                                        print(f"🔍 DEBUG: Next exercise created")
-                                    
-                                    print(f"🔍 DEBUG: Castling execution completed successfully")
                                 else:
                                     exercise.is_correct = False
                                     exercise.feedback_message = "Castling is not legal in this position!"
-                                    print(f"🔍 DEBUG: Castling failed - move not legal")
                             else:
                                 exercise.is_correct = False
                                 exercise.feedback_message = "That's not the correct square. Try again!"
@@ -454,67 +409,38 @@ class ChessSessionManager:
                             
                             if piece and piece.piece_type == chess.PAWN:
                                 if (piece.color == chess.WHITE and to_rank == 7) or (piece.color == chess.BLACK and to_rank == 0):
-                                    # Create promotion move with queen
                                     move = chess.Move.from_uci(f"{from_square}{square}q")
                                     
-                                    # DEBUG: Log promotion attempt
-                                    print(f"🔍 DEBUG: Promotion attempt - from: {from_square}, to: {square}")
-                                    print(f"🔍 DEBUG: Promotion move: {move}")
-                                    print(f"🔍 DEBUG: Legal moves: {list(self.lesson_engine.engine.board.legal_moves)}")
-                                    print(f"🔍 DEBUG: Is promotion legal: {move in self.lesson_engine.engine.board.legal_moves}")
-                                    
                                     if move in self.lesson_engine.engine.board.legal_moves:
-                                        # DEBUG: Entering success block
-                                        print(f"🔍 DEBUG: Promotion success - entering execution block")
                                         
-                                        # Make the promotion move
                                         self.lesson_engine.engine.board.push(move)
-                                        print(f"🔍 DEBUG: Promotion move pushed to board")
                                         
                                         exercise.board_position = self.lesson_engine.engine.get_board_position()
-                                        print(f"🔍 DEBUG: Board position updated")
                                         
                                         exercise.selected_square = None
-                                        print(f"🔍 DEBUG: Selected square cleared")
                                         
                                         exercise.is_correct = True
-                                        print(f"🔍 DEBUG: Exercise marked as correct")
                                         
                                         exercise.feedback_message = "Promotion successful! Pawn promoted to Queen! 👑"
-                                        print(f"🔍 DEBUG: Feedback message set")
                                         
                                         exercise.exercise_completed = True
-                                        print(f"🔍 DEBUG: Exercise marked as completed")
                                         
                                         exercise.progress_current = exercise.progress_total
-                                        print(f"🔍 DEBUG: Progress updated to {exercise.progress_total}")
                                         
-                                        # Move to next exercise
                                         session["completed_exercises"] += 1
-                                        print(f"🔍 DEBUG: Completed exercises incremented to {session['completed_exercises']}")
                                         
-                                        # Increment current exercise BEFORE creating next exercise
                                         session["current_exercise"] += 1
-                                        print(f"🔍 DEBUG: Current exercise incremented to {session['current_exercise']}")
                                         
-                                        # FIXED: Stop creating exercises when progress reaches 100%
-                                        # Each exercise sets progress_current = progress_total = 5, so we should stop after 5 exercises
-                                        if session["completed_exercises"] >= 5:  # Stop after 5 exercises (100% progress)
+                                        if session["completed_exercises"] >= 5:  
                                             exercise.module_completed = True
                                             session["completed"] = True
-                                            # IMPORTANT: Update session state to ensure completion is returned in API response
                                             session["current_exercise_state"].module_completed = True
-                                            print(f"🔍 DEBUG: Promotion - Module completed - reached 100% progress after 5 exercises")
                                         else:
-                                            print(f"🔍 DEBUG: Promotion - Creating next exercise - not yet at 100% progress")
                                             self._create_next_exercise(session_id)
-                                            print(f"🔍 DEBUG: Promotion - Next exercise created")
-                                        
-                                        print(f"🔍 DEBUG: Promotion execution completed successfully")
+                                    
                                     else:
                                         exercise.is_correct = False
                                         exercise.feedback_message = "Promotion is not legal in this position!"
-                                        print(f"🔍 DEBUG: Promotion failed - move not legal")
                                 else:
                                     exercise.is_correct = False
                                     exercise.feedback_message = "That's not a promotion move! Move the pawn to the end rank."
@@ -532,46 +458,28 @@ class ChessSessionManager:
                                 exercise.is_correct = False
                                 exercise.feedback_message = "Please select a pawn to promote."
                     
-                    # Handle en passant exercises
                     elif exercise.exercise_type == "en_passant":
-                        # For now, use default target square validation
                         if square in exercise.target_squares:
                             exercise.is_correct = True
                             exercise.feedback_message = "En passant capture successful! ♟️"
                             exercise.exercise_completed = True
                             exercise.progress_current = exercise.progress_total
                             
-                            # Move to next exercise
                             session["completed_exercises"] += 1
-                            print(f"🔍 DEBUG: En passant - Completed exercises incremented to {session['completed_exercises']}")
                             
-                            # Increment current exercise BEFORE creating next exercise
                             session["current_exercise"] += 1
-                            print(f"🔍 DEBUG: En passant - Current exercise incremented to {session['current_exercise']}")
                             
-                            # DEBUG: Check session state
-                            print(f"🔍 DEBUG: En passant - Session state - completed_exercises: {session['completed_exercises']}, total_exercises: {session['total_exercises']}")
-                            print(f"🔍 DEBUG: En passant - Session state - completed: {session.get('completed', False)}")
-                            
-                            # FIXED: Stop creating exercises when progress reaches 100%
-                            # Each exercise sets progress_current = progress_total = 5, so we should stop after 5 exercises
-                            if session["completed_exercises"] >= 5:  # Stop after 5 exercises (100% progress)
+                            if session["completed_exercises"] >= 5:  
                                 exercise.module_completed = True
                                 session["completed"] = True
-                                # IMPORTANT: Update session state to ensure completion is returned in API response
                                 session["current_exercise_state"].module_completed = True
-                                print(f"🔍 DEBUG: En passant - Module completed - reached 100% progress after 5 exercises")
                             else:
-                                print(f"🔍 DEBUG: En passant - Creating next exercise - not yet at 100% progress")
                                 self._create_next_exercise(session_id)
-                                print(f"🔍 DEBUG: En passant - Next exercise created")
                         else:
                             exercise.is_correct = False
                             exercise.feedback_message = "That's not the correct en passant square. Try again!"
 
-                # Special handling for check/checkmate/stalemate module
                 elif exercise.module_id == "check_checkmate_stalemate":
-                    # Select a piece first
                     if not exercise.selected_square:
                         piece = self.lesson_engine.engine.board.piece_at(chess.parse_square(square))
                         if piece and piece.color == self.lesson_engine.engine.board.turn:
@@ -587,7 +495,6 @@ class ChessSessionManager:
                             exercise.selected_square = None
                             exercise.is_correct = True
                             exercise.feedback_message = "Piece deselected. Select another piece."
-                            # Skip move evaluation on deselect
                         else:
                             move = chess.Move.from_uci(f"{from_square}{square}")
                             board = self.lesson_engine.engine.board
@@ -643,9 +550,7 @@ class ChessSessionManager:
                                 exercise.is_correct = False
                                 exercise.feedback_message = "Illegal move! Try again."
                 
-                # Default behavior for other modules
                 else:
-                    # Check if the clicked square is a target square
                     if square in exercise.target_squares:
                         exercise.is_correct = True
                         exercise.feedback_message = "Correct! Well done! ✅"
@@ -679,9 +584,7 @@ class ChessSessionManager:
         elif action_type == "submit_answer":
             answer = payload.get("answer")
             if exercise.exercise_type == "identify_pieces" and answer:
-                # Prevent duplicate submissions
                 if exercise.is_correct is not None:
-                    print(f"🔍 DEBUG: Answer already submitted, ignoring duplicate")
                     return
                 
                 is_correct = self.lesson_engine.check_answer(exercise, answer)
@@ -692,11 +595,9 @@ class ChessSessionManager:
                 if is_correct:
                     exercise.feedback_message = f"Correct! Well done! That is a {answer}."
                     session["completed_exercises"] += 1
-                    session["current_exercise"] += 1  # Increment exercise counter!
+                    session["current_exercise"] += 1  
                     
-                    # Check if module is completed
                     if session["completed_exercises"] >= self._get_total_exercises(session["module_id"]):
-                        print(f"🔍 DEBUG: All {session['completed_exercises']} exercises completed, marking module as completed")
                         exercise.module_completed = True
                         session["completed"] = True
                     else:
@@ -713,7 +614,6 @@ class ChessSessionManager:
             exercise.exercise_completed = True
             session["completed_exercises"] += 1
             
-            # Move to next exercise
             session["current_exercise"] += 1
             if session["current_exercise"] >= session["total_exercises"]:
                 exercise.module_completed = True
@@ -725,7 +625,6 @@ class ChessSessionManager:
             if exercise.exercise_completed:
                 self._create_next_exercise(session_id)
         
-        # Handle board setup specific actions
         elif action_type == "select_piece":
             piece_type = payload.get("piece_type")
             if exercise.exercise_type == "board_setup" and piece_type:
@@ -741,29 +640,13 @@ class ChessSessionManager:
             if exercise.exercise_type == "board_setup" and square:
                 exercise = self.lesson_engine.handle_board_setup_remove_piece(exercise, square)
         
-        # Update progress
         if exercise.exercise_type != "board_setup":
             exercise.progress_current = min(session["completed_exercises"], session.get("total_exercises", 0))
         
-        # Handle AI moves for gameplay
         if exercise.module_id == "gameplay":
-            # Check for game ending conditions
             board = self.lesson_engine.engine.board
             
-            # Update board position with current state
             exercise.board_position = self.lesson_engine.engine.get_board_position()
-            
-            # DEBUG: Print current board state
-            print(f"=== DEBUG: Game State Check ===")
-            print(f"FEN: {board.fen()}")
-            print(f"Turn: {'White' if board.turn else 'Black'}")
-            print(f"Is Check: {board.is_check()}")
-            print(f"Is Checkmate: {board.is_checkmate()}")
-            print(f"Is Stalemate: {board.is_stalemate()}")
-            print(f"Is Insufficient Material: {board.is_insufficient_material()}")
-            print(f"Can Claim Draw: {board.can_claim_draw()}")
-            print(f"Legal moves for Black: {list(board.legal_moves)}")
-            print(f"===============================")
             
             if board.is_checkmate():
                 if board.turn:  
@@ -807,16 +690,13 @@ class ChessSessionManager:
                     exercise.feedback_message = "⚠️ CHECK! Black king is in check!"
                 
                 print("Check detected! Still checking for AI turn...")
-                # Continue to AI move check below
-                    
+                
             else:
                 print("No check, no checkmate, continuing to AI check")
                     
-            # Check if it's AI's turn and make AI move (this should run after check detection)
             is_ai_turn = self.lesson_engine.is_ai_turn(exercise.exercise_type)
             print(f"After check detection - Exercise type: {exercise.exercise_type}, Board turn: {board.turn}, Is AI turn: {is_ai_turn}")
             
-            # IMPORTANT: Don't make AI move if game is already over!
             if exercise.exercise_completed:
                 print("Game is already over, skipping AI move")
             elif is_ai_turn:
@@ -833,7 +713,6 @@ class ChessSessionManager:
                     exercise.feedback_message = "❌ AI has no valid moves!"
                     print("AI move failed - no valid moves or error occurred")
         else:
-            # For lessons, update progress
             exercise.progress_current = session["completed_exercises"]
         
         return session["current_exercise_state"]
@@ -894,8 +773,6 @@ chess_session_manager = ChessSessionManager()
 
 def exercise_state_to_response(exercise: ExerciseState, session_id: str) -> ChessExerciseResponse:
     """Convert ExerciseState to API response"""
-    # DEBUG: Log what's being sent in the response
-    print(f"🔍 DEBUG: API Response - progress_current: {exercise.progress_current}, progress_total: {exercise.progress_total}")
     
     return ChessExerciseResponse(
         session_id=session_id,
