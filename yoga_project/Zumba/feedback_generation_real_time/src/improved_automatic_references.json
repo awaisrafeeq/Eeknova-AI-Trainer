@@ -1,0 +1,4688 @@
+{
+  "reference_angles": {
+    "twist_step": {
+      "left_arm_angle": 112.73,
+      "right_arm_angle": 115.88,
+      "left_shoulder_lift": 54.97,
+      "right_shoulder_lift": 60.53,
+      "left_leg_angle": 158.68,
+      "right_leg_angle": 157.46,
+      "left_hip_flex": 174.17,
+      "right_hip_flex": 173.62,
+      "left_torso_lean": 153.61,
+      "right_torso_lean": 147.27,
+      "left_hand_height": 188.76,
+      "right_hand_height": 188.57,
+      "hands_distance": 267.78,
+      "left_knee_lift": 192.51,
+      "right_knee_lift": 196.2,
+      "shoulder_alignment": 7.73,
+      "hip_alignment": 3.04,
+      "body_rotation": 125.19
+    },
+    "hip_roll_": {
+      "left_arm_angle": 130.14,
+      "right_arm_angle": 135.22,
+      "left_shoulder_lift": 28.98,
+      "right_shoulder_lift": 32.69,
+      "left_leg_angle": 169.42,
+      "right_leg_angle": 169.78,
+      "left_hip_flex": 166.81,
+      "right_hip_flex": 170.18,
+      "left_torso_lean": 151.85,
+      "right_torso_lean": 150.25,
+      "left_hand_height": 261.5,
+      "right_hand_height": 265.18,
+      "hands_distance": 257.6,
+      "left_knee_lift": 181.92,
+      "right_knee_lift": 186.34,
+      "shoulder_alignment": 9.84,
+      "hip_alignment": 11.0,
+      "body_rotation": 17.13
+    },
+    "salsa_step": {
+      "left_arm_angle": 74.5,
+      "right_arm_angle": 82.97,
+      "left_shoulder_lift": 22.85,
+      "right_shoulder_lift": 24.79,
+      "left_leg_angle": 173.18,
+      "right_leg_angle": 172.07,
+      "left_hip_flex": 173.84,
+      "right_hip_flex": 175.25,
+      "left_torso_lean": 154.91,
+      "right_torso_lean": 153.44,
+      "left_hand_height": 217.08,
+      "right_hand_height": 226.4,
+      "hands_distance": 139.53,
+      "left_knee_lift": 190.79,
+      "right_knee_lift": 189.14,
+      "shoulder_alignment": 6.64,
+      "hip_alignment": 2.97,
+      "body_rotation": 93.73
+    },
+    "lunge_with_punches": {
+      "right_arm_angle": 72.46,
+      "right_shoulder_lift": 23.16,
+      "left_leg_angle": 131.56,
+      "right_leg_angle": 133.95,
+      "left_hip_flex": 148.66,
+      "right_hip_flex": 150.99,
+      "right_torso_lean": 163.3,
+      "right_hand_height": 146.87,
+      "left_knee_lift": 180.34,
+      "right_knee_lift": 187.85,
+      "shoulder_alignment": 8.19,
+      "hip_alignment": 4.52,
+      "body_rotation": 114.27,
+      "left_arm_angle": 79.56,
+      "left_shoulder_lift": 40.86,
+      "left_hand_height": 144.66,
+      "hands_distance": 198.52
+    },
+    "jumping_jacks": {
+      "left_arm_angle": 171.33,
+      "right_arm_angle": 172.23,
+      "left_shoulder_lift": 51.08,
+      "right_shoulder_lift": 58.0,
+      "left_leg_angle": 174.47,
+      "right_leg_angle": 175.33,
+      "left_hip_flex": 165.83,
+      "right_hip_flex": 167.49,
+      "left_torso_lean": 151.18,
+      "right_torso_lean": 151.13,
+      "left_hand_height": 247.69,
+      "right_hand_height": 223.13,
+      "hands_distance": 470.47,
+      "left_knee_lift": 188.41,
+      "right_knee_lift": 189.67,
+      "shoulder_alignment": 3.25,
+      "hip_alignment": 1.34,
+      "body_rotation": 99.94
+    },
+    "squat_with_clap": {
+      "left_arm_angle": 74.69,
+      "right_arm_angle": 72.89,
+      "left_shoulder_lift": 27.78,
+      "right_shoulder_lift": 32.59,
+      "left_leg_angle": 168.63,
+      "right_leg_angle": 167.48,
+      "left_hip_flex": 166.55,
+      "right_hip_flex": 162.61,
+      "left_torso_lean": 152.98,
+      "right_torso_lean": 150.41,
+      "left_hand_height": 212.08,
+      "right_hand_height": 202.48,
+      "hands_distance": 234.19,
+      "left_knee_lift": 178.76,
+      "right_knee_lift": 180.56,
+      "shoulder_alignment": 3.73,
+      "hip_alignment": 3.17,
+      "body_rotation": 80.77
+    },
+    "cumbia_step": {
+      "left_arm_angle": 80.18,
+      "right_arm_angle": 88.76,
+      "left_shoulder_lift": 21.31,
+      "right_shoulder_lift": 23.63,
+      "left_leg_angle": 160.29,
+      "right_leg_angle": 153.67,
+      "left_hip_flex": 172.45,
+      "right_hip_flex": 171.25,
+      "left_torso_lean": 156.2,
+      "right_torso_lean": 154.56,
+      "left_hand_height": 216.85,
+      "right_hand_height": 239.57,
+      "hands_distance": 167.42,
+      "left_knee_lift": 196.32,
+      "right_knee_lift": 195.29,
+      "shoulder_alignment": 5.32,
+      "hip_alignment": 3.74,
+      "body_rotation": 135.84
+    },
+    "zumba_freeze_game": {
+      "left_arm_angle": 110.16,
+      "right_arm_angle": 109.5,
+      "left_shoulder_lift": 30.07,
+      "right_shoulder_lift": 23.29,
+      "left_leg_angle": 175.2,
+      "right_leg_angle": 171.26,
+      "left_hip_flex": 173.47,
+      "right_hip_flex": 169.35,
+      "left_torso_lean": 154.57,
+      "right_torso_lean": 153.82,
+      "left_hand_height": 336.59,
+      "right_hand_height": 364.95,
+      "hands_distance": 378.7,
+      "left_knee_lift": 285.08,
+      "right_knee_lift": 273.22,
+      "shoulder_alignment": 20.9,
+      "hip_alignment": 31.52,
+      "body_rotation": 34.63
+    },
+    "reggaeton_stomp": {
+      "left_arm_angle": 136.75,
+      "right_arm_angle": 156.91,
+      "left_shoulder_lift": 8.34,
+      "right_shoulder_lift": 20.46,
+      "left_leg_angle": 156.45,
+      "right_leg_angle": 156.49,
+      "left_hip_flex": 156.14,
+      "right_hip_flex": 157.68,
+      "left_torso_lean": 152.74,
+      "right_torso_lean": 155.87,
+      "left_hand_height": 307.12,
+      "right_hand_height": 290.56,
+      "hands_distance": 61.21,
+      "left_knee_lift": 181.12,
+      "right_knee_lift": 182.82,
+      "shoulder_alignment": 8.43,
+      "hip_alignment": 2.5,
+      "body_rotation": 105.74
+    },
+    "zumba_turn_(pivot)": {
+      "right_arm_angle": 118.25,
+      "right_shoulder_lift": 25.63,
+      "left_leg_angle": 138.0,
+      "right_leg_angle": 135.38,
+      "left_hip_flex": 157.62,
+      "right_hip_flex": 165.64,
+      "right_torso_lean": 160.24,
+      "right_hand_height": 267.32,
+      "left_knee_lift": 167.0,
+      "right_knee_lift": 184.23,
+      "shoulder_alignment": 8.05,
+      "hip_alignment": 6.81,
+      "body_rotation": 78.35,
+      "left_hand_height": 230.58,
+      "hands_distance": 232.75,
+      "left_arm_angle": 99.15,
+      "left_shoulder_lift": 25.05,
+      "left_torso_lean": 158.09
+    },
+    "knee_lifts": {
+      "left_arm_angle": 51.33,
+      "right_arm_angle": 49.48,
+      "left_shoulder_lift": 19.27,
+      "right_shoulder_lift": 25.61,
+      "left_leg_angle": 166.31,
+      "right_leg_angle": 162.39,
+      "left_hip_flex": 167.37,
+      "right_hip_flex": 159.88,
+      "left_torso_lean": 159.15,
+      "right_torso_lean": 155.3,
+      "left_hand_height": 161.14,
+      "right_hand_height": 145.56,
+      "hands_distance": 242.77,
+      "left_knee_lift": 179.81,
+      "right_knee_lift": 163.31,
+      "shoulder_alignment": 10.9,
+      "hip_alignment": 17.09,
+      "body_rotation": 75.05
+    },
+    "step_clap": {
+      "left_arm_angle": 90.9,
+      "left_shoulder_lift": 14.77,
+      "left_leg_angle": 140.63,
+      "right_leg_angle": 140.26,
+      "left_hip_flex": 154.01,
+      "right_hip_flex": 152.06,
+      "left_torso_lean": 173.68,
+      "left_hand_height": 216.17,
+      "left_knee_lift": 173.5,
+      "right_knee_lift": 180.73,
+      "shoulder_alignment": 7.51,
+      "hip_alignment": 10.61,
+      "body_rotation": 41.5,
+      "right_hand_height": 174.54,
+      "hands_distance": 29.77,
+      "right_arm_angle": 71.72,
+      "right_shoulder_lift": 19.04
+    },
+    "step_touch": {
+      "left_arm_angle": 155.85,
+      "right_arm_angle": 148.76,
+      "left_shoulder_lift": 30.94,
+      "right_shoulder_lift": 34.18,
+      "left_leg_angle": 170.7,
+      "right_leg_angle": 170.07,
+      "left_hip_flex": 164.7,
+      "right_hip_flex": 170.39,
+      "left_torso_lean": 152.05,
+      "right_torso_lean": 149.12,
+      "left_hand_height": 263.77,
+      "right_hand_height": 242.66,
+      "hands_distance": 338.1,
+      "left_knee_lift": 182.48,
+      "right_knee_lift": 183.51,
+      "shoulder_alignment": 12.89,
+      "hip_alignment": 6.0,
+      "body_rotation": 68.86
+    },
+    "grape_vine": {
+      "left_arm_angle": 46.07,
+      "right_arm_angle": 35.29,
+      "left_shoulder_lift": 18.67,
+      "right_shoulder_lift": 26.81,
+      "left_leg_angle": 170.1,
+      "right_leg_angle": 164.13,
+      "left_hip_flex": 168.21,
+      "right_hip_flex": 169.65,
+      "left_torso_lean": 156.86,
+      "right_torso_lean": 148.42,
+      "left_hand_height": 132.52,
+      "right_hand_height": 114.6,
+      "hands_distance": 207.67,
+      "left_knee_lift": 185.55,
+      "right_knee_lift": 189.9,
+      "shoulder_alignment": 7.18,
+      "hip_alignment": 1.66,
+      "body_rotation": 183.7
+    },
+    "mambo_step": {
+      "left_arm_angle": 20.38,
+      "right_arm_angle": 20.03,
+      "left_shoulder_lift": 20.39,
+      "right_shoulder_lift": 27.33,
+      "left_leg_angle": 168.54,
+      "right_leg_angle": 170.33,
+      "left_hip_flex": 173.86,
+      "right_hip_flex": 173.4,
+      "left_torso_lean": 154.73,
+      "right_torso_lean": 153.74,
+      "left_hand_height": 156.91,
+      "right_hand_height": 149.6,
+      "hands_distance": 167.7,
+      "left_knee_lift": 188.85,
+      "right_knee_lift": 189.18,
+      "shoulder_alignment": 2.52,
+      "hip_alignment": 2.32,
+      "body_rotation": 162.86
+    },
+    "march_in_place": {
+      "left_arm_angle": 132.63,
+      "right_arm_angle": 110.57,
+      "left_shoulder_lift": 12.68,
+      "right_shoulder_lift": 30.67,
+      "left_leg_angle": 152.48,
+      "right_leg_angle": 158.69,
+      "left_hip_flex": 156.78,
+      "right_hip_flex": 161.2,
+      "left_torso_lean": 158.36,
+      "left_hand_height": 265.51,
+      "right_hand_height": 263.94,
+      "hands_distance": 130.16,
+      "left_knee_lift": 160.87,
+      "right_knee_lift": 153.79,
+      "shoulder_alignment": 6.88,
+      "hip_alignment": 14.14,
+      "body_rotation": 108.3,
+      "right_torso_lean": 155.98
+    },
+    "body_rolls": {
+      "left_arm_angle": 159.76,
+      "left_shoulder_lift": 9.88,
+      "left_leg_angle": 145.44,
+      "right_leg_angle": 148.5,
+      "left_hip_flex": 139.36,
+      "right_hip_flex": 149.63,
+      "left_torso_lean": 160.47,
+      "left_hand_height": 348.28,
+      "left_knee_lift": 163.7,
+      "right_knee_lift": 172.8,
+      "shoulder_alignment": 5.78,
+      "hip_alignment": 4.11,
+      "body_rotation": 67.34,
+      "right_hand_height": 301.22,
+      "hands_distance": 91.35,
+      "right_arm_angle": 162.77,
+      "right_shoulder_lift": 10.09
+    },
+    "side_punches": {
+      "left_arm_angle": 55.46,
+      "right_arm_angle": 52.97,
+      "left_shoulder_lift": 23.27,
+      "right_shoulder_lift": 27.33,
+      "left_leg_angle": 171.53,
+      "right_leg_angle": 169.37,
+      "left_hip_flex": 169.08,
+      "right_hip_flex": 170.78,
+      "left_torso_lean": 159.74,
+      "right_torso_lean": 158.02,
+      "left_hand_height": 150.95,
+      "right_hand_height": 140.91,
+      "hands_distance": 131.92,
+      "left_knee_lift": 185.03,
+      "right_knee_lift": 185.67,
+      "shoulder_alignment": 11.0,
+      "hip_alignment": 9.12,
+      "body_rotation": 78.45
+    },
+    "shimmy": {
+      "left_arm_angle": 127.25,
+      "right_arm_angle": 126.17,
+      "left_shoulder_lift": 26.2,
+      "right_shoulder_lift": 27.84,
+      "left_leg_angle": 173.88,
+      "right_leg_angle": 175.81,
+      "left_hip_flex": 171.93,
+      "right_hip_flex": 175.56,
+      "left_torso_lean": 155.53,
+      "right_torso_lean": 154.4,
+      "left_hand_height": 235.98,
+      "right_hand_height": 218.68,
+      "hands_distance": 406.9,
+      "left_knee_lift": 188.7,
+      "right_knee_lift": 191.06,
+      "shoulder_alignment": 5.6,
+      "hip_alignment": 2.09,
+      "body_rotation": 102.18
+    },
+    "merengue_march": {
+      "left_arm_angle": 52.95,
+      "right_arm_angle": 56.44,
+      "left_shoulder_lift": 22.92,
+      "right_shoulder_lift": 25.57,
+      "left_leg_angle": 174.58,
+      "right_leg_angle": 177.11,
+      "left_hip_flex": 172.87,
+      "right_hip_flex": 175.19,
+      "left_torso_lean": 156.33,
+      "right_torso_lean": 153.53,
+      "left_hand_height": 212.66,
+      "right_hand_height": 213.9,
+      "hands_distance": 101.77,
+      "left_knee_lift": 201.3,
+      "right_knee_lift": 199.31,
+      "shoulder_alignment": 4.46,
+      "hip_alignment": 0.98,
+      "body_rotation": 122.98
+    },
+    "heel_taps": {
+      "left_arm_angle": 46.07,
+      "right_arm_angle": 35.29,
+      "left_shoulder_lift": 18.66,
+      "right_shoulder_lift": 26.8,
+      "left_leg_angle": 170.1,
+      "right_leg_angle": 164.14,
+      "left_hip_flex": 168.24,
+      "right_hip_flex": 169.67,
+      "left_torso_lean": 156.83,
+      "right_torso_lean": 148.42,
+      "left_hand_height": 132.52,
+      "right_hand_height": 114.6,
+      "hands_distance": 207.62,
+      "left_knee_lift": 185.55,
+      "right_knee_lift": 189.91,
+      "shoulder_alignment": 7.2,
+      "hip_alignment": 1.65,
+      "body_rotation": 181.58
+    }
+  },
+  "angle_tolerances": {
+    "twist_step": {
+      "left_arm_angle": 107.33,
+      "right_arm_angle": 110.8,
+      "left_shoulder_lift": 96.02,
+      "right_shoulder_lift": 85.59,
+      "left_leg_angle": 56.41,
+      "right_leg_angle": 58.05,
+      "left_hip_flex": 8.0,
+      "right_hip_flex": 8.4,
+      "left_torso_lean": 15.85,
+      "right_torso_lean": 21.56,
+      "left_hand_height": 280.85,
+      "right_hand_height": 276.85,
+      "hands_distance": 155.34,
+      "left_knee_lift": 20.68,
+      "right_knee_lift": 17.39,
+      "shoulder_alignment": 11.08,
+      "hip_alignment": 8.0,
+      "body_rotation": 272.83
+    },
+    "hip_roll_": {
+      "left_arm_angle": 117.03,
+      "right_arm_angle": 113.92,
+      "left_shoulder_lift": 31.07,
+      "right_shoulder_lift": 33.2,
+      "left_leg_angle": 22.83,
+      "right_leg_angle": 17.7,
+      "left_hip_flex": 25.12,
+      "right_hip_flex": 17.34,
+      "left_torso_lean": 16.59,
+      "right_torso_lean": 20.28,
+      "left_hand_height": 195.84,
+      "right_hand_height": 190.62,
+      "hands_distance": 262.37,
+      "left_knee_lift": 35.95,
+      "right_knee_lift": 27.52,
+      "shoulder_alignment": 18.49,
+      "hip_alignment": 25.05,
+      "body_rotation": 64.11
+    },
+    "salsa_step": {
+      "left_arm_angle": 82.68,
+      "right_arm_angle": 97.33,
+      "left_shoulder_lift": 12.67,
+      "right_shoulder_lift": 11.98,
+      "left_leg_angle": 12.14,
+      "right_leg_angle": 16.62,
+      "left_hip_flex": 10.95,
+      "right_hip_flex": 8.0,
+      "left_torso_lean": 8.0,
+      "right_torso_lean": 8.0,
+      "left_hand_height": 79.29,
+      "right_hand_height": 88.03,
+      "hands_distance": 75.35,
+      "left_knee_lift": 24.91,
+      "right_knee_lift": 20.64,
+      "shoulder_alignment": 10.91,
+      "hip_alignment": 8.0,
+      "body_rotation": 249.91
+    },
+    "lunge_with_punches": {
+      "right_arm_angle": 105.43,
+      "right_shoulder_lift": 48.56,
+      "left_leg_angle": 58.02,
+      "right_leg_angle": 55.83,
+      "left_hip_flex": 52.71,
+      "right_hip_flex": 44.52,
+      "right_torso_lean": 20.79,
+      "right_hand_height": 101.26,
+      "left_knee_lift": 47.99,
+      "right_knee_lift": 39.61,
+      "shoulder_alignment": 9.85,
+      "hip_alignment": 8.0,
+      "body_rotation": 224.57,
+      "left_arm_angle": 93.3,
+      "left_shoulder_lift": 80.63,
+      "left_hand_height": 84.54,
+      "hands_distance": 291.38
+    },
+    "jumping_jacks": {
+      "left_arm_angle": 8.0,
+      "right_arm_angle": 8.0,
+      "left_shoulder_lift": 72.22,
+      "right_shoulder_lift": 84.51,
+      "left_leg_angle": 8.39,
+      "right_leg_angle": 8.0,
+      "left_hip_flex": 15.6,
+      "right_hip_flex": 18.11,
+      "left_torso_lean": 8.0,
+      "right_torso_lean": 8.69,
+      "left_hand_height": 259.5,
+      "right_hand_height": 283.62,
+      "hands_distance": 413.53,
+      "left_knee_lift": 20.9,
+      "right_knee_lift": 17.39,
+      "shoulder_alignment": 8.0,
+      "hip_alignment": 8.0,
+      "body_rotation": 212.09
+    },
+    "squat_with_clap": {
+      "left_arm_angle": 160.29,
+      "right_arm_angle": 159.56,
+      "left_shoulder_lift": 25.4,
+      "right_shoulder_lift": 30.76,
+      "left_leg_angle": 26.65,
+      "right_leg_angle": 21.73,
+      "left_hip_flex": 22.7,
+      "right_hip_flex": 26.81,
+      "left_torso_lean": 9.95,
+      "right_torso_lean": 12.93,
+      "left_hand_height": 222.68,
+      "right_hand_height": 221.34,
+      "hands_distance": 204.57,
+      "left_knee_lift": 63.75,
+      "right_knee_lift": 57.18,
+      "shoulder_alignment": 8.0,
+      "hip_alignment": 8.0,
+      "body_rotation": 212.9
+    },
+    "cumbia_step": {
+      "left_arm_angle": 133.17,
+      "right_arm_angle": 146.9,
+      "left_shoulder_lift": 10.89,
+      "right_shoulder_lift": 13.25,
+      "left_leg_angle": 46.81,
+      "right_leg_angle": 49.03,
+      "left_hip_flex": 10.9,
+      "right_hip_flex": 12.8,
+      "left_torso_lean": 8.78,
+      "right_torso_lean": 8.0,
+      "left_hand_height": 122.87,
+      "right_hand_height": 174.68,
+      "hands_distance": 129.43,
+      "left_knee_lift": 22.48,
+      "right_knee_lift": 24.09,
+      "shoulder_alignment": 8.95,
+      "hip_alignment": 8.0,
+      "body_rotation": 282.19
+    },
+    "zumba_freeze_game": {
+      "left_arm_angle": 132.24,
+      "right_arm_angle": 133.83,
+      "left_shoulder_lift": 15.25,
+      "right_shoulder_lift": 10.54,
+      "left_leg_angle": 8.16,
+      "right_leg_angle": 17.19,
+      "left_hip_flex": 8.0,
+      "right_hip_flex": 14.23,
+      "left_torso_lean": 8.0,
+      "right_torso_lean": 8.0,
+      "left_hand_height": 212.0,
+      "right_hand_height": 244.09,
+      "hands_distance": 64.57,
+      "left_knee_lift": 115.24,
+      "right_knee_lift": 160.92,
+      "shoulder_alignment": 16.68,
+      "hip_alignment": 28.02,
+      "body_rotation": 70.08
+    },
+    "reggaeton_stomp": {
+      "left_arm_angle": 40.05,
+      "right_arm_angle": 15.39,
+      "left_shoulder_lift": 15.63,
+      "right_shoulder_lift": 21.32,
+      "left_leg_angle": 46.34,
+      "right_leg_angle": 41.35,
+      "left_hip_flex": 41.08,
+      "right_hip_flex": 36.15,
+      "left_torso_lean": 8.33,
+      "right_torso_lean": 15.08,
+      "left_hand_height": 79.74,
+      "right_hand_height": 61.77,
+      "hands_distance": 108.86,
+      "left_knee_lift": 31.12,
+      "right_knee_lift": 25.07,
+      "shoulder_alignment": 10.52,
+      "hip_alignment": 8.0,
+      "body_rotation": 257.6
+    },
+    "zumba_turn_(pivot)": {
+      "right_arm_angle": 104.53,
+      "right_shoulder_lift": 34.78,
+      "left_leg_angle": 61.76,
+      "right_leg_angle": 53.09,
+      "left_hip_flex": 30.98,
+      "right_hip_flex": 19.38,
+      "right_torso_lean": 21.06,
+      "right_hand_height": 174.62,
+      "left_knee_lift": 58.1,
+      "right_knee_lift": 27.64,
+      "shoulder_alignment": 10.94,
+      "hip_alignment": 9.28,
+      "body_rotation": 217.19,
+      "left_hand_height": 175.28,
+      "hands_distance": 198.79,
+      "left_arm_angle": 100.46,
+      "left_shoulder_lift": 28.49,
+      "left_torso_lean": 15.52
+    },
+    "knee_lifts": {
+      "left_arm_angle": 41.51,
+      "right_arm_angle": 50.53,
+      "left_shoulder_lift": 12.71,
+      "right_shoulder_lift": 18.16,
+      "left_leg_angle": 41.25,
+      "right_leg_angle": 49.27,
+      "left_hip_flex": 28.38,
+      "right_hip_flex": 48.95,
+      "left_torso_lean": 10.97,
+      "right_torso_lean": 10.35,
+      "left_hand_height": 53.61,
+      "right_hand_height": 35.57,
+      "hands_distance": 219.79,
+      "left_knee_lift": 81.01,
+      "right_knee_lift": 114.7,
+      "shoulder_alignment": 15.57,
+      "hip_alignment": 31.62,
+      "body_rotation": 176.32
+    },
+    "step_clap": {
+      "left_arm_angle": 113.55,
+      "left_shoulder_lift": 19.73,
+      "left_leg_angle": 64.08,
+      "right_leg_angle": 57.66,
+      "left_hip_flex": 57.04,
+      "right_hip_flex": 36.94,
+      "left_torso_lean": 8.66,
+      "left_hand_height": 225.05,
+      "left_knee_lift": 96.36,
+      "right_knee_lift": 50.58,
+      "shoulder_alignment": 8.0,
+      "hip_alignment": 12.76,
+      "body_rotation": 81.17,
+      "right_hand_height": 119.51,
+      "hands_distance": 51.1,
+      "right_arm_angle": 54.52,
+      "right_shoulder_lift": 20.47
+    },
+    "step_touch": {
+      "left_arm_angle": 35.85,
+      "right_arm_angle": 59.3,
+      "left_shoulder_lift": 55.72,
+      "right_shoulder_lift": 54.53,
+      "left_leg_angle": 16.22,
+      "right_leg_angle": 15.93,
+      "left_hip_flex": 28.65,
+      "right_hip_flex": 16.24,
+      "left_torso_lean": 18.62,
+      "right_torso_lean": 20.52,
+      "left_hand_height": 160.38,
+      "right_hand_height": 160.54,
+      "hands_distance": 453.21,
+      "left_knee_lift": 26.69,
+      "right_knee_lift": 17.17,
+      "shoulder_alignment": 18.6,
+      "hip_alignment": 10.22,
+      "body_rotation": 204.67
+    },
+    "grape_vine": {
+      "left_arm_angle": 40.09,
+      "right_arm_angle": 47.41,
+      "left_shoulder_lift": 22.8,
+      "right_shoulder_lift": 29.38,
+      "left_leg_angle": 28.28,
+      "right_leg_angle": 40.45,
+      "left_hip_flex": 21.7,
+      "right_hip_flex": 17.95,
+      "left_torso_lean": 8.0,
+      "right_torso_lean": 13.99,
+      "left_hand_height": 100.79,
+      "right_hand_height": 84.38,
+      "hands_distance": 205.49,
+      "left_knee_lift": 19.83,
+      "right_knee_lift": 11.58,
+      "shoulder_alignment": 12.45,
+      "hip_alignment": 8.0,
+      "body_rotation": 293.76
+    },
+    "mambo_step": {
+      "left_arm_angle": 22.15,
+      "right_arm_angle": 26.26,
+      "left_shoulder_lift": 9.4,
+      "right_shoulder_lift": 13.45,
+      "left_leg_angle": 19.42,
+      "right_leg_angle": 20.35,
+      "left_hip_flex": 8.0,
+      "right_hip_flex": 8.0,
+      "left_torso_lean": 13.45,
+      "right_torso_lean": 12.57,
+      "left_hand_height": 36.46,
+      "right_hand_height": 57.51,
+      "hands_distance": 134.18,
+      "left_knee_lift": 17.36,
+      "right_knee_lift": 15.69,
+      "shoulder_alignment": 8.0,
+      "hip_alignment": 8.0,
+      "body_rotation": 303.71
+    },
+    "march_in_place": {
+      "left_arm_angle": 98.27,
+      "right_arm_angle": 135.88,
+      "left_shoulder_lift": 12.62,
+      "right_shoulder_lift": 10.89,
+      "left_leg_angle": 74.14,
+      "right_leg_angle": 46.08,
+      "left_hip_flex": 54.55,
+      "right_hip_flex": 47.0,
+      "left_torso_lean": 15.63,
+      "left_hand_height": 194.99,
+      "right_hand_height": 186.65,
+      "hands_distance": 148.96,
+      "left_knee_lift": 112.34,
+      "right_knee_lift": 103.21,
+      "shoulder_alignment": 8.54,
+      "hip_alignment": 22.97,
+      "body_rotation": 190.26,
+      "right_torso_lean": 10.71
+    },
+    "body_rolls": {
+      "left_arm_angle": 12.37,
+      "left_shoulder_lift": 14.92,
+      "left_leg_angle": 49.53,
+      "right_leg_angle": 45.18,
+      "left_hip_flex": 77.56,
+      "right_hip_flex": 62.08,
+      "left_torso_lean": 24.21,
+      "left_hand_height": 50.09,
+      "left_knee_lift": 89.24,
+      "right_knee_lift": 52.67,
+      "shoulder_alignment": 8.0,
+      "hip_alignment": 8.0,
+      "body_rotation": 175.73,
+      "right_hand_height": 47.85,
+      "hands_distance": 93.19,
+      "right_arm_angle": 9.54,
+      "right_shoulder_lift": 10.42
+    },
+    "side_punches": {
+      "left_arm_angle": 135.31,
+      "right_arm_angle": 139.26,
+      "left_shoulder_lift": 23.08,
+      "right_shoulder_lift": 21.94,
+      "left_leg_angle": 15.58,
+      "right_leg_angle": 21.84,
+      "left_hip_flex": 12.26,
+      "right_hip_flex": 12.53,
+      "left_torso_lean": 18.21,
+      "right_torso_lean": 19.98,
+      "left_hand_height": 35.75,
+      "right_hand_height": 44.28,
+      "hands_distance": 75.36,
+      "left_knee_lift": 23.64,
+      "right_knee_lift": 22.26,
+      "shoulder_alignment": 19.73,
+      "hip_alignment": 15.41,
+      "body_rotation": 227.85
+    },
+    "shimmy": {
+      "left_arm_angle": 58.64,
+      "right_arm_angle": 57.71,
+      "left_shoulder_lift": 17.56,
+      "right_shoulder_lift": 15.91,
+      "left_leg_angle": 10.47,
+      "right_leg_angle": 8.0,
+      "left_hip_flex": 8.02,
+      "right_hip_flex": 8.0,
+      "left_torso_lean": 8.0,
+      "right_torso_lean": 8.0,
+      "left_hand_height": 60.81,
+      "right_hand_height": 51.58,
+      "hands_distance": 60.79,
+      "left_knee_lift": 17.66,
+      "right_knee_lift": 18.78,
+      "shoulder_alignment": 8.0,
+      "hip_alignment": 8.0,
+      "body_rotation": 214.88
+    },
+    "merengue_march": {
+      "left_arm_angle": 18.76,
+      "right_arm_angle": 29.24,
+      "left_shoulder_lift": 8.0,
+      "right_shoulder_lift": 8.0,
+      "left_leg_angle": 12.91,
+      "right_leg_angle": 8.0,
+      "left_hip_flex": 11.1,
+      "right_hip_flex": 8.0,
+      "left_torso_lean": 8.0,
+      "right_torso_lean": 8.0,
+      "left_hand_height": 23.33,
+      "right_hand_height": 26.71,
+      "hands_distance": 10.9,
+      "left_knee_lift": 8.0,
+      "right_knee_lift": 8.0,
+      "shoulder_alignment": 8.0,
+      "hip_alignment": 8.0,
+      "body_rotation": 271.02
+    },
+    "heel_taps": {
+      "left_arm_angle": 40.09,
+      "right_arm_angle": 47.41,
+      "left_shoulder_lift": 22.81,
+      "right_shoulder_lift": 29.4,
+      "left_leg_angle": 28.27,
+      "right_leg_angle": 40.47,
+      "left_hip_flex": 21.74,
+      "right_hip_flex": 17.98,
+      "left_torso_lean": 8.0,
+      "right_torso_lean": 14.01,
+      "left_hand_height": 100.79,
+      "right_hand_height": 84.38,
+      "hands_distance": 205.52,
+      "left_knee_lift": 19.84,
+      "right_knee_lift": 11.59,
+      "shoulder_alignment": 12.41,
+      "hip_alignment": 8.0,
+      "body_rotation": 289.46
+    }
+  },
+  "move_characteristics": {
+    "twist_step": {
+      "left_arm_angle": {
+        "mean": 112.73,
+        "std": 42.93,
+        "min": 45.84,
+        "max": 179.43,
+        "range": 133.59,
+        "samples": 690
+      },
+      "right_arm_angle": {
+        "mean": 115.88,
+        "std": 44.32,
+        "min": 46.87,
+        "max": 175.29,
+        "range": 128.42,
+        "samples": 690
+      },
+      "left_shoulder_lift": {
+        "mean": 54.97,
+        "std": 38.41,
+        "min": 9.32,
+        "max": 138.11,
+        "range": 128.79,
+        "samples": 690
+      },
+      "right_shoulder_lift": {
+        "mean": 60.53,
+        "std": 34.24,
+        "min": 15.14,
+        "max": 134.07,
+        "range": 118.93,
+        "samples": 690
+      },
+      "left_leg_angle": {
+        "mean": 158.68,
+        "std": 22.56,
+        "min": 104.61,
+        "max": 179.98,
+        "range": 75.37,
+        "samples": 690
+      },
+      "right_leg_angle": {
+        "mean": 157.46,
+        "std": 23.22,
+        "min": 102.44,
+        "max": 178.72,
+        "range": 76.28,
+        "samples": 690
+      },
+      "left_hip_flex": {
+        "mean": 174.17,
+        "std": 3.17,
+        "min": 164.98,
+        "max": 179.12,
+        "range": 14.14,
+        "samples": 635
+      },
+      "right_hip_flex": {
+        "mean": 173.62,
+        "std": 3.36,
+        "min": 163.89,
+        "max": 178.88,
+        "range": 14.99,
+        "samples": 679
+      },
+      "left_torso_lean": {
+        "mean": 153.61,
+        "std": 6.34,
+        "min": 135.95,
+        "max": 167.23,
+        "range": 31.28,
+        "samples": 539
+      },
+      "right_torso_lean": {
+        "mean": 147.27,
+        "std": 8.62,
+        "min": 127.92,
+        "max": 161.02,
+        "range": 33.1,
+        "samples": 592
+      },
+      "left_hand_height": {
+        "mean": 188.76,
+        "std": 112.34,
+        "min": 24.48,
+        "max": 385.92,
+        "range": 361.44,
+        "samples": 690
+      },
+      "right_hand_height": {
+        "mean": 188.57,
+        "std": 110.74,
+        "min": 22.88,
+        "max": 390.14,
+        "range": 367.26,
+        "samples": 690
+      },
+      "hands_distance": {
+        "mean": 267.78,
+        "std": 62.14,
+        "min": 134.78,
+        "max": 424.58,
+        "range": 289.8,
+        "samples": 690
+      },
+      "left_knee_lift": {
+        "mean": 192.51,
+        "std": 8.27,
+        "min": 175.94,
+        "max": 207.46,
+        "range": 31.52,
+        "samples": 690
+      },
+      "right_knee_lift": {
+        "mean": 196.2,
+        "std": 6.96,
+        "min": 179.08,
+        "max": 208.63,
+        "range": 29.55,
+        "samples": 690
+      },
+      "shoulder_alignment": {
+        "mean": 7.73,
+        "std": 4.43,
+        "min": 0.15,
+        "max": 18.4,
+        "range": 18.25,
+        "samples": 690
+      },
+      "hip_alignment": {
+        "mean": 3.04,
+        "std": 1.82,
+        "min": 0.09,
+        "max": 7.99,
+        "range": 7.9,
+        "samples": 680
+      },
+      "body_rotation": {
+        "mean": 125.19,
+        "std": 109.13,
+        "min": 0.17,
+        "max": 359.43,
+        "range": 359.26,
+        "samples": 690
+      }
+    },
+    "hip_roll_": {
+      "left_arm_angle": {
+        "mean": 130.14,
+        "std": 46.81,
+        "min": 25.37,
+        "max": 178.94,
+        "range": 153.57,
+        "samples": 451
+      },
+      "right_arm_angle": {
+        "mean": 135.22,
+        "std": 45.57,
+        "min": 16.07,
+        "max": 175.8,
+        "range": 159.73,
+        "samples": 451
+      },
+      "left_shoulder_lift": {
+        "mean": 28.98,
+        "std": 12.43,
+        "min": 9.85,
+        "max": 59.53,
+        "range": 49.68,
+        "samples": 451
+      },
+      "right_shoulder_lift": {
+        "mean": 32.69,
+        "std": 13.28,
+        "min": 14.76,
+        "max": 65.04,
+        "range": 50.28,
+        "samples": 451
+      },
+      "left_leg_angle": {
+        "mean": 169.42,
+        "std": 9.13,
+        "min": 141.79,
+        "max": 179.66,
+        "range": 37.87,
+        "samples": 431
+      },
+      "right_leg_angle": {
+        "mean": 169.78,
+        "std": 7.08,
+        "min": 144.76,
+        "max": 177.87,
+        "range": 33.11,
+        "samples": 407
+      },
+      "left_hip_flex": {
+        "mean": 166.81,
+        "std": 10.05,
+        "min": 136.96,
+        "max": 179.03,
+        "range": 42.07,
+        "samples": 449
+      },
+      "right_hip_flex": {
+        "mean": 170.18,
+        "std": 6.94,
+        "min": 146.04,
+        "max": 178.14,
+        "range": 32.1,
+        "samples": 422
+      },
+      "left_torso_lean": {
+        "mean": 151.85,
+        "std": 6.64,
+        "min": 134.82,
+        "max": 168.09,
+        "range": 33.27,
+        "samples": 333
+      },
+      "right_torso_lean": {
+        "mean": 150.25,
+        "std": 8.11,
+        "min": 131.07,
+        "max": 161.59,
+        "range": 30.52,
+        "samples": 358
+      },
+      "left_hand_height": {
+        "mean": 261.5,
+        "std": 78.34,
+        "min": 104.42,
+        "max": 375.04,
+        "range": 270.62,
+        "samples": 451
+      },
+      "right_hand_height": {
+        "mean": 265.18,
+        "std": 76.25,
+        "min": 106.36,
+        "max": 380.39,
+        "range": 274.03,
+        "samples": 451
+      },
+      "hands_distance": {
+        "mean": 257.6,
+        "std": 104.95,
+        "min": 105.84,
+        "max": 510.33,
+        "range": 404.49,
+        "samples": 451
+      },
+      "left_knee_lift": {
+        "mean": 181.92,
+        "std": 14.38,
+        "min": 136.13,
+        "max": 203.45,
+        "range": 67.32,
+        "samples": 409
+      },
+      "right_knee_lift": {
+        "mean": 186.34,
+        "std": 11.01,
+        "min": 148.2,
+        "max": 202.08,
+        "range": 53.88,
+        "samples": 397
+      },
+      "shoulder_alignment": {
+        "mean": 9.84,
+        "std": 7.39,
+        "min": 0.76,
+        "max": 30.57,
+        "range": 29.81,
+        "samples": 451
+      },
+      "hip_alignment": {
+        "mean": 11.0,
+        "std": 10.02,
+        "min": 0.24,
+        "max": 38.01,
+        "range": 37.77,
+        "samples": 451
+      },
+      "body_rotation": {
+        "mean": 17.13,
+        "std": 25.65,
+        "min": 0.07,
+        "max": 107.02,
+        "range": 106.95,
+        "samples": 402
+      }
+    },
+    "salsa_step": {
+      "left_arm_angle": {
+        "mean": 74.5,
+        "std": 33.07,
+        "min": 4.57,
+        "max": 163.19,
+        "range": 158.62,
+        "samples": 751
+      },
+      "right_arm_angle": {
+        "mean": 82.97,
+        "std": 38.93,
+        "min": 5.32,
+        "max": 165.54,
+        "range": 160.22,
+        "samples": 751
+      },
+      "left_shoulder_lift": {
+        "mean": 22.85,
+        "std": 5.07,
+        "min": 11.32,
+        "max": 34.7,
+        "range": 23.38,
+        "samples": 742
+      },
+      "right_shoulder_lift": {
+        "mean": 24.79,
+        "std": 4.79,
+        "min": 12.73,
+        "max": 37.12,
+        "range": 24.39,
+        "samples": 726
+      },
+      "left_leg_angle": {
+        "mean": 173.18,
+        "std": 4.86,
+        "min": 158.72,
+        "max": 179.47,
+        "range": 20.75,
+        "samples": 715
+      },
+      "right_leg_angle": {
+        "mean": 172.07,
+        "std": 6.65,
+        "min": 151.08,
+        "max": 179.53,
+        "range": 28.45,
+        "samples": 709
+      },
+      "left_hip_flex": {
+        "mean": 173.84,
+        "std": 4.38,
+        "min": 161.53,
+        "max": 179.2,
+        "range": 17.67,
+        "samples": 723
+      },
+      "right_hip_flex": {
+        "mean": 175.25,
+        "std": 2.49,
+        "min": 168.24,
+        "max": 179.3,
+        "range": 11.06,
+        "samples": 723
+      },
+      "left_torso_lean": {
+        "mean": 154.91,
+        "std": 2.66,
+        "min": 147.91,
+        "max": 161.5,
+        "range": 13.59,
+        "samples": 643
+      },
+      "right_torso_lean": {
+        "mean": 153.44,
+        "std": 2.78,
+        "min": 145.84,
+        "max": 160.62,
+        "range": 14.78,
+        "samples": 595
+      },
+      "left_hand_height": {
+        "mean": 217.08,
+        "std": 31.72,
+        "min": 136.11,
+        "max": 291.51,
+        "range": 155.4,
+        "samples": 740
+      },
+      "right_hand_height": {
+        "mean": 226.4,
+        "std": 35.21,
+        "min": 153.04,
+        "max": 313.78,
+        "range": 160.74,
+        "samples": 749
+      },
+      "hands_distance": {
+        "mean": 139.53,
+        "std": 30.14,
+        "min": 79.99,
+        "max": 219.75,
+        "range": 139.76,
+        "samples": 735
+      },
+      "left_knee_lift": {
+        "mean": 190.79,
+        "std": 9.96,
+        "min": 167.74,
+        "max": 213.03,
+        "range": 45.29,
+        "samples": 733
+      },
+      "right_knee_lift": {
+        "mean": 189.14,
+        "std": 8.26,
+        "min": 171.87,
+        "max": 211.01,
+        "range": 39.14,
+        "samples": 724
+      },
+      "shoulder_alignment": {
+        "mean": 6.64,
+        "std": 4.36,
+        "min": 0.72,
+        "max": 18.97,
+        "range": 18.25,
+        "samples": 744
+      },
+      "hip_alignment": {
+        "mean": 2.97,
+        "std": 1.67,
+        "min": 0.12,
+        "max": 7.62,
+        "range": 7.5,
+        "samples": 744
+      },
+      "body_rotation": {
+        "mean": 93.73,
+        "std": 99.96,
+        "min": 0.4,
+        "max": 358.77,
+        "range": 358.37,
+        "samples": 751
+      }
+    },
+    "lunge_with_punches": {
+      "right_arm_angle": {
+        "mean": 72.46,
+        "std": 42.17,
+        "min": 15.47,
+        "max": 169.51,
+        "range": 154.04,
+        "samples": 579
+      },
+      "right_shoulder_lift": {
+        "mean": 23.16,
+        "std": 19.42,
+        "min": 1.15,
+        "max": 87.72,
+        "range": 86.57,
+        "samples": 495
+      },
+      "left_leg_angle": {
+        "mean": 131.56,
+        "std": 23.21,
+        "min": 88.73,
+        "max": 178.48,
+        "range": 89.75,
+        "samples": 579
+      },
+      "right_leg_angle": {
+        "mean": 133.95,
+        "std": 22.33,
+        "min": 95.07,
+        "max": 178.79,
+        "range": 83.72,
+        "samples": 579
+      },
+      "left_hip_flex": {
+        "mean": 148.66,
+        "std": 21.08,
+        "min": 99.36,
+        "max": 179.78,
+        "range": 80.42,
+        "samples": 579
+      },
+      "right_hip_flex": {
+        "mean": 150.99,
+        "std": 17.81,
+        "min": 121.29,
+        "max": 179.67,
+        "range": 58.38,
+        "samples": 579
+      },
+      "right_torso_lean": {
+        "mean": 163.3,
+        "std": 8.32,
+        "min": 139.35,
+        "max": 177.95,
+        "range": 38.6,
+        "samples": 571
+      },
+      "right_hand_height": {
+        "mean": 146.87,
+        "std": 40.51,
+        "min": 49.63,
+        "max": 236.98,
+        "range": 187.35,
+        "samples": 518
+      },
+      "left_knee_lift": {
+        "mean": 180.34,
+        "std": 19.2,
+        "min": 120.04,
+        "max": 208.35,
+        "range": 88.31,
+        "samples": 499
+      },
+      "right_knee_lift": {
+        "mean": 187.85,
+        "std": 15.84,
+        "min": 137.72,
+        "max": 210.65,
+        "range": 72.93,
+        "samples": 515
+      },
+      "shoulder_alignment": {
+        "mean": 8.19,
+        "std": 3.94,
+        "min": 0.87,
+        "max": 19.27,
+        "range": 18.4,
+        "samples": 575
+      },
+      "hip_alignment": {
+        "mean": 4.52,
+        "std": 2.19,
+        "min": 0.88,
+        "max": 11.1,
+        "range": 10.22,
+        "samples": 535
+      },
+      "body_rotation": {
+        "mean": 114.27,
+        "std": 89.83,
+        "min": 1.07,
+        "max": 355.17,
+        "range": 354.1,
+        "samples": 579
+      },
+      "left_arm_angle": {
+        "mean": 79.56,
+        "std": 37.32,
+        "min": 25.51,
+        "max": 167.66,
+        "range": 142.15,
+        "samples": 388
+      },
+      "left_shoulder_lift": {
+        "mean": 40.86,
+        "std": 32.25,
+        "min": 0.32,
+        "max": 113.61,
+        "range": 113.29,
+        "samples": 403
+      },
+      "left_hand_height": {
+        "mean": 144.66,
+        "std": 33.81,
+        "min": 58.34,
+        "max": 218.61,
+        "range": 160.27,
+        "samples": 375
+      },
+      "hands_distance": {
+        "mean": 198.52,
+        "std": 116.55,
+        "min": 4.06,
+        "max": 389.55,
+        "range": 385.49,
+        "samples": 393
+      }
+    },
+    "jumping_jacks": {
+      "left_arm_angle": {
+        "mean": 171.33,
+        "std": 2.57,
+        "min": 164.91,
+        "max": 177.97,
+        "range": 13.06,
+        "samples": 662
+      },
+      "right_arm_angle": {
+        "mean": 172.23,
+        "std": 2.39,
+        "min": 166.65,
+        "max": 178.41,
+        "range": 11.76,
+        "samples": 683
+      },
+      "left_shoulder_lift": {
+        "mean": 51.08,
+        "std": 28.89,
+        "min": 14.28,
+        "max": 105.47,
+        "range": 91.19,
+        "samples": 683
+      },
+      "right_shoulder_lift": {
+        "mean": 58.0,
+        "std": 33.8,
+        "min": 3.96,
+        "max": 118.18,
+        "range": 114.22,
+        "samples": 683
+      },
+      "left_leg_angle": {
+        "mean": 174.47,
+        "std": 3.36,
+        "min": 164.73,
+        "max": 179.35,
+        "range": 14.62,
+        "samples": 640
+      },
+      "right_leg_angle": {
+        "mean": 175.33,
+        "std": 2.2,
+        "min": 169.57,
+        "max": 178.89,
+        "range": 9.32,
+        "samples": 661
+      },
+      "left_hip_flex": {
+        "mean": 165.83,
+        "std": 6.24,
+        "min": 150.77,
+        "max": 178.3,
+        "range": 27.53,
+        "samples": 683
+      },
+      "right_hip_flex": {
+        "mean": 167.49,
+        "std": 7.24,
+        "min": 153.56,
+        "max": 179.14,
+        "range": 25.58,
+        "samples": 683
+      },
+      "left_torso_lean": {
+        "mean": 151.18,
+        "std": 3.12,
+        "min": 143.18,
+        "max": 155.74,
+        "range": 12.56,
+        "samples": 683
+      },
+      "right_torso_lean": {
+        "mean": 151.13,
+        "std": 3.48,
+        "min": 143.98,
+        "max": 162.31,
+        "range": 18.33,
+        "samples": 681
+      },
+      "left_hand_height": {
+        "mean": 247.69,
+        "std": 103.8,
+        "min": 39.02,
+        "max": 365.09,
+        "range": 326.07,
+        "samples": 683
+      },
+      "right_hand_height": {
+        "mean": 223.13,
+        "std": 113.45,
+        "min": 31.84,
+        "max": 364.4,
+        "range": 332.56,
+        "samples": 683
+      },
+      "hands_distance": {
+        "mean": 470.47,
+        "std": 165.41,
+        "min": 189.9,
+        "max": 683.5,
+        "range": 493.6,
+        "samples": 683
+      },
+      "left_knee_lift": {
+        "mean": 188.41,
+        "std": 8.36,
+        "min": 167.09,
+        "max": 205.42,
+        "range": 38.33,
+        "samples": 676
+      },
+      "right_knee_lift": {
+        "mean": 189.67,
+        "std": 6.96,
+        "min": 172.03,
+        "max": 206.34,
+        "range": 34.31,
+        "samples": 668
+      },
+      "shoulder_alignment": {
+        "mean": 3.25,
+        "std": 1.32,
+        "min": 0.48,
+        "max": 6.99,
+        "range": 6.51,
+        "samples": 669
+      },
+      "hip_alignment": {
+        "mean": 1.34,
+        "std": 0.68,
+        "min": 0.08,
+        "max": 3.16,
+        "range": 3.08,
+        "samples": 651
+      },
+      "body_rotation": {
+        "mean": 99.94,
+        "std": 84.84,
+        "min": 0.23,
+        "max": 358.83,
+        "range": 358.6,
+        "samples": 683
+      }
+    },
+    "squat_with_clap": {
+      "left_arm_angle": {
+        "mean": 74.69,
+        "std": 64.11,
+        "min": 1.39,
+        "max": 177.68,
+        "range": 176.29,
+        "samples": 588
+      },
+      "right_arm_angle": {
+        "mean": 72.89,
+        "std": 63.82,
+        "min": 2.29,
+        "max": 177.49,
+        "range": 175.2,
+        "samples": 588
+      },
+      "left_shoulder_lift": {
+        "mean": 27.78,
+        "std": 10.16,
+        "min": 13.11,
+        "max": 58.82,
+        "range": 45.71,
+        "samples": 579
+      },
+      "right_shoulder_lift": {
+        "mean": 32.59,
+        "std": 12.31,
+        "min": 13.96,
+        "max": 60.19,
+        "range": 46.23,
+        "samples": 588
+      },
+      "left_leg_angle": {
+        "mean": 168.63,
+        "std": 10.66,
+        "min": 140.59,
+        "max": 179.89,
+        "range": 39.3,
+        "samples": 588
+      },
+      "right_leg_angle": {
+        "mean": 167.48,
+        "std": 8.69,
+        "min": 142.52,
+        "max": 178.61,
+        "range": 36.09,
+        "samples": 579
+      },
+      "left_hip_flex": {
+        "mean": 166.55,
+        "std": 9.08,
+        "min": 140.87,
+        "max": 178.91,
+        "range": 38.04,
+        "samples": 588
+      },
+      "right_hip_flex": {
+        "mean": 162.61,
+        "std": 10.73,
+        "min": 139.78,
+        "max": 176.83,
+        "range": 37.05,
+        "samples": 588
+      },
+      "left_torso_lean": {
+        "mean": 152.98,
+        "std": 3.98,
+        "min": 142.95,
+        "max": 162.67,
+        "range": 19.72,
+        "samples": 511
+      },
+      "right_torso_lean": {
+        "mean": 150.41,
+        "std": 5.17,
+        "min": 138.86,
+        "max": 159.85,
+        "range": 20.99,
+        "samples": 477
+      },
+      "left_hand_height": {
+        "mean": 212.08,
+        "std": 89.07,
+        "min": 93.58,
+        "max": 385.29,
+        "range": 291.71,
+        "samples": 588
+      },
+      "right_hand_height": {
+        "mean": 202.48,
+        "std": 88.54,
+        "min": 73.95,
+        "max": 384.08,
+        "range": 310.13,
+        "samples": 588
+      },
+      "hands_distance": {
+        "mean": 234.19,
+        "std": 81.83,
+        "min": 83.6,
+        "max": 449.74,
+        "range": 366.14,
+        "samples": 565
+      },
+      "left_knee_lift": {
+        "mean": 178.76,
+        "std": 25.5,
+        "min": 122.55,
+        "max": 210.58,
+        "range": 88.03,
+        "samples": 588
+      },
+      "right_knee_lift": {
+        "mean": 180.56,
+        "std": 22.87,
+        "min": 132.06,
+        "max": 208.29,
+        "range": 76.23,
+        "samples": 588
+      },
+      "shoulder_alignment": {
+        "mean": 3.73,
+        "std": 2.03,
+        "min": 0.08,
+        "max": 9.9,
+        "range": 9.82,
+        "samples": 531
+      },
+      "hip_alignment": {
+        "mean": 3.17,
+        "std": 2.19,
+        "min": 0.57,
+        "max": 9.17,
+        "range": 8.6,
+        "samples": 585
+      },
+      "body_rotation": {
+        "mean": 80.77,
+        "std": 85.16,
+        "min": 0.19,
+        "max": 337.45,
+        "range": 337.26,
+        "samples": 579
+      }
+    },
+    "cumbia_step": {
+      "left_arm_angle": {
+        "mean": 80.18,
+        "std": 53.27,
+        "min": 3.11,
+        "max": 178.39,
+        "range": 175.28,
+        "samples": 693
+      },
+      "right_arm_angle": {
+        "mean": 88.76,
+        "std": 58.76,
+        "min": 4.46,
+        "max": 178.51,
+        "range": 174.05,
+        "samples": 693
+      },
+      "left_shoulder_lift": {
+        "mean": 21.31,
+        "std": 4.36,
+        "min": 10.78,
+        "max": 32.17,
+        "range": 21.39,
+        "samples": 669
+      },
+      "right_shoulder_lift": {
+        "mean": 23.63,
+        "std": 5.3,
+        "min": 11.72,
+        "max": 38.36,
+        "range": 26.64,
+        "samples": 685
+      },
+      "left_leg_angle": {
+        "mean": 160.29,
+        "std": 18.73,
+        "min": 109.58,
+        "max": 179.76,
+        "range": 70.18,
+        "samples": 693
+      },
+      "right_leg_angle": {
+        "mean": 153.67,
+        "std": 19.61,
+        "min": 95.43,
+        "max": 178.2,
+        "range": 82.77,
+        "samples": 693
+      },
+      "left_hip_flex": {
+        "mean": 172.45,
+        "std": 4.36,
+        "min": 159.51,
+        "max": 179.39,
+        "range": 19.88,
+        "samples": 675
+      },
+      "right_hip_flex": {
+        "mean": 171.25,
+        "std": 5.12,
+        "min": 155.7,
+        "max": 178.43,
+        "range": 22.73,
+        "samples": 675
+      },
+      "left_torso_lean": {
+        "mean": 156.2,
+        "std": 3.51,
+        "min": 147.06,
+        "max": 164.12,
+        "range": 17.06,
+        "samples": 652
+      },
+      "right_torso_lean": {
+        "mean": 154.56,
+        "std": 2.84,
+        "min": 147.65,
+        "max": 160.72,
+        "range": 13.07,
+        "samples": 643
+      },
+      "left_hand_height": {
+        "mean": 216.85,
+        "std": 49.15,
+        "min": 100.44,
+        "max": 355.01,
+        "range": 254.57,
+        "samples": 625
+      },
+      "right_hand_height": {
+        "mean": 239.57,
+        "std": 69.87,
+        "min": 119.95,
+        "max": 383.26,
+        "range": 263.31,
+        "samples": 693
+      },
+      "hands_distance": {
+        "mean": 167.42,
+        "std": 51.77,
+        "min": 72.88,
+        "max": 300.35,
+        "range": 227.47,
+        "samples": 671
+      },
+      "left_knee_lift": {
+        "mean": 196.32,
+        "std": 8.99,
+        "min": 170.19,
+        "max": 211.31,
+        "range": 41.12,
+        "samples": 642
+      },
+      "right_knee_lift": {
+        "mean": 195.29,
+        "std": 9.64,
+        "min": 166.97,
+        "max": 210.85,
+        "range": 43.88,
+        "samples": 664
+      },
+      "shoulder_alignment": {
+        "mean": 5.32,
+        "std": 3.58,
+        "min": 0.18,
+        "max": 15.72,
+        "range": 15.54,
+        "samples": 678
+      },
+      "hip_alignment": {
+        "mean": 3.74,
+        "std": 2.35,
+        "min": 0.17,
+        "max": 9.62,
+        "range": 9.45,
+        "samples": 693
+      },
+      "body_rotation": {
+        "mean": 135.84,
+        "std": 112.88,
+        "min": 0.13,
+        "max": 359.64,
+        "range": 359.51,
+        "samples": 693
+      }
+    },
+    "zumba_freeze_game": {
+      "left_arm_angle": {
+        "mean": 110.16,
+        "std": 52.9,
+        "min": 12.75,
+        "max": 176.78,
+        "range": 164.03,
+        "samples": 573
+      },
+      "right_arm_angle": {
+        "mean": 109.5,
+        "std": 53.53,
+        "min": 8.6,
+        "max": 176.89,
+        "range": 168.29,
+        "samples": 573
+      },
+      "left_shoulder_lift": {
+        "mean": 30.07,
+        "std": 6.1,
+        "min": 18.21,
+        "max": 46.47,
+        "range": 28.26,
+        "samples": 557
+      },
+      "right_shoulder_lift": {
+        "mean": 23.29,
+        "std": 4.21,
+        "min": 14.76,
+        "max": 34.35,
+        "range": 19.59,
+        "samples": 569
+      },
+      "left_leg_angle": {
+        "mean": 175.2,
+        "std": 3.26,
+        "min": 163.0,
+        "max": 179.22,
+        "range": 16.22,
+        "samples": 423
+      },
+      "right_leg_angle": {
+        "mean": 171.26,
+        "std": 6.88,
+        "min": 145.26,
+        "max": 178.84,
+        "range": 33.58,
+        "samples": 423
+      },
+      "left_hip_flex": {
+        "mean": 173.47,
+        "std": 3.03,
+        "min": 163.06,
+        "max": 178.02,
+        "range": 14.96,
+        "samples": 484
+      },
+      "right_hip_flex": {
+        "mean": 169.35,
+        "std": 5.69,
+        "min": 148.09,
+        "max": 175.05,
+        "range": 26.96,
+        "samples": 478
+      },
+      "left_torso_lean": {
+        "mean": 154.57,
+        "std": 3.11,
+        "min": 148.26,
+        "max": 162.32,
+        "range": 14.06,
+        "samples": 573
+      },
+      "right_torso_lean": {
+        "mean": 153.82,
+        "std": 2.17,
+        "min": 148.01,
+        "max": 159.31,
+        "range": 11.3,
+        "samples": 573
+      },
+      "left_hand_height": {
+        "mean": 336.59,
+        "std": 84.8,
+        "min": 126.39,
+        "max": 453.68,
+        "range": 327.29,
+        "samples": 573
+      },
+      "right_hand_height": {
+        "mean": 364.95,
+        "std": 97.64,
+        "min": 151.94,
+        "max": 495.89,
+        "range": 343.95,
+        "samples": 573
+      },
+      "hands_distance": {
+        "mean": 378.7,
+        "std": 25.83,
+        "min": 327.27,
+        "max": 451.52,
+        "range": 124.25,
+        "samples": 554
+      },
+      "left_knee_lift": {
+        "mean": 285.08,
+        "std": 46.1,
+        "min": 169.43,
+        "max": 352.6,
+        "range": 183.17,
+        "samples": 573
+      },
+      "right_knee_lift": {
+        "mean": 273.22,
+        "std": 64.37,
+        "min": 126.82,
+        "max": 355.57,
+        "range": 228.75,
+        "samples": 573
+      },
+      "shoulder_alignment": {
+        "mean": 20.9,
+        "std": 6.67,
+        "min": 1.54,
+        "max": 39.32,
+        "range": 37.78,
+        "samples": 573
+      },
+      "hip_alignment": {
+        "mean": 31.52,
+        "std": 11.21,
+        "min": 3.02,
+        "max": 61.25,
+        "range": 58.23,
+        "samples": 573
+      },
+      "body_rotation": {
+        "mean": 34.63,
+        "std": 28.03,
+        "min": 2.42,
+        "max": 122.68,
+        "range": 120.26,
+        "samples": 564
+      }
+    },
+    "reggaeton_stomp": {
+      "left_arm_angle": {
+        "mean": 136.75,
+        "std": 16.02,
+        "min": 95.1,
+        "max": 178.61,
+        "range": 83.51,
+        "samples": 214
+      },
+      "right_arm_angle": {
+        "mean": 156.91,
+        "std": 6.15,
+        "min": 138.24,
+        "max": 173.28,
+        "range": 35.04,
+        "samples": 578
+      },
+      "left_shoulder_lift": {
+        "mean": 8.34,
+        "std": 6.25,
+        "min": 0.82,
+        "max": 22.8,
+        "range": 21.98,
+        "samples": 221
+      },
+      "right_shoulder_lift": {
+        "mean": 20.46,
+        "std": 8.53,
+        "min": 0.68,
+        "max": 31.28,
+        "range": 30.6,
+        "samples": 644
+      },
+      "left_leg_angle": {
+        "mean": 156.45,
+        "std": 18.53,
+        "min": 122.54,
+        "max": 179.71,
+        "range": 57.17,
+        "samples": 644
+      },
+      "right_leg_angle": {
+        "mean": 156.49,
+        "std": 16.54,
+        "min": 125.08,
+        "max": 179.21,
+        "range": 54.13,
+        "samples": 644
+      },
+      "left_hip_flex": {
+        "mean": 156.14,
+        "std": 16.43,
+        "min": 126.79,
+        "max": 179.48,
+        "range": 52.69,
+        "samples": 644
+      },
+      "right_hip_flex": {
+        "mean": 157.68,
+        "std": 14.46,
+        "min": 134.93,
+        "max": 178.86,
+        "range": 43.93,
+        "samples": 644
+      },
+      "left_torso_lean": {
+        "mean": 152.74,
+        "std": 3.33,
+        "min": 146.1,
+        "max": 160.92,
+        "range": 14.82,
+        "samples": 222
+      },
+      "right_torso_lean": {
+        "mean": 155.87,
+        "std": 6.03,
+        "min": 145.23,
+        "max": 171.94,
+        "range": 26.71,
+        "samples": 628
+      },
+      "left_hand_height": {
+        "mean": 307.12,
+        "std": 31.9,
+        "min": 262.35,
+        "max": 372.2,
+        "range": 109.85,
+        "samples": 217
+      },
+      "right_hand_height": {
+        "mean": 290.56,
+        "std": 24.71,
+        "min": 250.5,
+        "max": 354.69,
+        "range": 104.19,
+        "samples": 609
+      },
+      "hands_distance": {
+        "mean": 61.21,
+        "std": 43.54,
+        "min": 8.13,
+        "max": 205.06,
+        "range": 196.93,
+        "samples": 201
+      },
+      "left_knee_lift": {
+        "mean": 181.12,
+        "std": 12.45,
+        "min": 154.42,
+        "max": 212.42,
+        "range": 58.0,
+        "samples": 636
+      },
+      "right_knee_lift": {
+        "mean": 182.82,
+        "std": 10.03,
+        "min": 157.35,
+        "max": 203.12,
+        "range": 45.77,
+        "samples": 630
+      },
+      "shoulder_alignment": {
+        "mean": 8.43,
+        "std": 4.21,
+        "min": 1.43,
+        "max": 16.94,
+        "range": 15.51,
+        "samples": 644
+      },
+      "hip_alignment": {
+        "mean": 2.5,
+        "std": 1.01,
+        "min": 0.53,
+        "max": 5.29,
+        "range": 4.76,
+        "samples": 639
+      },
+      "body_rotation": {
+        "mean": 105.74,
+        "std": 103.04,
+        "min": 0.09,
+        "max": 357.87,
+        "range": 357.78,
+        "samples": 644
+      }
+    },
+    "zumba_turn_(pivot)": {
+      "right_arm_angle": {
+        "mean": 118.25,
+        "std": 41.81,
+        "min": 15.95,
+        "max": 178.96,
+        "range": 163.01,
+        "samples": 555
+      },
+      "right_shoulder_lift": {
+        "mean": 25.63,
+        "std": 13.91,
+        "min": 0.6,
+        "max": 60.57,
+        "range": 59.97,
+        "samples": 557
+      },
+      "left_leg_angle": {
+        "mean": 138.0,
+        "std": 24.71,
+        "min": 79.09,
+        "max": 179.33,
+        "range": 100.24,
+        "samples": 572
+      },
+      "right_leg_angle": {
+        "mean": 135.38,
+        "std": 21.24,
+        "min": 79.74,
+        "max": 179.59,
+        "range": 99.85,
+        "samples": 564
+      },
+      "left_hip_flex": {
+        "mean": 157.62,
+        "std": 12.39,
+        "min": 130.16,
+        "max": 179.82,
+        "range": 49.66,
+        "samples": 569
+      },
+      "right_hip_flex": {
+        "mean": 165.64,
+        "std": 7.75,
+        "min": 144.99,
+        "max": 178.37,
+        "range": 33.38,
+        "samples": 573
+      },
+      "right_torso_lean": {
+        "mean": 160.24,
+        "std": 8.43,
+        "min": 140.99,
+        "max": 176.86,
+        "range": 35.87,
+        "samples": 357
+      },
+      "right_hand_height": {
+        "mean": 267.32,
+        "std": 69.85,
+        "min": 140.43,
+        "max": 372.93,
+        "range": 232.5,
+        "samples": 519
+      },
+      "left_knee_lift": {
+        "mean": 167.0,
+        "std": 23.24,
+        "min": 107.36,
+        "max": 207.9,
+        "range": 100.54,
+        "samples": 559
+      },
+      "right_knee_lift": {
+        "mean": 184.23,
+        "std": 11.06,
+        "min": 153.09,
+        "max": 202.18,
+        "range": 49.09,
+        "samples": 572
+      },
+      "shoulder_alignment": {
+        "mean": 8.05,
+        "std": 4.38,
+        "min": 1.21,
+        "max": 21.6,
+        "range": 20.39,
+        "samples": 562
+      },
+      "hip_alignment": {
+        "mean": 6.81,
+        "std": 3.71,
+        "min": 1.21,
+        "max": 18.98,
+        "range": 17.77,
+        "samples": 526
+      },
+      "body_rotation": {
+        "mean": 78.35,
+        "std": 86.88,
+        "min": 1.05,
+        "max": 316.42,
+        "range": 315.37,
+        "samples": 559
+      },
+      "left_hand_height": {
+        "mean": 230.58,
+        "std": 70.11,
+        "min": 99.28,
+        "max": 362.81,
+        "range": 263.53,
+        "samples": 487
+      },
+      "hands_distance": {
+        "mean": 232.75,
+        "std": 79.52,
+        "min": 58.46,
+        "max": 361.53,
+        "range": 303.07,
+        "samples": 500
+      },
+      "left_arm_angle": {
+        "mean": 99.15,
+        "std": 40.18,
+        "min": 24.46,
+        "max": 178.33,
+        "range": 153.87,
+        "samples": 518
+      },
+      "left_shoulder_lift": {
+        "mean": 25.05,
+        "std": 11.4,
+        "min": 0.39,
+        "max": 51.38,
+        "range": 50.99,
+        "samples": 521
+      },
+      "left_torso_lean": {
+        "mean": 158.09,
+        "std": 6.21,
+        "min": 143.94,
+        "max": 174.38,
+        "range": 30.44,
+        "samples": 283
+      }
+    },
+    "knee_lifts": {
+      "left_arm_angle": {
+        "mean": 51.33,
+        "std": 16.6,
+        "min": 23.63,
+        "max": 121.32,
+        "range": 97.69,
+        "samples": 399
+      },
+      "right_arm_angle": {
+        "mean": 49.48,
+        "std": 20.21,
+        "min": 15.62,
+        "max": 130.71,
+        "range": 115.09,
+        "samples": 400
+      },
+      "left_shoulder_lift": {
+        "mean": 19.27,
+        "std": 5.08,
+        "min": 8.2,
+        "max": 34.34,
+        "range": 26.14,
+        "samples": 466
+      },
+      "right_shoulder_lift": {
+        "mean": 25.61,
+        "std": 7.26,
+        "min": 9.83,
+        "max": 45.32,
+        "range": 35.49,
+        "samples": 469
+      },
+      "left_leg_angle": {
+        "mean": 166.31,
+        "std": 16.5,
+        "min": 115.0,
+        "max": 179.5,
+        "range": 64.5,
+        "samples": 424
+      },
+      "right_leg_angle": {
+        "mean": 162.39,
+        "std": 19.71,
+        "min": 103.18,
+        "max": 178.96,
+        "range": 75.78,
+        "samples": 439
+      },
+      "left_hip_flex": {
+        "mean": 167.37,
+        "std": 11.35,
+        "min": 126.71,
+        "max": 178.94,
+        "range": 52.23,
+        "samples": 404
+      },
+      "right_hip_flex": {
+        "mean": 159.88,
+        "std": 19.58,
+        "min": 104.64,
+        "max": 178.84,
+        "range": 74.2,
+        "samples": 448
+      },
+      "left_torso_lean": {
+        "mean": 159.15,
+        "std": 4.39,
+        "min": 149.92,
+        "max": 172.9,
+        "range": 22.98,
+        "samples": 430
+      },
+      "right_torso_lean": {
+        "mean": 155.3,
+        "std": 4.14,
+        "min": 145.6,
+        "max": 166.95,
+        "range": 21.35,
+        "samples": 419
+      },
+      "left_hand_height": {
+        "mean": 161.14,
+        "std": 21.44,
+        "min": 107.77,
+        "max": 244.68,
+        "range": 136.91,
+        "samples": 397
+      },
+      "right_hand_height": {
+        "mean": 145.56,
+        "std": 14.23,
+        "min": 104.18,
+        "max": 198.77,
+        "range": 94.59,
+        "samples": 387
+      },
+      "hands_distance": {
+        "mean": 242.77,
+        "std": 87.92,
+        "min": 99.67,
+        "max": 462.7,
+        "range": 363.03,
+        "samples": 474
+      },
+      "left_knee_lift": {
+        "mean": 179.81,
+        "std": 32.41,
+        "min": 77.06,
+        "max": 204.19,
+        "range": 127.13,
+        "samples": 425
+      },
+      "right_knee_lift": {
+        "mean": 163.31,
+        "std": 45.88,
+        "min": 44.39,
+        "max": 204.06,
+        "range": 159.67,
+        "samples": 466
+      },
+      "shoulder_alignment": {
+        "mean": 10.9,
+        "std": 6.23,
+        "min": 1.02,
+        "max": 27.89,
+        "range": 26.87,
+        "samples": 461
+      },
+      "hip_alignment": {
+        "mean": 17.09,
+        "std": 12.65,
+        "min": 0.14,
+        "max": 44.72,
+        "range": 44.58,
+        "samples": 474
+      },
+      "body_rotation": {
+        "mean": 75.05,
+        "std": 70.53,
+        "min": 0.27,
+        "max": 295.77,
+        "range": 295.5,
+        "samples": 465
+      }
+    },
+    "step_clap": {
+      "left_arm_angle": {
+        "mean": 90.9,
+        "std": 45.42,
+        "min": 24.34,
+        "max": 177.04,
+        "range": 152.7,
+        "samples": 518
+      },
+      "left_shoulder_lift": {
+        "mean": 14.77,
+        "std": 7.89,
+        "min": 0.18,
+        "max": 37.99,
+        "range": 37.81,
+        "samples": 508
+      },
+      "left_leg_angle": {
+        "mean": 140.63,
+        "std": 25.63,
+        "min": 76.15,
+        "max": 178.43,
+        "range": 102.28,
+        "samples": 518
+      },
+      "right_leg_angle": {
+        "mean": 140.26,
+        "std": 23.06,
+        "min": 84.13,
+        "max": 178.39,
+        "range": 94.26,
+        "samples": 504
+      },
+      "left_hip_flex": {
+        "mean": 154.01,
+        "std": 22.82,
+        "min": 93.52,
+        "max": 179.53,
+        "range": 86.01,
+        "samples": 518
+      },
+      "right_hip_flex": {
+        "mean": 152.06,
+        "std": 14.77,
+        "min": 116.41,
+        "max": 178.56,
+        "range": 62.15,
+        "samples": 518
+      },
+      "left_torso_lean": {
+        "mean": 173.68,
+        "std": 3.46,
+        "min": 164.43,
+        "max": 179.21,
+        "range": 14.78,
+        "samples": 505
+      },
+      "left_hand_height": {
+        "mean": 216.17,
+        "std": 90.02,
+        "min": 116.15,
+        "max": 397.32,
+        "range": 281.17,
+        "samples": 518
+      },
+      "left_knee_lift": {
+        "mean": 173.5,
+        "std": 38.55,
+        "min": 57.71,
+        "max": 214.4,
+        "range": 156.69,
+        "samples": 515
+      },
+      "right_knee_lift": {
+        "mean": 180.73,
+        "std": 20.23,
+        "min": 127.63,
+        "max": 213.78,
+        "range": 86.15,
+        "samples": 488
+      },
+      "shoulder_alignment": {
+        "mean": 7.51,
+        "std": 3.18,
+        "min": 0.29,
+        "max": 16.04,
+        "range": 15.75,
+        "samples": 499
+      },
+      "hip_alignment": {
+        "mean": 10.61,
+        "std": 5.11,
+        "min": 1.08,
+        "max": 25.39,
+        "range": 24.31,
+        "samples": 513
+      },
+      "body_rotation": {
+        "mean": 41.5,
+        "std": 32.47,
+        "min": 5.75,
+        "max": 152.34,
+        "range": 146.59,
+        "samples": 489
+      },
+      "right_hand_height": {
+        "mean": 174.54,
+        "std": 47.81,
+        "min": 101.77,
+        "max": 298.36,
+        "range": 196.59,
+        "samples": 263
+      },
+      "hands_distance": {
+        "mean": 29.77,
+        "std": 20.44,
+        "min": 6.78,
+        "max": 92.18,
+        "range": 85.4,
+        "samples": 245
+      },
+      "right_arm_angle": {
+        "mean": 71.72,
+        "std": 21.81,
+        "min": 20.57,
+        "max": 135.73,
+        "range": 115.16,
+        "samples": 211
+      },
+      "right_shoulder_lift": {
+        "mean": 19.04,
+        "std": 8.19,
+        "min": 1.38,
+        "max": 38.67,
+        "range": 37.29,
+        "samples": 247
+      }
+    },
+    "step_touch": {
+      "left_arm_angle": {
+        "mean": 155.85,
+        "std": 14.34,
+        "min": 115.95,
+        "max": 177.54,
+        "range": 61.59,
+        "samples": 325
+      },
+      "right_arm_angle": {
+        "mean": 148.76,
+        "std": 23.72,
+        "min": 93.03,
+        "max": 178.7,
+        "range": 85.67,
+        "samples": 331
+      },
+      "left_shoulder_lift": {
+        "mean": 30.94,
+        "std": 22.29,
+        "min": 1.8,
+        "max": 82.51,
+        "range": 80.71,
+        "samples": 331
+      },
+      "right_shoulder_lift": {
+        "mean": 34.18,
+        "std": 21.81,
+        "min": 3.94,
+        "max": 82.61,
+        "range": 78.67,
+        "samples": 331
+      },
+      "left_leg_angle": {
+        "mean": 170.7,
+        "std": 6.49,
+        "min": 153.68,
+        "max": 179.26,
+        "range": 25.58,
+        "samples": 323
+      },
+      "right_leg_angle": {
+        "mean": 170.07,
+        "std": 6.37,
+        "min": 155.05,
+        "max": 178.54,
+        "range": 23.49,
+        "samples": 331
+      },
+      "left_hip_flex": {
+        "mean": 164.7,
+        "std": 11.46,
+        "min": 135.87,
+        "max": 178.24,
+        "range": 42.37,
+        "samples": 331
+      },
+      "right_hip_flex": {
+        "mean": 170.39,
+        "std": 6.5,
+        "min": 149.85,
+        "max": 177.45,
+        "range": 27.6,
+        "samples": 291
+      },
+      "left_torso_lean": {
+        "mean": 152.05,
+        "std": 7.45,
+        "min": 132.77,
+        "max": 171.49,
+        "range": 38.72,
+        "samples": 265
+      },
+      "right_torso_lean": {
+        "mean": 149.12,
+        "std": 8.21,
+        "min": 131.41,
+        "max": 161.66,
+        "range": 30.25,
+        "samples": 272
+      },
+      "left_hand_height": {
+        "mean": 263.77,
+        "std": 64.15,
+        "min": 106.31,
+        "max": 368.84,
+        "range": 262.53,
+        "samples": 331
+      },
+      "right_hand_height": {
+        "mean": 242.66,
+        "std": 64.21,
+        "min": 98.52,
+        "max": 365.66,
+        "range": 267.14,
+        "samples": 328
+      },
+      "hands_distance": {
+        "mean": 338.1,
+        "std": 181.28,
+        "min": 78.81,
+        "max": 647.15,
+        "range": 568.34,
+        "samples": 331
+      },
+      "left_knee_lift": {
+        "mean": 182.48,
+        "std": 10.67,
+        "min": 157.84,
+        "max": 209.36,
+        "range": 51.52,
+        "samples": 331
+      },
+      "right_knee_lift": {
+        "mean": 183.51,
+        "std": 6.87,
+        "min": 168.35,
+        "max": 199.05,
+        "range": 30.7,
+        "samples": 328
+      },
+      "shoulder_alignment": {
+        "mean": 12.89,
+        "std": 7.44,
+        "min": 0.7,
+        "max": 29.77,
+        "range": 29.07,
+        "samples": 331
+      },
+      "hip_alignment": {
+        "mean": 6.0,
+        "std": 4.09,
+        "min": 0.59,
+        "max": 18.22,
+        "range": 17.63,
+        "samples": 331
+      },
+      "body_rotation": {
+        "mean": 68.86,
+        "std": 81.87,
+        "min": 0.25,
+        "max": 313.59,
+        "range": 313.34,
+        "samples": 325
+      }
+    },
+    "grape_vine": {
+      "left_arm_angle": {
+        "mean": 46.07,
+        "std": 16.04,
+        "min": 5.11,
+        "max": 102.62,
+        "range": 97.51,
+        "samples": 531
+      },
+      "right_arm_angle": {
+        "mean": 35.29,
+        "std": 18.96,
+        "min": 3.14,
+        "max": 103.09,
+        "range": 99.95,
+        "samples": 532
+      },
+      "left_shoulder_lift": {
+        "mean": 18.67,
+        "std": 9.12,
+        "min": 1.39,
+        "max": 42.73,
+        "range": 41.34,
+        "samples": 581
+      },
+      "right_shoulder_lift": {
+        "mean": 26.81,
+        "std": 11.75,
+        "min": 3.06,
+        "max": 53.98,
+        "range": 50.92,
+        "samples": 619
+      },
+      "left_leg_angle": {
+        "mean": 170.1,
+        "std": 11.31,
+        "min": 138.66,
+        "max": 179.87,
+        "range": 41.21,
+        "samples": 574
+      },
+      "right_leg_angle": {
+        "mean": 164.13,
+        "std": 16.18,
+        "min": 118.46,
+        "max": 179.43,
+        "range": 60.97,
+        "samples": 617
+      },
+      "left_hip_flex": {
+        "mean": 168.21,
+        "std": 8.68,
+        "min": 143.59,
+        "max": 179.34,
+        "range": 35.75,
+        "samples": 608
+      },
+      "right_hip_flex": {
+        "mean": 169.65,
+        "std": 7.18,
+        "min": 147.32,
+        "max": 177.78,
+        "range": 30.46,
+        "samples": 619
+      },
+      "left_torso_lean": {
+        "mean": 156.86,
+        "std": 2.83,
+        "min": 149.0,
+        "max": 163.9,
+        "range": 14.9,
+        "samples": 399
+      },
+      "right_torso_lean": {
+        "mean": 148.42,
+        "std": 5.6,
+        "min": 133.68,
+        "max": 159.42,
+        "range": 25.74,
+        "samples": 614
+      },
+      "left_hand_height": {
+        "mean": 132.52,
+        "std": 40.32,
+        "min": 45.62,
+        "max": 266.05,
+        "range": 220.43,
+        "samples": 540
+      },
+      "right_hand_height": {
+        "mean": 114.6,
+        "std": 33.75,
+        "min": 51.91,
+        "max": 234.55,
+        "range": 182.64,
+        "samples": 532
+      },
+      "hands_distance": {
+        "mean": 207.67,
+        "std": 82.2,
+        "min": 32.45,
+        "max": 372.57,
+        "range": 340.12,
+        "samples": 619
+      },
+      "left_knee_lift": {
+        "mean": 185.55,
+        "std": 7.93,
+        "min": 167.01,
+        "max": 200.5,
+        "range": 33.49,
+        "samples": 602
+      },
+      "right_knee_lift": {
+        "mean": 189.9,
+        "std": 4.63,
+        "min": 176.24,
+        "max": 199.26,
+        "range": 23.02,
+        "samples": 556
+      },
+      "shoulder_alignment": {
+        "mean": 7.18,
+        "std": 4.98,
+        "min": 0.6,
+        "max": 19.13,
+        "range": 18.53,
+        "samples": 619
+      },
+      "hip_alignment": {
+        "mean": 1.66,
+        "std": 1.0,
+        "min": 0.19,
+        "max": 4.74,
+        "range": 4.55,
+        "samples": 572
+      },
+      "body_rotation": {
+        "mean": 183.7,
+        "std": 117.51,
+        "min": 0.29,
+        "max": 359.18,
+        "range": 358.89,
+        "samples": 619
+      }
+    },
+    "mambo_step": {
+      "left_arm_angle": {
+        "mean": 20.38,
+        "std": 8.86,
+        "min": 1.76,
+        "max": 46.69,
+        "range": 44.93,
+        "samples": 619
+      },
+      "right_arm_angle": {
+        "mean": 20.03,
+        "std": 10.51,
+        "min": 0.54,
+        "max": 58.26,
+        "range": 57.72,
+        "samples": 619
+      },
+      "left_shoulder_lift": {
+        "mean": 20.39,
+        "std": 3.76,
+        "min": 12.46,
+        "max": 29.87,
+        "range": 17.41,
+        "samples": 727
+      },
+      "right_shoulder_lift": {
+        "mean": 27.33,
+        "std": 5.38,
+        "min": 14.52,
+        "max": 38.62,
+        "range": 24.1,
+        "samples": 721
+      },
+      "left_leg_angle": {
+        "mean": 168.54,
+        "std": 7.77,
+        "min": 146.18,
+        "max": 179.76,
+        "range": 33.58,
+        "samples": 670
+      },
+      "right_leg_angle": {
+        "mean": 170.33,
+        "std": 8.14,
+        "min": 144.76,
+        "max": 178.81,
+        "range": 34.05,
+        "samples": 669
+      },
+      "left_hip_flex": {
+        "mean": 173.86,
+        "std": 2.62,
+        "min": 166.7,
+        "max": 178.86,
+        "range": 12.16,
+        "samples": 711
+      },
+      "right_hip_flex": {
+        "mean": 173.4,
+        "std": 2.94,
+        "min": 164.7,
+        "max": 179.17,
+        "range": 14.47,
+        "samples": 711
+      },
+      "left_torso_lean": {
+        "mean": 154.73,
+        "std": 5.38,
+        "min": 143.19,
+        "max": 167.87,
+        "range": 24.68,
+        "samples": 679
+      },
+      "right_torso_lean": {
+        "mean": 153.74,
+        "std": 5.03,
+        "min": 141.86,
+        "max": 165.94,
+        "range": 24.08,
+        "samples": 683
+      },
+      "left_hand_height": {
+        "mean": 156.91,
+        "std": 14.58,
+        "min": 129.01,
+        "max": 209.11,
+        "range": 80.1,
+        "samples": 623
+      },
+      "right_hand_height": {
+        "mean": 149.6,
+        "std": 23.01,
+        "min": 108.08,
+        "max": 234.56,
+        "range": 126.48,
+        "samples": 627
+      },
+      "hands_distance": {
+        "mean": 167.7,
+        "std": 53.67,
+        "min": 82.9,
+        "max": 249.93,
+        "range": 167.03,
+        "samples": 727
+      },
+      "left_knee_lift": {
+        "mean": 188.85,
+        "std": 6.95,
+        "min": 172.71,
+        "max": 206.36,
+        "range": 33.65,
+        "samples": 727
+      },
+      "right_knee_lift": {
+        "mean": 189.18,
+        "std": 6.27,
+        "min": 176.51,
+        "max": 201.25,
+        "range": 24.74,
+        "samples": 727
+      },
+      "shoulder_alignment": {
+        "mean": 2.52,
+        "std": 1.19,
+        "min": 0.28,
+        "max": 5.94,
+        "range": 5.66,
+        "samples": 682
+      },
+      "hip_alignment": {
+        "mean": 2.32,
+        "std": 1.46,
+        "min": 0.21,
+        "max": 6.59,
+        "range": 6.38,
+        "samples": 695
+      },
+      "body_rotation": {
+        "mean": 162.86,
+        "std": 121.48,
+        "min": 0.24,
+        "max": 358.91,
+        "range": 358.67,
+        "samples": 727
+      }
+    },
+    "march_in_place": {
+      "left_arm_angle": {
+        "mean": 132.63,
+        "std": 39.31,
+        "min": 54.59,
+        "max": 178.6,
+        "range": 124.01,
+        "samples": 324
+      },
+      "right_arm_angle": {
+        "mean": 110.57,
+        "std": 54.35,
+        "min": 6.7,
+        "max": 177.19,
+        "range": 170.49,
+        "samples": 384
+      },
+      "left_shoulder_lift": {
+        "mean": 12.68,
+        "std": 5.05,
+        "min": 1.22,
+        "max": 21.9,
+        "range": 20.68,
+        "samples": 364
+      },
+      "right_shoulder_lift": {
+        "mean": 30.67,
+        "std": 4.36,
+        "min": 17.44,
+        "max": 41.24,
+        "range": 23.8,
+        "samples": 349
+      },
+      "left_leg_angle": {
+        "mean": 152.48,
+        "std": 29.65,
+        "min": 80.98,
+        "max": 179.19,
+        "range": 98.21,
+        "samples": 384
+      },
+      "right_leg_angle": {
+        "mean": 158.69,
+        "std": 18.43,
+        "min": 106.92,
+        "max": 177.85,
+        "range": 70.93,
+        "samples": 366
+      },
+      "left_hip_flex": {
+        "mean": 156.78,
+        "std": 21.82,
+        "min": 104.65,
+        "max": 178.19,
+        "range": 73.54,
+        "samples": 384
+      },
+      "right_hip_flex": {
+        "mean": 161.2,
+        "std": 18.8,
+        "min": 110.12,
+        "max": 178.14,
+        "range": 68.02,
+        "samples": 378
+      },
+      "left_torso_lean": {
+        "mean": 158.36,
+        "std": 6.25,
+        "min": 148.61,
+        "max": 173.83,
+        "range": 25.22,
+        "samples": 300
+      },
+      "left_hand_height": {
+        "mean": 265.51,
+        "std": 78.0,
+        "min": 102.97,
+        "max": 359.24,
+        "range": 256.27,
+        "samples": 324
+      },
+      "right_hand_height": {
+        "mean": 263.94,
+        "std": 74.66,
+        "min": 106.92,
+        "max": 355.77,
+        "range": 248.85,
+        "samples": 384
+      },
+      "hands_distance": {
+        "mean": 130.16,
+        "std": 59.59,
+        "min": 19.73,
+        "max": 229.26,
+        "range": 209.53,
+        "samples": 324
+      },
+      "left_knee_lift": {
+        "mean": 160.87,
+        "std": 44.93,
+        "min": 48.28,
+        "max": 206.25,
+        "range": 157.97,
+        "samples": 384
+      },
+      "right_knee_lift": {
+        "mean": 153.79,
+        "std": 41.28,
+        "min": 43.58,
+        "max": 197.1,
+        "range": 153.52,
+        "samples": 377
+      },
+      "shoulder_alignment": {
+        "mean": 6.88,
+        "std": 3.42,
+        "min": 0.6,
+        "max": 16.47,
+        "range": 15.87,
+        "samples": 379
+      },
+      "hip_alignment": {
+        "mean": 14.14,
+        "std": 9.19,
+        "min": 0.32,
+        "max": 33.07,
+        "range": 32.75,
+        "samples": 384
+      },
+      "body_rotation": {
+        "mean": 108.3,
+        "std": 76.1,
+        "min": 0.19,
+        "max": 315.08,
+        "range": 314.89,
+        "samples": 378
+      },
+      "right_torso_lean": {
+        "mean": 155.98,
+        "std": 4.28,
+        "min": 147.77,
+        "max": 166.32,
+        "range": 18.55,
+        "samples": 272
+      }
+    },
+    "body_rolls": {
+      "left_arm_angle": {
+        "mean": 159.76,
+        "std": 4.95,
+        "min": 147.49,
+        "max": 170.93,
+        "range": 23.44,
+        "samples": 722
+      },
+      "left_shoulder_lift": {
+        "mean": 9.88,
+        "std": 5.97,
+        "min": 0.71,
+        "max": 24.75,
+        "range": 24.04,
+        "samples": 767
+      },
+      "left_leg_angle": {
+        "mean": 145.44,
+        "std": 19.81,
+        "min": 108.13,
+        "max": 178.68,
+        "range": 70.55,
+        "samples": 767
+      },
+      "right_leg_angle": {
+        "mean": 148.5,
+        "std": 18.07,
+        "min": 110.14,
+        "max": 177.07,
+        "range": 66.93,
+        "samples": 767
+      },
+      "left_hip_flex": {
+        "mean": 139.36,
+        "std": 31.02,
+        "min": 85.68,
+        "max": 178.03,
+        "range": 92.35,
+        "samples": 767
+      },
+      "right_hip_flex": {
+        "mean": 149.63,
+        "std": 24.83,
+        "min": 100.75,
+        "max": 179.6,
+        "range": 78.85,
+        "samples": 767
+      },
+      "left_torso_lean": {
+        "mean": 160.47,
+        "std": 9.68,
+        "min": 137.87,
+        "max": 178.11,
+        "range": 40.24,
+        "samples": 767
+      },
+      "left_hand_height": {
+        "mean": 348.28,
+        "std": 20.04,
+        "min": 290.76,
+        "max": 393.61,
+        "range": 102.85,
+        "samples": 736
+      },
+      "left_knee_lift": {
+        "mean": 163.7,
+        "std": 35.7,
+        "min": 80.4,
+        "max": 209.12,
+        "range": 128.72,
+        "samples": 767
+      },
+      "right_knee_lift": {
+        "mean": 172.8,
+        "std": 21.07,
+        "min": 124.99,
+        "max": 201.47,
+        "range": 76.48,
+        "samples": 767
+      },
+      "shoulder_alignment": {
+        "mean": 5.78,
+        "std": 3.15,
+        "min": 0.87,
+        "max": 14.72,
+        "range": 13.85,
+        "samples": 736
+      },
+      "hip_alignment": {
+        "mean": 4.11,
+        "std": 2.19,
+        "min": 0.81,
+        "max": 10.28,
+        "range": 9.47,
+        "samples": 767
+      },
+      "body_rotation": {
+        "mean": 67.34,
+        "std": 70.29,
+        "min": 0.84,
+        "max": 272.46,
+        "range": 271.62,
+        "samples": 750
+      },
+      "right_hand_height": {
+        "mean": 301.22,
+        "std": 19.14,
+        "min": 258.39,
+        "max": 356.02,
+        "range": 97.63,
+        "samples": 286
+      },
+      "hands_distance": {
+        "mean": 91.35,
+        "std": 37.28,
+        "min": 4.09,
+        "max": 182.44,
+        "range": 178.35,
+        "samples": 288
+      },
+      "right_arm_angle": {
+        "mean": 162.77,
+        "std": 3.82,
+        "min": 152.42,
+        "max": 172.07,
+        "range": 19.65,
+        "samples": 260
+      },
+      "right_shoulder_lift": {
+        "mean": 10.09,
+        "std": 4.17,
+        "min": 0.15,
+        "max": 18.96,
+        "range": 18.81,
+        "samples": 262
+      }
+    },
+    "side_punches": {
+      "left_arm_angle": {
+        "mean": 55.46,
+        "std": 54.12,
+        "min": 1.48,
+        "max": 177.6,
+        "range": 176.12,
+        "samples": 651
+      },
+      "right_arm_angle": {
+        "mean": 52.97,
+        "std": 55.7,
+        "min": 1.3,
+        "max": 177.34,
+        "range": 176.04,
+        "samples": 653
+      },
+      "left_shoulder_lift": {
+        "mean": 23.27,
+        "std": 9.23,
+        "min": 3.68,
+        "max": 51.0,
+        "range": 47.32,
+        "samples": 591
+      },
+      "right_shoulder_lift": {
+        "mean": 27.33,
+        "std": 8.78,
+        "min": 8.36,
+        "max": 53.96,
+        "range": 45.6,
+        "samples": 592
+      },
+      "left_leg_angle": {
+        "mean": 171.53,
+        "std": 6.23,
+        "min": 155.71,
+        "max": 179.55,
+        "range": 23.84,
+        "samples": 653
+      },
+      "right_leg_angle": {
+        "mean": 169.37,
+        "std": 8.74,
+        "min": 142.46,
+        "max": 179.0,
+        "range": 36.54,
+        "samples": 647
+      },
+      "left_hip_flex": {
+        "mean": 169.08,
+        "std": 4.9,
+        "min": 158.25,
+        "max": 178.5,
+        "range": 20.25,
+        "samples": 653
+      },
+      "right_hip_flex": {
+        "mean": 170.78,
+        "std": 5.01,
+        "min": 159.82,
+        "max": 179.39,
+        "range": 19.57,
+        "samples": 653
+      },
+      "left_torso_lean": {
+        "mean": 159.74,
+        "std": 7.28,
+        "min": 149.29,
+        "max": 174.7,
+        "range": 25.41,
+        "samples": 529
+      },
+      "right_torso_lean": {
+        "mean": 158.02,
+        "std": 7.99,
+        "min": 146.12,
+        "max": 175.85,
+        "range": 29.73,
+        "samples": 557
+      },
+      "left_hand_height": {
+        "mean": 150.95,
+        "std": 14.3,
+        "min": 106.64,
+        "max": 195.11,
+        "range": 88.47,
+        "samples": 497
+      },
+      "right_hand_height": {
+        "mean": 140.91,
+        "std": 17.71,
+        "min": 89.86,
+        "max": 193.3,
+        "range": 103.44,
+        "samples": 522
+      },
+      "hands_distance": {
+        "mean": 131.92,
+        "std": 30.14,
+        "min": 62.69,
+        "max": 211.43,
+        "range": 148.74,
+        "samples": 632
+      },
+      "left_knee_lift": {
+        "mean": 185.03,
+        "std": 9.46,
+        "min": 161.57,
+        "max": 201.99,
+        "range": 40.42,
+        "samples": 653
+      },
+      "right_knee_lift": {
+        "mean": 185.67,
+        "std": 8.91,
+        "min": 169.07,
+        "max": 202.51,
+        "range": 33.44,
+        "samples": 653
+      },
+      "shoulder_alignment": {
+        "mean": 11.0,
+        "std": 7.89,
+        "min": 0.56,
+        "max": 35.63,
+        "range": 35.07,
+        "samples": 653
+      },
+      "hip_alignment": {
+        "mean": 9.12,
+        "std": 6.16,
+        "min": 0.11,
+        "max": 22.63,
+        "range": 22.52,
+        "samples": 653
+      },
+      "body_rotation": {
+        "mean": 78.45,
+        "std": 91.14,
+        "min": 0.51,
+        "max": 336.95,
+        "range": 336.44,
+        "samples": 649
+      }
+    },
+    "shimmy": {
+      "left_arm_angle": {
+        "mean": 127.25,
+        "std": 23.46,
+        "min": 79.04,
+        "max": 174.27,
+        "range": 95.23,
+        "samples": 584
+      },
+      "right_arm_angle": {
+        "mean": 126.17,
+        "std": 23.09,
+        "min": 78.2,
+        "max": 174.92,
+        "range": 96.72,
+        "samples": 584
+      },
+      "left_shoulder_lift": {
+        "mean": 26.2,
+        "std": 7.03,
+        "min": 12.59,
+        "max": 43.45,
+        "range": 30.86,
+        "samples": 584
+      },
+      "right_shoulder_lift": {
+        "mean": 27.84,
+        "std": 6.36,
+        "min": 14.65,
+        "max": 44.61,
+        "range": 29.96,
+        "samples": 582
+      },
+      "left_leg_angle": {
+        "mean": 173.88,
+        "std": 4.19,
+        "min": 161.48,
+        "max": 179.68,
+        "range": 18.2,
+        "samples": 570
+      },
+      "right_leg_angle": {
+        "mean": 175.81,
+        "std": 2.54,
+        "min": 167.95,
+        "max": 179.26,
+        "range": 11.31,
+        "samples": 556
+      },
+      "left_hip_flex": {
+        "mean": 171.93,
+        "std": 3.21,
+        "min": 162.97,
+        "max": 177.93,
+        "range": 14.96,
+        "samples": 584
+      },
+      "right_hip_flex": {
+        "mean": 175.56,
+        "std": 1.71,
+        "min": 170.08,
+        "max": 179.21,
+        "range": 9.13,
+        "samples": 578
+      },
+      "left_torso_lean": {
+        "mean": 155.53,
+        "std": 1.76,
+        "min": 150.82,
+        "max": 160.34,
+        "range": 9.52,
+        "samples": 571
+      },
+      "right_torso_lean": {
+        "mean": 154.4,
+        "std": 2.22,
+        "min": 148.32,
+        "max": 160.02,
+        "range": 11.7,
+        "samples": 579
+      },
+      "left_hand_height": {
+        "mean": 235.98,
+        "std": 24.33,
+        "min": 192.99,
+        "max": 332.79,
+        "range": 139.8,
+        "samples": 492
+      },
+      "right_hand_height": {
+        "mean": 218.68,
+        "std": 20.63,
+        "min": 179.71,
+        "max": 301.14,
+        "range": 121.43,
+        "samples": 490
+      },
+      "hands_distance": {
+        "mean": 406.9,
+        "std": 24.31,
+        "min": 326.46,
+        "max": 469.46,
+        "range": 143.0,
+        "samples": 496
+      },
+      "left_knee_lift": {
+        "mean": 188.7,
+        "std": 7.06,
+        "min": 171.43,
+        "max": 204.39,
+        "range": 32.96,
+        "samples": 560
+      },
+      "right_knee_lift": {
+        "mean": 191.06,
+        "std": 7.51,
+        "min": 175.52,
+        "max": 206.65,
+        "range": 31.13,
+        "samples": 581
+      },
+      "shoulder_alignment": {
+        "mean": 5.6,
+        "std": 2.41,
+        "min": 1.02,
+        "max": 12.19,
+        "range": 11.17,
+        "samples": 584
+      },
+      "hip_alignment": {
+        "mean": 2.09,
+        "std": 1.05,
+        "min": 0.15,
+        "max": 4.9,
+        "range": 4.75,
+        "samples": 575
+      },
+      "body_rotation": {
+        "mean": 102.18,
+        "std": 85.95,
+        "min": 0.24,
+        "max": 335.37,
+        "range": 335.13,
+        "samples": 572
+      }
+    },
+    "merengue_march": {
+      "left_arm_angle": {
+        "mean": 52.95,
+        "std": 7.5,
+        "min": 37.32,
+        "max": 76.76,
+        "range": 39.44,
+        "samples": 491
+      },
+      "right_arm_angle": {
+        "mean": 56.44,
+        "std": 11.7,
+        "min": 27.04,
+        "max": 92.91,
+        "range": 65.87,
+        "samples": 486
+      },
+      "left_shoulder_lift": {
+        "mean": 22.92,
+        "std": 2.82,
+        "min": 14.92,
+        "max": 28.8,
+        "range": 13.88,
+        "samples": 522
+      },
+      "right_shoulder_lift": {
+        "mean": 25.57,
+        "std": 3.14,
+        "min": 16.83,
+        "max": 33.14,
+        "range": 16.31,
+        "samples": 517
+      },
+      "left_leg_angle": {
+        "mean": 174.58,
+        "std": 5.16,
+        "min": 160.03,
+        "max": 179.7,
+        "range": 19.67,
+        "samples": 565
+      },
+      "right_leg_angle": {
+        "mean": 177.11,
+        "std": 1.08,
+        "min": 174.01,
+        "max": 179.05,
+        "range": 5.04,
+        "samples": 519
+      },
+      "left_hip_flex": {
+        "mean": 172.87,
+        "std": 4.44,
+        "min": 161.71,
+        "max": 179.01,
+        "range": 17.3,
+        "samples": 565
+      },
+      "right_hip_flex": {
+        "mean": 175.19,
+        "std": 2.1,
+        "min": 169.55,
+        "max": 179.63,
+        "range": 10.08,
+        "samples": 563
+      },
+      "left_torso_lean": {
+        "mean": 156.33,
+        "std": 2.25,
+        "min": 150.41,
+        "max": 162.87,
+        "range": 12.46,
+        "samples": 555
+      },
+      "right_torso_lean": {
+        "mean": 153.53,
+        "std": 2.61,
+        "min": 146.76,
+        "max": 161.04,
+        "range": 14.28,
+        "samples": 565
+      },
+      "left_hand_height": {
+        "mean": 212.66,
+        "std": 9.33,
+        "min": 192.99,
+        "max": 243.48,
+        "range": 50.49,
+        "samples": 491
+      },
+      "right_hand_height": {
+        "mean": 213.9,
+        "std": 10.68,
+        "min": 190.33,
+        "max": 252.14,
+        "range": 61.81,
+        "samples": 493
+      },
+      "hands_distance": {
+        "mean": 101.77,
+        "std": 4.36,
+        "min": 92.13,
+        "max": 116.23,
+        "range": 24.1,
+        "samples": 489
+      },
+      "left_knee_lift": {
+        "mean": 201.3,
+        "std": 2.0,
+        "min": 195.9,
+        "max": 206.4,
+        "range": 10.5,
+        "samples": 551
+      },
+      "right_knee_lift": {
+        "mean": 199.31,
+        "std": 2.11,
+        "min": 193.46,
+        "max": 204.91,
+        "range": 11.45,
+        "samples": 557
+      },
+      "shoulder_alignment": {
+        "mean": 4.46,
+        "std": 2.31,
+        "min": 0.54,
+        "max": 10.8,
+        "range": 10.26,
+        "samples": 559
+      },
+      "hip_alignment": {
+        "mean": 0.98,
+        "std": 0.51,
+        "min": 0.08,
+        "max": 2.38,
+        "range": 2.3,
+        "samples": 550
+      },
+      "body_rotation": {
+        "mean": 122.98,
+        "std": 108.41,
+        "min": 0.45,
+        "max": 358.8,
+        "range": 358.35,
+        "samples": 565
+      }
+    },
+    "heel_taps": {
+      "left_arm_angle": {
+        "mean": 46.07,
+        "std": 16.04,
+        "min": 5.11,
+        "max": 102.62,
+        "range": 97.51,
+        "samples": 531
+      },
+      "right_arm_angle": {
+        "mean": 35.29,
+        "std": 18.96,
+        "min": 3.14,
+        "max": 103.09,
+        "range": 99.95,
+        "samples": 532
+      },
+      "left_shoulder_lift": {
+        "mean": 18.66,
+        "std": 9.12,
+        "min": 1.39,
+        "max": 42.73,
+        "range": 41.34,
+        "samples": 581
+      },
+      "right_shoulder_lift": {
+        "mean": 26.8,
+        "std": 11.76,
+        "min": 3.06,
+        "max": 53.98,
+        "range": 50.92,
+        "samples": 619
+      },
+      "left_leg_angle": {
+        "mean": 170.1,
+        "std": 11.31,
+        "min": 138.66,
+        "max": 179.87,
+        "range": 41.21,
+        "samples": 574
+      },
+      "right_leg_angle": {
+        "mean": 164.14,
+        "std": 16.19,
+        "min": 118.46,
+        "max": 179.43,
+        "range": 60.97,
+        "samples": 617
+      },
+      "left_hip_flex": {
+        "mean": 168.24,
+        "std": 8.7,
+        "min": 143.59,
+        "max": 179.34,
+        "range": 35.75,
+        "samples": 608
+      },
+      "right_hip_flex": {
+        "mean": 169.67,
+        "std": 7.19,
+        "min": 147.32,
+        "max": 177.78,
+        "range": 30.46,
+        "samples": 619
+      },
+      "left_torso_lean": {
+        "mean": 156.83,
+        "std": 2.86,
+        "min": 148.93,
+        "max": 163.9,
+        "range": 14.97,
+        "samples": 400
+      },
+      "right_torso_lean": {
+        "mean": 148.42,
+        "std": 5.6,
+        "min": 133.68,
+        "max": 159.42,
+        "range": 25.74,
+        "samples": 614
+      },
+      "left_hand_height": {
+        "mean": 132.52,
+        "std": 40.32,
+        "min": 45.62,
+        "max": 266.05,
+        "range": 220.43,
+        "samples": 540
+      },
+      "right_hand_height": {
+        "mean": 114.6,
+        "std": 33.75,
+        "min": 51.91,
+        "max": 234.55,
+        "range": 182.64,
+        "samples": 532
+      },
+      "hands_distance": {
+        "mean": 207.62,
+        "std": 82.21,
+        "min": 32.45,
+        "max": 372.57,
+        "range": 340.12,
+        "samples": 619
+      },
+      "left_knee_lift": {
+        "mean": 185.55,
+        "std": 7.94,
+        "min": 167.01,
+        "max": 200.9,
+        "range": 33.89,
+        "samples": 602
+      },
+      "right_knee_lift": {
+        "mean": 189.91,
+        "std": 4.64,
+        "min": 176.24,
+        "max": 199.65,
+        "range": 23.41,
+        "samples": 556
+      },
+      "shoulder_alignment": {
+        "mean": 7.2,
+        "std": 4.96,
+        "min": 0.6,
+        "max": 19.13,
+        "range": 18.53,
+        "samples": 619
+      },
+      "hip_alignment": {
+        "mean": 1.65,
+        "std": 1.01,
+        "min": 0.13,
+        "max": 4.74,
+        "range": 4.61,
+        "samples": 572
+      },
+      "body_rotation": {
+        "mean": 181.58,
+        "std": 115.78,
+        "min": 0.29,
+        "max": 358.99,
+        "range": 358.7,
+        "samples": 619
+      }
+    }
+  },
+  "move_signatures": {
+    "twist_step": {
+      "left_arm_angle": {
+        "mean": 112.72857971633692,
+        "std": 42.933597534547175,
+        "range": 133.59,
+        "pattern": "cyclic"
+      },
+      "right_arm_angle": {
+        "mean": 115.88411594025986,
+        "std": 44.32191929964851,
+        "range": 128.42,
+        "pattern": "cyclic"
+      },
+      "left_knee_lift": {
+        "mean": 192.51321740015004,
+        "std": 8.272553411446346,
+        "range": 31.52000000000001,
+        "pattern": "variable"
+      },
+      "right_knee_lift": {
+        "mean": 196.2017536284958,
+        "std": 6.957457018055266,
+        "range": 29.549999999999983,
+        "pattern": "variable"
+      },
+      "body_rotation": {
+        "mean": 125.19384057971014,
+        "std": 109.13291217276262,
+        "range": 359.26,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 267.77682608695653,
+        "std": 62.136556802180664,
+        "range": 289.79999999999995,
+        "pattern": "cyclic"
+      }
+    },
+    "hip_roll_": {
+      "left_arm_angle": {
+        "mean": 130.1380709534368,
+        "std": 46.81339977265425,
+        "range": 153.57,
+        "pattern": "cyclic"
+      },
+      "right_arm_angle": {
+        "mean": 135.21725055432373,
+        "std": 45.56826744305796,
+        "range": 159.73000000000002,
+        "pattern": "cyclic"
+      },
+      "left_knee_lift": {
+        "mean": 175.1034146341463,
+        "std": 25.592201051050516,
+        "range": 117.60999999999999,
+        "pattern": "variable"
+      },
+      "right_knee_lift": {
+        "mean": 176.77554323725056,
+        "std": 28.89867268996067,
+        "range": 137.48000000000002,
+        "pattern": "variable"
+      },
+      "body_rotation": {
+        "mean": 37.2029490022173,
+        "std": 68.37543822529202,
+        "range": 337.06,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 257.5992239467849,
+        "std": 104.94742609288666,
+        "range": 404.49,
+        "pattern": "cyclic"
+      }
+    },
+    "salsa_step": {
+      "left_arm_angle": {
+        "mean": 74.49504660452729,
+        "std": 33.07225015312542,
+        "range": 158.62,
+        "pattern": "cyclic"
+      },
+      "right_arm_angle": {
+        "mean": 82.9679360852197,
+        "std": 38.93214127644087,
+        "range": 160.22,
+        "pattern": "cyclic"
+      },
+      "left_knee_lift": {
+        "mean": 191.3382023968043,
+        "std": 10.604802649994035,
+        "range": 52.610000000000014,
+        "pattern": "variable"
+      },
+      "right_knee_lift": {
+        "mean": 190.05940079893475,
+        "std": 9.406803472578613,
+        "range": 45.66999999999999,
+        "pattern": "variable"
+      },
+      "body_rotation": {
+        "mean": 93.731637816245,
+        "std": 99.96228060584696,
+        "range": 358.37,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 141.6004793608522,
+        "std": 32.971346726563795,
+        "range": 170.07,
+        "pattern": "variable"
+      }
+    },
+    "lunge_with_punches": {
+      "left_arm_angle": {
+        "mean": 79.56484536082473,
+        "std": 37.31930688280799,
+        "range": 142.15,
+        "pattern": "cyclic"
+      },
+      "right_arm_angle": {
+        "mean": 72.46359240069084,
+        "std": 42.17253691676861,
+        "range": 154.04,
+        "pattern": "cyclic"
+      },
+      "left_knee_lift": {
+        "mean": 168.26516407599308,
+        "std": 35.41246697667037,
+        "range": 138.97,
+        "pattern": "cyclic"
+      },
+      "right_knee_lift": {
+        "mean": 180.70390328151987,
+        "std": 25.368127874955814,
+        "range": 106.02000000000001,
+        "pattern": "variable"
+      },
+      "body_rotation": {
+        "mean": 114.27331606217616,
+        "std": 89.82645613717794,
+        "range": 354.1,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 198.51717557251908,
+        "std": 116.55253129843855,
+        "range": 385.49,
+        "pattern": "cyclic"
+      }
+    },
+    "jumping_jacks": {
+      "left_arm_angle": {
+        "mean": 171.5538653001464,
+        "std": 2.823144357599725,
+        "range": 13.920000000000016,
+        "pattern": "static"
+      },
+      "right_arm_angle": {
+        "mean": 172.22808199121522,
+        "std": 2.394549015761643,
+        "range": 11.759999999999991,
+        "pattern": "static"
+      },
+      "left_knee_lift": {
+        "mean": 188.1662225475842,
+        "std": 8.653431470463943,
+        "range": 42.879999999999995,
+        "pattern": "variable"
+      },
+      "right_knee_lift": {
+        "mean": 189.26295754026356,
+        "std": 7.4056255797917165,
+        "range": 36.390000000000015,
+        "pattern": "variable"
+      },
+      "body_rotation": {
+        "mean": 99.94035139092242,
+        "std": 84.8368947743672,
+        "range": 358.59999999999997,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 470.47426061493417,
+        "std": 165.41121478787704,
+        "range": 493.6,
+        "pattern": "cyclic"
+      }
+    },
+    "squat_with_clap": {
+      "left_arm_angle": {
+        "mean": 74.68511904761904,
+        "std": 64.11452596948644,
+        "range": 176.29000000000002,
+        "pattern": "cyclic"
+      },
+      "right_arm_angle": {
+        "mean": 72.88678571428572,
+        "std": 63.82229622381674,
+        "range": 175.20000000000002,
+        "pattern": "cyclic"
+      },
+      "left_knee_lift": {
+        "mean": 178.76416666666668,
+        "std": 25.49807446016863,
+        "range": 88.03000000000002,
+        "pattern": "variable"
+      },
+      "right_knee_lift": {
+        "mean": 180.56319727891156,
+        "std": 22.871222619946423,
+        "range": 76.22999999999999,
+        "pattern": "variable"
+      },
+      "body_rotation": {
+        "mean": 85.03042517006803,
+        "std": 91.1587388703808,
+        "range": 359.13,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 244.0854931972789,
+        "std": 94.12286376827062,
+        "range": 444.75,
+        "pattern": "cyclic"
+      }
+    },
+    "cumbia_step": {
+      "left_arm_angle": {
+        "mean": 80.18489177489178,
+        "std": 53.26959080061312,
+        "range": 175.27999999999997,
+        "pattern": "cyclic"
+      },
+      "right_arm_angle": {
+        "mean": 88.7589898989899,
+        "std": 58.759485609149486,
+        "range": 174.04999999999998,
+        "pattern": "cyclic"
+      },
+      "left_knee_lift": {
+        "mean": 193.85229437229435,
+        "std": 12.402816561604856,
+        "range": 61.120000000000005,
+        "pattern": "variable"
+      },
+      "right_knee_lift": {
+        "mean": 193.90933621933618,
+        "std": 11.538341723060787,
+        "range": 55.46000000000001,
+        "pattern": "variable"
+      },
+      "body_rotation": {
+        "mean": 135.8409668109668,
+        "std": 112.87604411028016,
+        "range": 359.51,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 173.04124098124097,
+        "std": 59.72302340211597,
+        "range": 287.5,
+        "pattern": "cyclic"
+      }
+    },
+    "zumba_freeze_game": {
+      "left_arm_angle": {
+        "mean": 110.15677137870856,
+        "std": 52.895414761957674,
+        "range": 164.03,
+        "pattern": "cyclic"
+      },
+      "right_arm_angle": {
+        "mean": 109.49640488656196,
+        "std": 53.53277362510396,
+        "range": 168.29,
+        "pattern": "cyclic"
+      },
+      "left_knee_lift": {
+        "mean": 285.08499127399654,
+        "std": 46.09715220114763,
+        "range": 183.17000000000002,
+        "pattern": "variable"
+      },
+      "right_knee_lift": {
+        "mean": 273.223595113438,
+        "std": 64.36750401223054,
+        "range": 228.75,
+        "pattern": "cyclic"
+      },
+      "body_rotation": {
+        "mean": 36.95760907504363,
+        "std": 34.07661476788957,
+        "range": 267.37,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 377.9441012216405,
+        "std": 35.98969590421281,
+        "range": 367.35,
+        "pattern": "variable"
+      }
+    },
+    "reggaeton_stomp": {
+      "left_arm_angle": {
+        "mean": 136.49911627906977,
+        "std": 16.407495356397334,
+        "range": 96.41000000000001,
+        "pattern": "variable"
+      },
+      "right_arm_angle": {
+        "mean": 154.26346273291927,
+        "std": 9.846055045854785,
+        "range": 49.010000000000005,
+        "pattern": "variable"
+      },
+      "left_knee_lift": {
+        "mean": 182.1017857142857,
+        "std": 15.473395874395468,
+        "range": 150.09,
+        "pattern": "variable"
+      },
+      "right_knee_lift": {
+        "mean": 183.400450310559,
+        "std": 12.35626898308359,
+        "range": 104.50999999999999,
+        "pattern": "variable"
+      },
+      "body_rotation": {
+        "mean": 105.741350931677,
+        "std": 103.04070690001349,
+        "range": 357.78000000000003,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 76.2268202764977,
+        "std": 68.09344112314153,
+        "range": 304.06,
+        "pattern": "cyclic"
+      }
+    },
+    "zumba_turn_(pivot)": {
+      "left_arm_angle": {
+        "mean": 99.14694980694979,
+        "std": 40.18466920305393,
+        "range": 153.87,
+        "pattern": "cyclic"
+      },
+      "right_arm_angle": {
+        "mean": 118.24938738738739,
+        "std": 41.81175011779576,
+        "range": 163.01000000000002,
+        "pattern": "cyclic"
+      },
+      "left_knee_lift": {
+        "mean": 164.71422145328722,
+        "std": 26.009554303203746,
+        "range": 117.69000000000001,
+        "pattern": "variable"
+      },
+      "right_knee_lift": {
+        "mean": 183.87069204152252,
+        "std": 11.541315982485868,
+        "range": 54.48000000000002,
+        "pattern": "variable"
+      },
+      "body_rotation": {
+        "mean": 86.87129757785468,
+        "std": 97.13773756751274,
+        "range": 353.34,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 232.75084000000004,
+        "std": 79.51644981319527,
+        "range": 303.07,
+        "pattern": "cyclic"
+      }
+    },
+    "knee_lifts": {
+      "left_arm_angle": {
+        "mean": 70.34516877637131,
+        "std": 46.64463422717242,
+        "range": 155.36,
+        "pattern": "cyclic"
+      },
+      "right_arm_angle": {
+        "mean": 68.31548523206752,
+        "std": 47.6820842908245,
+        "range": 161.54999999999998,
+        "pattern": "cyclic"
+      },
+      "left_knee_lift": {
+        "mean": 167.08305907172993,
+        "std": 48.55526475655126,
+        "range": 168.24,
+        "pattern": "cyclic"
+      },
+      "right_knee_lift": {
+        "mean": 161.155,
+        "std": 48.37104392506785,
+        "range": 176.92000000000002,
+        "pattern": "cyclic"
+      },
+      "body_rotation": {
+        "mean": 80.06426160337554,
+        "std": 78.65768605488991,
+        "range": 358.57,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 242.772805907173,
+        "std": 87.91671206231727,
+        "range": 363.03,
+        "pattern": "cyclic"
+      }
+    },
+    "step_clap": {
+      "left_arm_angle": {
+        "mean": 90.89669884169884,
+        "std": 45.41909024196074,
+        "range": 152.7,
+        "pattern": "cyclic"
+      },
+      "right_arm_angle": {
+        "mean": 79.96213675213674,
+        "std": 32.579821984819006,
+        "range": 149.26000000000002,
+        "pattern": "cyclic"
+      },
+      "left_knee_lift": {
+        "mean": 172.76750965250966,
+        "std": 39.6033289396635,
+        "range": 168.37,
+        "pattern": "cyclic"
+      },
+      "right_knee_lift": {
+        "mean": 176.9711196911197,
+        "std": 24.991017303233956,
+        "range": 128.24,
+        "pattern": "variable"
+      },
+      "body_rotation": {
+        "mean": 51.68102316602316,
+        "std": 53.41668826904817,
+        "range": 322.06,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 37.186816479400754,
+        "std": 32.03131523654312,
+        "range": 155.37,
+        "pattern": "cyclic"
+      }
+    },
+    "step_touch": {
+      "left_arm_angle": {
+        "mean": 155.00305135951663,
+        "std": 15.531133124381865,
+        "range": 70.74999999999999,
+        "pattern": "variable"
+      },
+      "right_arm_angle": {
+        "mean": 148.7571601208459,
+        "std": 23.718527636942213,
+        "range": 85.66999999999999,
+        "pattern": "variable"
+      },
+      "left_knee_lift": {
+        "mean": 182.47673716012085,
+        "std": 10.674916426529649,
+        "range": 51.52000000000001,
+        "pattern": "variable"
+      },
+      "right_knee_lift": {
+        "mean": 183.70694864048338,
+        "std": 7.145748533858765,
+        "range": 40.150000000000006,
+        "pattern": "variable"
+      },
+      "body_rotation": {
+        "mean": 73.97471299093655,
+        "std": 89.45466397281152,
+        "range": 359.03,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 338.1018731117825,
+        "std": 181.28401582620168,
+        "range": 568.3399999999999,
+        "pattern": "cyclic"
+      }
+    },
+    "grape_vine": {
+      "left_arm_angle": {
+        "mean": 62.89151857835219,
+        "std": 44.41969693234577,
+        "range": 172.45,
+        "pattern": "cyclic"
+      },
+      "right_arm_angle": {
+        "mean": 53.80906300484652,
+        "std": 49.34043844232645,
+        "range": 175.12,
+        "pattern": "cyclic"
+      },
+      "left_knee_lift": {
+        "mean": 184.87158319870758,
+        "std": 8.808350738233047,
+        "range": 45.74000000000001,
+        "pattern": "variable"
+      },
+      "right_knee_lift": {
+        "mean": 187.69612277867526,
+        "std": 7.985875646789878,
+        "range": 40.28999999999999,
+        "pattern": "variable"
+      },
+      "body_rotation": {
+        "mean": 183.69856219709206,
+        "std": 117.50537726959718,
+        "range": 358.89,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 207.66898222940227,
+        "std": 82.19768189934861,
+        "range": 340.12,
+        "pattern": "cyclic"
+      }
+    },
+    "mambo_step": {
+      "left_arm_angle": {
+        "mean": 38.89634112792297,
+        "std": 46.37748030372523,
+        "range": 176.21,
+        "pattern": "cyclic"
+      },
+      "right_arm_angle": {
+        "mean": 38.70850068775791,
+        "std": 46.93866792949635,
+        "range": 175.68,
+        "pattern": "cyclic"
+      },
+      "left_knee_lift": {
+        "mean": 188.84896836313618,
+        "std": 6.945314465235348,
+        "range": 33.650000000000006,
+        "pattern": "variable"
+      },
+      "right_knee_lift": {
+        "mean": 189.1756258596974,
+        "std": 6.274843410118263,
+        "range": 24.74000000000001,
+        "pattern": "variable"
+      },
+      "body_rotation": {
+        "mean": 162.86448418156812,
+        "std": 121.48390433336914,
+        "range": 358.67,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 167.7012242090784,
+        "std": 53.67372387050457,
+        "range": 167.03,
+        "pattern": "cyclic"
+      }
+    },
+    "march_in_place": {
+      "left_arm_angle": {
+        "mean": 132.6303703703704,
+        "std": 39.309655591245416,
+        "range": 124.00999999999999,
+        "pattern": "cyclic"
+      },
+      "right_arm_angle": {
+        "mean": 110.56781250000002,
+        "std": 54.350988241420325,
+        "range": 170.49,
+        "pattern": "cyclic"
+      },
+      "left_knee_lift": {
+        "mean": 160.874609375,
+        "std": 44.934647230421334,
+        "range": 157.97,
+        "pattern": "cyclic"
+      },
+      "right_knee_lift": {
+        "mean": 151.69247395833335,
+        "std": 43.69813417753989,
+        "range": 164.45999999999998,
+        "pattern": "cyclic"
+      },
+      "body_rotation": {
+        "mean": 111.80552083333333,
+        "std": 80.48392451575593,
+        "range": 358.29,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 130.16000000000003,
+        "std": 59.58562790194575,
+        "range": 209.53,
+        "pattern": "cyclic"
+      }
+    },
+    "body_rolls": {
+      "left_arm_angle": {
+        "mean": 159.04574967405475,
+        "std": 6.011301692347862,
+        "range": 33.94,
+        "pattern": "variable"
+      },
+      "right_arm_angle": {
+        "mean": 162.67534351145036,
+        "std": 3.9515060995168625,
+        "range": 21.819999999999993,
+        "pattern": "static"
+      },
+      "left_knee_lift": {
+        "mean": 163.70036505867014,
+        "std": 35.695210816372445,
+        "range": 128.72,
+        "pattern": "cyclic"
+      },
+      "right_knee_lift": {
+        "mean": 172.80159061277706,
+        "std": 21.0676848342595,
+        "range": 76.48,
+        "pattern": "variable"
+      },
+      "body_rotation": {
+        "mean": 72.5483963494133,
+        "std": 77.67801863658566,
+        "range": 327.18,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 91.35041666666666,
+        "std": 37.27592004369801,
+        "range": 178.35,
+        "pattern": "cyclic"
+      }
+    },
+    "side_punches": {
+      "left_arm_angle": {
+        "mean": 55.461797235023035,
+        "std": 54.122174017918574,
+        "range": 176.12,
+        "pattern": "cyclic"
+      },
+      "right_arm_angle": {
+        "mean": 52.96584992343032,
+        "std": 55.70472267876999,
+        "range": 176.04,
+        "pattern": "cyclic"
+      },
+      "left_knee_lift": {
+        "mean": 185.02747320061255,
+        "std": 9.456753012300384,
+        "range": 40.420000000000016,
+        "pattern": "variable"
+      },
+      "right_knee_lift": {
+        "mean": 185.66609494640122,
+        "std": 8.905925238423801,
+        "range": 33.44,
+        "pattern": "variable"
+      },
+      "body_rotation": {
+        "mean": 80.16863705972435,
+        "std": 93.45537292125815,
+        "range": 358.24,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 136.38619047619045,
+        "std": 39.8708936442149,
+        "range": 272.83,
+        "pattern": "cyclic"
+      }
+    },
+    "shimmy": {
+      "left_arm_angle": {
+        "mean": 127.25018835616439,
+        "std": 23.457714231891178,
+        "range": 95.23,
+        "pattern": "cyclic"
+      },
+      "right_arm_angle": {
+        "mean": 126.16746575342466,
+        "std": 23.085371830451358,
+        "range": 96.71999999999998,
+        "pattern": "variable"
+      },
+      "left_knee_lift": {
+        "mean": 188.74755136986303,
+        "std": 7.855439503419378,
+        "range": 41.53,
+        "pattern": "variable"
+      },
+      "right_knee_lift": {
+        "mean": 190.97917808219177,
+        "std": 7.5815774605424,
+        "range": 32.03,
+        "pattern": "variable"
+      },
+      "body_rotation": {
+        "mean": 107.39493150684932,
+        "std": 92.38204178396032,
+        "range": 356.37,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 374.11650684931504,
+        "std": 82.67161505464317,
+        "range": 328.84999999999997,
+        "pattern": "cyclic"
+      }
+    },
+    "merengue_march": {
+      "left_arm_angle": {
+        "mean": 67.15667256637168,
+        "std": 38.348048839714664,
+        "range": 140.53,
+        "pattern": "cyclic"
+      },
+      "right_arm_angle": {
+        "mean": 69.27869026548673,
+        "std": 37.95610072177343,
+        "range": 158.85,
+        "pattern": "cyclic"
+      },
+      "left_knee_lift": {
+        "mean": 201.1846017699115,
+        "std": 2.287442222452584,
+        "range": 18.319999999999993,
+        "pattern": "static"
+      },
+      "right_knee_lift": {
+        "mean": 199.20851327433627,
+        "std": 2.2552230630212797,
+        "range": 14.849999999999994,
+        "pattern": "static"
+      },
+      "body_rotation": {
+        "mean": 122.98132743362834,
+        "std": 108.408521037136,
+        "range": 358.35,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 111.97897345132742,
+        "std": 27.31961868910105,
+        "range": 106.98000000000002,
+        "pattern": "cyclic"
+      }
+    },
+    "heel_taps": {
+      "left_arm_angle": {
+        "mean": 62.90810985460419,
+        "std": 44.461376923639335,
+        "range": 172.45,
+        "pattern": "cyclic"
+      },
+      "right_arm_angle": {
+        "mean": 53.824426494345715,
+        "std": 49.37732291456328,
+        "range": 175.12,
+        "pattern": "cyclic"
+      },
+      "left_knee_lift": {
+        "mean": 184.87407108239097,
+        "std": 8.812804949832957,
+        "range": 46.140000000000015,
+        "pattern": "variable"
+      },
+      "right_knee_lift": {
+        "mean": 187.69870759289176,
+        "std": 7.989583926486742,
+        "range": 40.68000000000001,
+        "pattern": "variable"
+      },
+      "body_rotation": {
+        "mean": 181.57886914378028,
+        "std": 115.78346845042684,
+        "range": 358.7,
+        "pattern": "cyclic"
+      },
+      "hands_distance": {
+        "mean": 207.62046849757672,
+        "std": 82.20867502309918,
+        "range": 340.12,
+        "pattern": "cyclic"
+      }
+    }
+  },
+  "generation_date": "2025-07-08T18:12:07.699922",
+  "system_type": "Improved Automatic - With Temporal Smoothing",
+  "classification_threshold": 0.45,
+  "minimum_stability_frames": 8
+}
