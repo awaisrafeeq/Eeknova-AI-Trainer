@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 import json
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,19 @@ class YogaSession(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class YogaInstruction(Base):
+    """Yoga pose instructions stored in DB"""
+    __tablename__ = "yoga_instructions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pose_id = Column(String(100), unique=True, index=True, nullable=False)
+    name = Column(String(150), nullable=False)
+    entry = Column(Text, default="[]")
+    release = Column(Text, default="[]")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ChessProgress(Base):
     """Chess progress tracking model"""
     __tablename__ = "chess_progress"
@@ -129,6 +143,14 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    finally:
+        db.close()
+
+
+def count_yoga_instructions() -> int:
+    db = SessionLocal()
+    try:
+        return db.query(YogaInstruction).count()
     finally:
         db.close()
 
@@ -304,6 +326,96 @@ def email_exists(email: str) -> bool:
 
 # ===================== Yoga Streak Operations =====================
 
+def _normalize_pose_id(name: str) -> str:
+    cleaned = re.sub(r"\([^)]*\)", "", name or "")
+    cleaned = cleaned.replace("–", "-").replace("—", "-").replace("-", " ")
+    cleaned = re.sub(r"[^A-Za-z0-9 ]+", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned.lower().replace(" ", "_")
+
+
+def _pose_id_aliases() -> Dict[str, str]:
+    return {
+        "cat_and_camel_pose": "cat_cow_pose",
+        "child_pose": "childs_pose",
+        "warrior_pose": "warrior_ii",
+        "warrior_1": "warrior_i",
+        "seated_forward": "seated_forward_bend",
+        "triangle": "triangle_pose",
+    }
+
+
+def yoga_instruction_exists(pose_id: str) -> bool:
+    db = SessionLocal()
+    try:
+        return db.query(YogaInstruction).filter(YogaInstruction.pose_id == pose_id).first() is not None
+    finally:
+        db.close()
+
+
+def resolve_pose_id_db(pose_name: str) -> Optional[str]:
+    if not pose_name:
+        return None
+    candidate = _normalize_pose_id(pose_name)
+    if yoga_instruction_exists(candidate):
+        return candidate
+    alias = _pose_id_aliases().get(candidate)
+    if alias and yoga_instruction_exists(alias):
+        return alias
+    return None
+
+
+def list_yoga_instructions() -> List[Dict[str, Any]]:
+    db = SessionLocal()
+    try:
+        records = db.query(YogaInstruction).order_by(YogaInstruction.name.asc()).all()
+        return [
+            {
+                "pose_id": rec.pose_id,
+                "name": rec.name,
+                "entry": json.loads(rec.entry or "[]"),
+                "release": json.loads(rec.release or "[]"),
+            }
+            for rec in records
+        ]
+    finally:
+        db.close()
+
+
+def get_yoga_instruction(pose_id: str) -> Optional[Dict[str, Any]]:
+    db = SessionLocal()
+    try:
+        rec = db.query(YogaInstruction).filter(YogaInstruction.pose_id == pose_id).first()
+        if not rec:
+            return None
+        return {
+            "pose_id": rec.pose_id,
+            "name": rec.name,
+            "entry": json.loads(rec.entry or "[]"),
+            "release": json.loads(rec.release or "[]"),
+        }
+    finally:
+        db.close()
+
+
+def upsert_yoga_instruction(pose_id: str, name: str, entry: List[str], release: List[str]) -> None:
+    db = SessionLocal()
+    try:
+        rec = db.query(YogaInstruction).filter(YogaInstruction.pose_id == pose_id).first()
+        if not rec:
+            rec = YogaInstruction(pose_id=pose_id, name=name)
+            db.add(rec)
+        rec.name = name
+        rec.entry = json.dumps(entry or [])
+        rec.release = json.dumps(release or [])
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error upserting yoga instruction: {e}")
+        raise
+    finally:
+        db.close()
+
 def get_yoga_streak(username: str) -> Optional[Dict[str, Any]]:
     """Get yoga streak data for user"""
     db = SessionLocal()
@@ -343,6 +455,7 @@ def get_yoga_streak(username: str) -> Optional[Dict[str, Any]]:
 
 def update_yoga_streak(username: str, session_duration_seconds: int, session_minutes: int) -> Optional[Dict[str, Any]]:
     """Update yoga streak after a completed session"""
+    print(f"[DEBUG] update_yoga_streak called for {username}, duration={session_duration_seconds}s")
     db = SessionLocal()
     try:
         streak = db.query(YogaStreak).filter(YogaStreak.username == username).first()
@@ -420,7 +533,7 @@ def create_yoga_session(username: str, session_data: Dict[str, Any]) -> Optional
         db.refresh(session)
         
         # Update streak if session was completed
-        if session.completed and session.duration_seconds >= 60:
+        if session.completed:
             update_yoga_streak(username, session.duration_seconds, session.duration_seconds // 60)
         
         return {

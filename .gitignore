@@ -95,3 +95,5 @@ tests/
 # frontend/public/T_Body_SRMF.PNG
 # *.PNG
 # *.png
+
+*.md
