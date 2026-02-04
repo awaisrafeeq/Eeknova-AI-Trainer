@@ -225,7 +225,7 @@ export default function YogaPage() {
   // Load streak data from database API
 
   const loadStreakData = async () => {
-
+    console.log('loadStreakData called');
     try {
 
       const token = localStorage.getItem('access_token');
@@ -266,9 +266,13 @@ export default function YogaPage() {
 
           const streakResult = await streakResponse.json();
 
+          console.log('streakResult:', streakResult);
+
           if (streakResult.success) {
 
             const streakData = streakResult.data;
+
+            console.log('Setting streak to:', streakData.current_streak);
 
             setSessionStats(prev => ({ 
 
@@ -599,12 +603,14 @@ export default function YogaPage() {
 
 
       // Update streak when session completes successfully
-
-      if (summary.duration_seconds >= 60) { // Only count if session was at least 1 minute
-
-        updateStreak();
-
-      }
+      console.log('Updating streak...');
+      updateStreak()
+        .then((res) => console.log('updateStreak response:', res))
+        .then(() => {
+          console.log('Reloading streak...');
+          loadStreakData();
+        })
+        .catch((e) => console.error('updateStreak error:', e));
 
     }
 
@@ -1016,6 +1022,8 @@ export default function YogaPage() {
                 onTTSSpeakingChange={handleTTSSpeakingChange}
 
                 onTTSTextChange={handleTTSTextChange}
+
+                currentPhase={currentPhase}
 
                 onPhaseChange={handlePhaseChange}
 

@@ -27,7 +27,12 @@ from database import (
     init_db, get_yoga_streak, update_yoga_streak, create_yoga_session,
     get_chess_progress, update_chess_progress,
     get_module_progress, update_module_progress,
-    get_user_profile
+    get_user_profile,
+    count_yoga_instructions,
+    get_yoga_instruction as get_yoga_instruction_db,
+    list_yoga_instructions,
+    resolve_pose_id_db,
+    upsert_yoga_instruction,
 )
 
 # Import your existing yoga pose analysis functions
@@ -44,6 +49,9 @@ from Yoga_pose_estimation_YOLO import (
 )
 # Import Zumba processor
 from zumba_processor import zumba_session_manager
+
+# Yoga instruction loader (for one-time seeding)
+from yoga_instructions import get_pose_display_name, load_instructions
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -74,6 +82,20 @@ active_connections: Dict[str, WebSocket] = {}
 @app.on_event("startup")
 async def startup_event():
     init_db()
+    if count_yoga_instructions() == 0:
+        try:
+            instructions = load_instructions()
+            for pose_id, data in instructions.items():
+                upsert_yoga_instruction(
+                    pose_id=pose_id,
+                    name=get_pose_display_name(pose_id) or pose_id.replace("_", " ").title(),
+                    entry=data.get("entry", []),
+                    release=data.get("release", [])
+                )
+            if instructions:
+                logger.info("Seeded yoga instructions from markdown")
+        except Exception as e:
+            logger.warning(f"Skipped yoga instruction seeding: {e}")
     logger.info("Database initialized successfully")
 
 # Complete Chess Engine imports - Full pygame functionality
@@ -167,6 +189,13 @@ class UserProfile(BaseModel):
     weight: Optional[float] = None
     fitness_level: Optional[str] = "beginner"
     preferences: Optional[Dict[str, Any]] = {}
+
+
+class YogaInstructionResponse(BaseModel):
+    pose_id: str
+    name: str
+    entry: List[str]
+    release: List[str]
 
 
 
@@ -1170,6 +1199,47 @@ async def get_yoga_streak_endpoint(username: str):
     except Exception as e:
         logger.error(f"Error getting yoga streak: {e}")
         return {"success": False, "message": str(e)}
+
+
+@app.get("/api/yoga/instructions", response_model=List[YogaInstructionResponse])
+async def get_yoga_instructions():
+    """Get all beginner yoga instructions"""
+    try:
+        poses = []
+        for pose in list_yoga_instructions():
+            poses.append(
+                YogaInstructionResponse(
+                    pose_id=pose["pose_id"],
+                    name=pose["name"],
+                    entry=pose.get("entry", []),
+                    release=pose.get("release", [])
+                )
+            )
+        return poses
+    except Exception as e:
+        logger.error(f"Error loading yoga instructions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/yoga/instructions/{pose_id}", response_model=YogaInstructionResponse)
+async def get_yoga_instruction(pose_id: str):
+    """Get instructions for a single pose"""
+    try:
+        resolved_id = resolve_pose_id_db(pose_id) or pose_id
+        instructions = get_yoga_instruction_db(resolved_id)
+        if not instructions:
+            raise HTTPException(status_code=404, detail="Pose not found")
+        return YogaInstructionResponse(
+            pose_id=resolved_id,
+            name=instructions.get("name") or resolved_id.replace("_", " ").title(),
+            entry=instructions.get("entry", []),
+            release=instructions.get("release", [])
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error loading yoga instruction {pose_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/yoga/session")
 async def create_yoga_session_endpoint(session_data: Dict[str, Any]):
