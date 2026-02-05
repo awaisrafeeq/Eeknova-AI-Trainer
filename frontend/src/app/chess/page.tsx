@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -68,6 +68,9 @@ export default function ChessPage() {
   const [view, setView] = useState<'list' | 'lesson'>('list');
   const [moduleProgress, setModuleProgress] = useState<Record<string, number>>({});
   const [progressUpdateKey, setProgressUpdateKey] = useState(0); // Force re-render
+  const [chessAnimKey, setChessAnimKey] = useState(0);
+  const lastCorrectRef = useRef(false);
+  const hasPlayedInitialRef = useRef(false); // Prevent initial animation on load
 
   // AI vs AI automation
   useEffect(() => {
@@ -103,6 +106,34 @@ export default function ChessPage() {
     };
     loadModules();
   }, []);
+
+  useEffect(() => {
+    console.log('Animation check:', {
+      isCorrect: exercise?.is_correct,
+      lastCorrect: lastCorrectRef.current,
+      hasPlayedInitial: hasPlayedInitialRef.current,
+      exerciseId: exercise?.exercise_id
+    });
+    
+    // Reset lastCorrect when exercise changes
+    if (exercise?.exercise_id) {
+      lastCorrectRef.current = false;
+    }
+    
+    // Only trigger animation for correct moves after initial load
+    if (exercise?.is_correct === true && !lastCorrectRef.current && hasPlayedInitialRef.current) {
+      console.log('Triggering animation!');
+      setChessAnimKey((prev: number) => prev + 1);
+      lastCorrectRef.current = true;
+    } else if (exercise?.is_correct === true) {
+      lastCorrectRef.current = true;
+    }
+    
+    // Set initial flag to true after first exercise loads
+    if (exercise && !hasPlayedInitialRef.current) {
+      hasPlayedInitialRef.current = true;
+    }
+  }, [exercise?.is_correct, exercise?.exercise_id]);
 
   // Load chess module progress from database
   useEffect(() => {
@@ -462,12 +493,19 @@ export default function ChessPage() {
     
     try {
       const state = await sendChessAction(sessionId, 'select_square', { square });
+      console.log('🔍 DEBUG: Backend response:', {
+        exercise_id: state.exercise_id,
+        is_correct: state.is_correct,
+        exercise_completed: state.exercise_completed,
+        module_completed: state.module_completed
+      });
       setExercise(state);
       updateModuleProgressForExercise(state);
       
       // Auto-progress if exercise is completed BUT module is not completed
       if (state.exercise_completed && !state.module_completed) {
         setTimeout(() => {
+          console.log('🔍 DEBUG: Auto-progressing to next exercise from select_square');
           handleAction('next');
         }, 1500); // Small delay before next exercise
       }
@@ -494,6 +532,7 @@ export default function ChessPage() {
       // Auto-progress if exercise is completed BUT module is not completed
       if (state.exercise_completed && !state.module_completed) {
         setTimeout(() => {
+          console.log('🔍 DEBUG: Auto-progressing to next exercise from handleAction');
           handleAction('next');
         }, 1500); // Small delay before next exercise
       }
@@ -519,17 +558,23 @@ export default function ChessPage() {
           ← Back
         </button>
 
-        <section className="relative grid grid-cols-12 gap-4 md:gap-6 mt-6">
-          {/* Avatar Section */}
-          <div className="col-span-12 lg:col-span-5 xl:col-span-5 relative">
+        <section className="relative flex flex-col gap-6 mt-6">
+          {/* Avatar Section - Top */}
+          <div className="relative">
             <div
-              className="avatar-wrap relative h-[72vh] rounded-[var(--radius-lg)] border border-[var(--glass-stroke)]"
+              className="avatar-wrap relative h-[40vh] rounded-[var(--radius-lg)] border border-[var(--glass-stroke)]"
               style={{
                 background: 'linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02))',
                 backdropFilter: 'blur(12px)',
               }}
             >
-              <Avatar3D onlyInAnimation={false} staticMode={true} />
+              <Avatar3D
+                onlyInAnimation={false}
+                staticMode={true}
+                staticModelPath="/Encouraging Gesture_compressed.glb"
+                playAnimationPath="/Encouraging Gesture_compressed.glb"
+                playAnimationKey={chessAnimKey}
+              />
               <div
                 className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-[42px] h-[18px] w-[60%]"
                 style={{
@@ -540,13 +585,8 @@ export default function ChessPage() {
             </div>
           </div>
 
-          {/* Divider */}
-          <div className="hidden lg:block col-span-1 relative">
-            <div className="absolute inset-y-6 left-1/2 w-px -translate-x-1/2 bg-gradient-to-b from-[rgba(25,227,255,.0)] via-[rgba(25,227,255,.75)] to-[rgba(25,227,255,.0)] shadow-[0_0_16px_rgba(25,227,255,.65),0_0_48px_rgba(25,227,255,.28)]" />
-          </div>
-
-          {/* Chess Lessons Panel */}
-          <aside className="col-span-12 lg:col-span-6 xl:col-span-6 content-center space-y-4">
+          {/* Chess Lessons Panel - Bottom */}
+          <aside className="flex-1 content-center space-y-4">
             <div className="mb-2 flex items-center justify-between">
               <h2
                 className="text-[32px] font-bold leading-tight text-[var(--brand-neo)]"
