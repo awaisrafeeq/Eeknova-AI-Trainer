@@ -518,7 +518,7 @@ class LessonEngine:
         
         return ExerciseState(
             exercise_id=exercise_id,
-            module_id="special_moves",  # Fixed: Use special_moves instead of pawn_movement
+            module_id="pawn_movement",
             exercise_type="en_passant",
             board_position=self.engine.get_board_position(),
             highlighted_squares=[
@@ -532,7 +532,7 @@ class LessonEngine:
             feedback_message=None,
             is_correct=None,
             progress_current=exercise_number,
-            progress_total=5,
+            progress_total=15,
             hint_available=True,
             exercise_completed=False,
             module_completed=False

@@ -93,7 +93,7 @@ const POSE_ANIMATIONS: Record<string, PoseAnimation> = {
   },
 };
 
-function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false, onError }: { selectedPose: string; onlyInAnimation?: boolean; isTTSSpeaking?: boolean; isPaused?: boolean; staticMode?: boolean; onError?: (error: string) => void }) {
+function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, onError }: { selectedPose: string; onlyInAnimation?: boolean; isTTSSpeaking?: boolean; isPaused?: boolean; staticMode?: boolean; staticModelPath?: string; playAnimationPath?: string; playAnimationKey?: number; onError?: (error: string) => void }) {
   const [model, setModel] = useState<THREE.Group | null>(null);
   const [mixer, setMixer] = useState<THREE.AnimationMixer | null>(null);
   const [currentAnimation, setCurrentAnimation] = useState<'in' | 'main' | 'out'>('in');
@@ -108,7 +108,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = fals
   const originalBlendshapesRef = useRef<number[]>([]);
 
   // Load chess avatar without animations
-  const loadChessAvatar = async () => {
+  const loadChessAvatar = async (modelPath?: string) => {
     try {
       const loader = new GLTFLoader();
       
@@ -126,7 +126,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = fals
       console.log('Loading static avatar...');
       
       // Load yoga avatar as static model (use in animation)
-      const gltf = await loader.loadAsync('/Mountain Pose/in_compressed.glb');
+      const gltf = await loader.loadAsync(modelPath || '/Mountain Pose/in_compressed.glb');
       const loadedModel = gltf.scene;
 
       // Set shadows and materials
@@ -156,7 +156,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = fals
   useEffect(() => {
     // If static mode, load chess avatar without animations
     if (staticMode) {
-      loadChessAvatar();
+      loadChessAvatar(staticModelPath);
       return;
     }
 
@@ -428,7 +428,87 @@ function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = fals
         clearTimeout(animationTimeoutRef.current);
       }
     };
-  }, [selectedPose]);
+  }, [selectedPose, staticMode, staticModelPath]);
+
+  useEffect(() => {
+    if (!staticMode || playAnimationKey === undefined || playAnimationKey === 0 || !playAnimationPath) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const playChessAnimation = async () => {
+      try {
+        console.log('🎬 Playing chess animation:', playAnimationPath);
+        const loader = new GLTFLoader();
+
+        const dracoLoader = new DRACOLoader();
+        dracoLoader.setDecoderPath('/draco/');
+        loader.setDRACOLoader(dracoLoader);
+
+        const ktx2Loader = new KTX2Loader()
+          .setTranscoderPath('/basis/')
+          .detectSupport(new THREE.WebGLRenderer());
+        loader.setKTX2Loader(ktx2Loader);
+
+        const gltf = await loader.loadAsync(playAnimationPath);
+        if (isCancelled) {
+          return;
+        }
+
+        const loadedModel = gltf.scene;
+
+        if (mixer) {
+          mixer.stopAllAction();
+          mixer.uncacheRoot(loadedModel);
+        }
+
+        const animationMixer = new THREE.AnimationMixer(loadedModel);
+        setMixer(animationMixer);
+
+        let maxDuration = 0;
+        if (gltf.animations && gltf.animations.length > 0) {
+          console.log('🎭 Found animations:', gltf.animations.map(a => a.name));
+          gltf.animations.forEach((clip: THREE.AnimationClip) => {
+            const action = animationMixer.clipAction(clip);
+            action.setLoop(THREE.LoopOnce, 1);
+            action.clampWhenFinished = true;
+            action.play();
+            maxDuration = Math.max(maxDuration, clip.duration);
+          });
+        } else {
+          console.warn('No animations found in chess gesture model');
+        }
+
+        loadedModel.position.set(0, -1, 0);
+        loadedModel.scale.setScalar(1.2);
+        setModel(loadedModel);
+
+        if (animationTimeoutRef.current) {
+          clearTimeout(animationTimeoutRef.current);
+        }
+
+        if (maxDuration > 0) {
+          animationTimeoutRef.current = setTimeout(() => {
+            if (animationMixer) {
+              animationMixer.stopAllAction();
+            }
+          }, maxDuration * 1000);
+        }
+      } catch (error) {
+        console.error('Error playing chess animation:', error);
+      }
+    };
+
+    playChessAnimation();
+
+    return () => {
+      isCancelled = true;
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+      }
+    };
+  }, [playAnimationKey, playAnimationPath, staticMode]);
 
   // TTS blendshape animation effect
   useFrame((state, delta) => {
@@ -567,9 +647,12 @@ interface Avatar3DProps {
   isTTSSpeaking?: boolean; // New prop for TTS sync
   isPaused?: boolean; // New prop for pause/resume
   staticMode?: boolean; // New prop for static avatar without animation
+  staticModelPath?: string; // Optional custom static model (e.g. chess)
+  playAnimationPath?: string; // Optional custom animation model (e.g. chess)
+  playAnimationKey?: number; // Increment to trigger one-shot animation
 }
 
-export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false }: Avatar3DProps) {
+export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey }: Avatar3DProps) {
   const [webglSupported, setWebglSupported] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -621,6 +704,9 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
                 isTTSSpeaking={isTTSSpeaking} 
                 isPaused={isPaused}
                 staticMode={staticMode}
+                staticModelPath={staticModelPath}
+                playAnimationPath={playAnimationPath}
+                playAnimationKey={playAnimationKey}
                 onError={setError}
               />
             </Suspense>

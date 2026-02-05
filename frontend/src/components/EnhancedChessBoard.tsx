@@ -119,6 +119,7 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
                 return;
             }
             
+            // AUTO-PROGRESS ON CORRECT ANSWER
             if (exercise.exercise_completed && !exercise.module_completed) {
                 console.log('🔍 DEBUG: Auto-progressing to next exercise');
                 onAction('next');
