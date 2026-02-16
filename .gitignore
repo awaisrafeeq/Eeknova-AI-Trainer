@@ -77,7 +77,7 @@ build/
 
 # OpenCV models
 *.onnx
-*.pt
+# *.pt
 *.pth
 *.weights
 
