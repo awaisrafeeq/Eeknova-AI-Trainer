@@ -6,6 +6,7 @@ import ZumbaCamera from '@/components/ZumbaCamera';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { getZumbaMoves, ZumbaSessionSummary } from '@/lib/zumbaApi';
+import { useAuth, useAuthenticatedFetch } from '@/hooks/useAuth';
 
 /**
  * Zumba Module page with real-time camera integration
@@ -18,6 +19,8 @@ import { getZumbaMoves, ZumbaSessionSummary } from '@/lib/zumbaApi';
 
 export default function ZumbaPage() {
   const router = useRouter();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const authenticatedFetch = useAuthenticatedFetch();
 
   // State management
   const [availableMoves, setAvailableMoves] = useState<string[]>([]);
@@ -39,6 +42,8 @@ export default function ZumbaPage() {
 
   // Load available moves
   useEffect(() => {
+    if (!isAuthenticated) return; // Only load if authenticated
+    
     const loadMoves = async () => {
       try {
         const moves = await getZumbaMoves();
@@ -55,7 +60,7 @@ export default function ZumbaPage() {
     };
 
     loadMoves();
-  }, [selectedMove]);
+  }, [selectedMove, isAuthenticated]);
 
   // Toggle session state on click
   function toggleSessionState(id: string) {

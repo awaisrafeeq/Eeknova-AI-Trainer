@@ -16,7 +16,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# lib/
 lib64/
 parts/
 sdist/
@@ -96,4 +96,4 @@ tests/
 # *.PNG
 # *.png
 
-*.md
+*.txt

@@ -44,7 +44,8 @@ export default function SettingsPage() {
         return;
       }
 
-      const response = await fetch('http://localhost:8000/api/auth/me', {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/api/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -78,7 +79,8 @@ export default function SettingsPage() {
         return;
       }
 
-      const response = await fetch('http://localhost:8000/api/auth/profile', {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/api/auth/profile`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,

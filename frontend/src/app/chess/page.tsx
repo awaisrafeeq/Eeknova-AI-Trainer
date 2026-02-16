@@ -7,6 +7,7 @@ import Image from 'next/image';
 import AuthGuard from '@/components/AuthGuard';
 import Avatar3D from '@/components/Avatar3D';
 import { getChessModules, createChessSession, sendChessAction, ChessModule, ChessExerciseState } from '@/lib/chessApi';
+import { TTSFeedback } from '@/lib/yogaApi';
 import EnhancedChessBoard from '@/components/EnhancedChessBoard';
 
 interface UserProfile {
@@ -51,6 +52,8 @@ function Particles() {
 export default function ChessPage() {
   const router = useRouter();
 
+  const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8000';
+
   const [modules, setModules] = useState<ChessModule[]>([]);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -72,6 +75,9 @@ export default function ChessPage() {
   const lastCorrectRef = useRef(false);
   const hasPlayedInitialRef = useRef(false); // Prevent initial animation on load
 
+  // TTS for chess feedback
+  const ttsRef = useRef<TTSFeedback | null>(null);
+
   // AI vs AI automation
   useEffect(() => {
     if (view !== 'lesson' || !sessionId || !exercise || !exercise.instructions) return;
@@ -91,6 +97,22 @@ export default function ChessPage() {
       return () => clearTimeout(timer);
     }
   }, [view, sessionId, exercise]);
+
+  // Initialize TTS for chess feedback
+  useEffect(() => {
+    ttsRef.current = new TTSFeedback((speaking) => {
+      console.log('🎤 TTS speaking state changed:', speaking);
+      setIsTTSSpeaking(speaking);
+    }, (text) => {
+      console.log('TTS speaking:', text);
+    });
+
+    return () => {
+      if (ttsRef.current) {
+        ttsRef.current.stop();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const loadModules = async () => {
@@ -112,7 +134,8 @@ export default function ChessPage() {
       isCorrect: exercise?.is_correct,
       lastCorrect: lastCorrectRef.current,
       hasPlayedInitial: hasPlayedInitialRef.current,
-      exerciseId: exercise?.exercise_id
+      exerciseId: exercise?.exercise_id,
+      exerciseCompleted: exercise?.exercise_completed
     });
     
     // Reset lastCorrect when exercise changes
@@ -120,12 +143,19 @@ export default function ChessPage() {
       lastCorrectRef.current = false;
     }
     
-    // Only trigger animation for correct moves after initial load
-    if (exercise?.is_correct === true && !lastCorrectRef.current && hasPlayedInitialRef.current) {
-      console.log('Triggering animation!');
+    // Only trigger animation for CORRECTLY COMPLETED exercises after initial load
+    // This ensures animation plays only when piece moves to correct cell or correct answer is given
+    if (exercise?.is_correct === true && exercise?.exercise_completed === true && !lastCorrectRef.current && hasPlayedInitialRef.current) {
+      console.log('Triggering animation for correct completion!');
+      
+      // Trigger TTS IMMEDIATELY when correct move detected
+      if (ttsRef.current) {
+        ttsRef.current.speak('Good move!', true); // Priority speak
+      }
+      
       setChessAnimKey((prev: number) => prev + 1);
       lastCorrectRef.current = true;
-    } else if (exercise?.is_correct === true) {
+    } else if (exercise?.is_correct === true && exercise?.exercise_completed === true) {
       lastCorrectRef.current = true;
     }
     
@@ -133,7 +163,7 @@ export default function ChessPage() {
     if (exercise && !hasPlayedInitialRef.current) {
       hasPlayedInitialRef.current = true;
     }
-  }, [exercise?.is_correct, exercise?.exercise_id]);
+  }, [exercise?.is_correct, exercise?.exercise_completed, exercise?.exercise_id]);
 
   // Load chess module progress from database
   useEffect(() => {
@@ -147,7 +177,7 @@ export default function ChessPage() {
           return;
         }
         
-        const profileResponse = await fetch('http://localhost:8000/api/auth/me', {
+        const profileResponse = await fetch(`${apiBaseUrl}/api/auth/me`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -168,7 +198,7 @@ export default function ChessPage() {
         }
         
         // First try module progress endpoint (where we actually save the data)
-        const progressResponse = await fetch(`http://localhost:8000/api/module/progress/${username}`, {
+        const progressResponse = await fetch(`${apiBaseUrl}/api/module/progress/${username}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -177,7 +207,7 @@ export default function ChessPage() {
         
         if (!progressResponse.ok) {
           // Try chess progress endpoint as fallback
-          const chessProgressResponse = await fetch(`http://localhost:8000/api/chess/progress/${username}`, {
+          const chessProgressResponse = await fetch(`${apiBaseUrl}/api/chess/progress/${username}`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
@@ -344,7 +374,7 @@ export default function ChessPage() {
       }
       
       // Get username from token using existing auth system
-      const profileResponse = await fetch('http://localhost:8000/api/auth/me', {
+      const profileResponse = await fetch(`${apiBaseUrl}/api/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -372,7 +402,7 @@ export default function ChessPage() {
         progress: progress
       };
       
-      const moduleProgressResponse = await fetch(`http://localhost:8000/api/module/progress/${username}?${queryParams}`, {
+      const moduleProgressResponse = await fetch(`${apiBaseUrl}/api/module/progress/${username}?${queryParams}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -458,15 +488,21 @@ export default function ChessPage() {
     }
   };
 
-  const startLesson = async (moduleId: string) => {
+  const handleStartLesson = async (moduleId: string) => {
     setLoading(true);
     setError(null);
-    setSessionId(null);
     setExercise(null);
     
+    console.log('🔍 DEBUG: Starting lesson for module:', moduleId);
     
     try {
       const state = await createChessSession(moduleId);
+      
+      console.log('🔍 DEBUG: Created session state:', state);
+      console.log('🔍 DEBUG: Session ID:', state.session_id);
+      console.log('🔍 DEBUG: Exercise ID:', state.exercise_id);
+      console.log('🔍 DEBUG: Exercise type:', state.exercise_type);
+      console.log('🔍 DEBUG: Expected board_setup, got:', state.exercise_type);
       
       setSelectedModuleId(moduleId);
       setSessionId(state.session_id);
@@ -490,6 +526,7 @@ export default function ChessPage() {
       return;
     }
     
+    console.log('🔍 DEBUG: handleSquareClick called with square:', square);
     
     try {
       const state = await sendChessAction(sessionId, 'select_square', { square });
@@ -497,17 +534,27 @@ export default function ChessPage() {
         exercise_id: state.exercise_id,
         is_correct: state.is_correct,
         exercise_completed: state.exercise_completed,
-        module_completed: state.module_completed
+        module_completed: state.module_completed,
+        progress_current: state.progress_current,
+        progress_total: state.progress_total,
+        placed_pieces: state.placed_pieces
       });
+      
       setExercise(state);
       updateModuleProgressForExercise(state);
       
+      // Trigger TTS for bad move if incorrect
+      if (state.is_correct === false && ttsRef.current) {
+        ttsRef.current.speak('Bad move!', true); // Priority speak
+      }
+      
       // Auto-progress if exercise is completed BUT module is not completed
-      if (state.exercise_completed && !state.module_completed) {
+      if (state.exercise_completed && !state.module_completed && state.exercise_type !== 'identify_pieces') {
+        const delay = state.exercise_type === 'identify_pieces' ? 5000 : 1500;
         setTimeout(() => {
           console.log('🔍 DEBUG: Auto-progressing to next exercise from select_square');
           handleAction('next');
-        }, 1500); // Small delay before next exercise
+        }, delay); // Longer delay for identify_pieces to show feedback
       }
     } catch (e: any) {
       setError(e.message || 'Failed to apply move');
@@ -517,6 +564,8 @@ export default function ChessPage() {
   const handleAction = async (type: string, payload?: any) => {
     if (!sessionId) return;
     
+    console.log('🔍 DEBUG: handleAction called with type:', type, 'payload:', payload);
+    
     // Don't allow skip/next actions if module is already completed
     if (exercise?.module_completed && (type === 'skip' || type === 'next')) {
       console.log('Module already completed, ignoring skip/next action');
@@ -525,12 +574,23 @@ export default function ChessPage() {
     
     try {
       const state = await sendChessAction(sessionId, type, payload);
+      console.log('🔍 DEBUG: Backend response:', {
+        exercise_id: state.exercise_id,
+        is_correct: state.is_correct,
+        exercise_completed: state.exercise_completed,
+        module_completed: state.module_completed,
+        progress_current: state.progress_current,
+        progress_total: state.progress_total,
+        placed_pieces: state.placed_pieces,
+        current_piece_type: state.current_piece_type,
+        pieces_inventory: state.pieces_inventory
+      });
       
       setExercise(state);
       updateModuleProgressForExercise(state);
       
       // Auto-progress if exercise is completed BUT module is not completed
-      if (state.exercise_completed && !state.module_completed) {
+      if (state.exercise_completed && !state.module_completed && state.exercise_type !== 'identify_pieces') {
         setTimeout(() => {
           console.log('🔍 DEBUG: Auto-progressing to next exercise from handleAction');
           handleAction('next');
@@ -574,6 +634,7 @@ export default function ChessPage() {
                 staticModelPath="/Encouraging Gesture_compressed.glb"
                 playAnimationPath="/Encouraging Gesture_compressed.glb"
                 playAnimationKey={chessAnimKey}
+                isTTSSpeaking={isTTSSpeaking}
               />
               <div
                 className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-[42px] h-[18px] w-[60%]"
@@ -638,7 +699,7 @@ export default function ChessPage() {
                       <button
                         key={`${m.id}-${progressUpdateKey}`} // Force re-render on progress update
                         type="button"
-                        onClick={() => startLesson(m.id)}
+                        onClick={() => handleStartLesson(m.id)}
                         className="w-full rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-[var(--glass)] px-3 py-3 text-left transition hover:border-[var(--brand-neo)] hover:shadow-[var(--glow-neo)]"
                       >
                         <div className="flex items-center justify-between mb-1">
@@ -810,7 +871,7 @@ export default function ChessPage() {
                     </div>
 
                     {/* Feedback message */}
-                    {exercise.feedback_message && (
+                    {exercise.feedback_message && !String(exercise.feedback_message).trim().toLowerCase().startsWith('hint:') && (
                       <div
                         className={`text-[14px] mt-2 ${exercise.is_correct === true
                           ? 'text-green-400'
@@ -827,7 +888,7 @@ export default function ChessPage() {
                   <div className="mt-3">
                     <button
                       type="button"
-                      onClick={() => startLesson(selectedModule.id)}
+                      onClick={() => handleStartLesson(selectedModule.id)}
                       disabled={loading}
                       className="px-4 py-2 rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-[var(--brand-neo)] text-black text-[14px] font-semibold disabled:opacity-60"
                     >

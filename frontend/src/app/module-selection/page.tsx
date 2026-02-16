@@ -111,7 +111,8 @@ export default function Page() {
             const token = localStorage.getItem('access_token');
             if (!token) return;
             try {
-                const response = await fetch('http://localhost:8000/api/auth/me', {
+                const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8000';
+                const response = await fetch(`${apiBaseUrl}/api/auth/me`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (response.ok) {
@@ -137,7 +138,7 @@ export default function Page() {
                     <section className="relative grid grid-cols-12 gap-4 md:gap-6">
                         <div className="col-span-12 lg:col-span-5 xl:col-span-5 relative">
                             <div className="avatar-wrap relative h-[72vh] rounded-[var(--radius-lg)] border border-[var(--glass-stroke)]" data-walktour="avatar" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02))', backdropFilter: 'blur(12px)' }}>
-                                <Avatar3D selectedPose="Mountain Pose" onlyInAnimation={false} />
+                                <Avatar3D selectedPose="" onlyInAnimation={false} staticModelPath="/smile & greet_compressed.glb" />
                                 <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-[42px] h-[18px] w-[60%]" style={{ filter: 'blur(10px)', background: 'radial-gradient(closest-side, rgba(25,227,255,.35), transparent)' }} />
                             </div>
                         </div>

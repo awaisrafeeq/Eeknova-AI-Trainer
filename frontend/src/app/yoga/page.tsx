@@ -1,14 +1,14 @@
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useAuth, useAuthenticatedFetch } from '@/hooks/useAuth';
+import { authRedirect } from '@/lib/auth';
 
 import { useRouter } from 'next/navigation';
 
 import Avatar3D from '@/components/Avatar3D';
-
 import YogaCamera from '@/components/YogaCamera';
-
-import { SessionSummary } from '@/lib/yogaApi';
+import { SessionSummary, TTSFeedback } from '@/lib/yogaApi';
 
 
 
@@ -86,13 +86,70 @@ const MET_VALUES: Record<string, number> = {
 
 export default function YogaPage() {
 
+  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
+  const authenticatedFetch = useAuthenticatedFetch();
+  const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8000';
   const router = useRouter();
+
+  // TTS reference for cleanup
+  const ttsRef = useRef<TTSFeedback | null>(null);
 
   const [selectedPose, setSelectedPose] = useState<string>("Mountain Pose");
 
   const [isSessionStarted, setIsSessionStarted] = useState(false);
 
   const [isPaused, setIsPaused] = useState(false);
+
+  const [flowStage, setFlowStage] = useState<'setup' | 'warmup' | 'pose' | 'cooldown'>('setup');
+
+  const WARMUP_STEPS = [
+    {
+      label: 'Deep Breathing Cycle',
+      path: '/warm-up/Deep Breathing Cycle_compressed.glb',
+      seconds: 60, // 1 minute per step
+    },
+    {
+      label: 'Neck Rolls',
+      path: '/warm-up/NECK_ROLLS_compressed.glb',
+      seconds: 60,
+    },
+    {
+      label: 'Arm Circles',
+      path: '/warm-up/Arm Circles_compressed.glb',
+      seconds: 60,
+      isPlaceholder: true,
+    },
+    {
+      label: 'Leg Stretch Side-to-Side',
+      path: '/warm-up/Leg Stretch Side-to-Side_compressed.glb',
+      seconds: 60,
+    },
+  ] as const;
+
+  const COOLDOWN_STEPS = [
+    {
+      label: 'Forward Fold Stretch',
+      path: '/cool-down/Forward Fold Stretch_compressed.glb',
+      seconds: 60,
+    },
+    {
+      label: 'Deep Breathing Cycle',
+      path: '/cool-down/Deep Breathing Cycle_compressed.glb',
+      seconds: 60, // 1 minute per step
+    },
+    {
+      label: 'Relax and Reset Pose',
+      path: '/cool-down/RELAX_&_RESET_pose_compressed.glb',
+      seconds: 60,
+      isPlaceholder: true,
+    },
+  ] as const;
+
+  const [warmupStepIndex, setWarmupStepIndex] = useState(0);
+  const [cooldownStepIndex, setCooldownStepIndex] = useState(0);
+  const [auxTimeLeft, setAuxTimeLeft] = useState(0);
+  const [auxAnimKey, setAuxAnimKey] = useState(0);
+  const [showWarmupSkipWarning, setShowWarmupSkipWarning] = useState(false);
 
   const [currentPoseIndex, setCurrentPoseIndex] = useState(2); // Mountain Pose index
 
@@ -138,15 +195,15 @@ export default function YogaPage() {
 
   // Pose specifications for timing
   const POSE_SPEC: Record<string, { in: number; hold: number; out: number; total: number }> = {
-    "Mountain Pose": { in: 4, hold: 27, out: 3, total: 34 },
-    "Tree Pose": { in: 6, hold: 30, out: 5, total: 41 },
-    "Downward Dog": { in: 7, hold: 30, out: 6, total: 43 },
+    "Mountain Pose": { in: 4, hold: 24, out: 5, total: 33 },
+    "Tree Pose": { in: 9, hold: 30, out: 7, total: 46 },
+    "Downward Dog": { in: 9, hold: 30, out: 8, total: 47 },
     "Warrior 1": { in: 8, hold: 30, out: 6, total: 44 },
-    "Warrior Pose": { in: 7, hold: 30, out: 6, total: 43 },
-    "Triangle": { in: 8, hold: 25, out: 6, total: 39 },
-    "Child Pose": { in: 5, hold: 35, out: 5, total: 45 },
-    "Cobra Pose": { in: 6, hold: 20, out: 6, total: 32 },
-    "Cat And Camel Pose": { in: 4, hold: 40, out: 4, total: 48 },
+    "Warrior Pose": { in: 8, hold: 30, out: 6, total: 44 },
+    "Triangle": { in: 4, hold: 25, out: 4, total: 33 },
+    "Child Pose": { in: 10, hold: 33, out: 9, total: 52 },
+    "Cobra Pose": { in: 9, hold: 21, out: 9, total: 39 },
+    "Cat And Camel Pose": { in: 8, hold: 42, out: 10, total: 60 },
   };
 
 
@@ -165,8 +222,9 @@ export default function YogaPage() {
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          // Time's up, end session
-          handleEndSession();
+          // TODO: Re-enable cool-down later - skip directly to session end
+          // startCooldown();
+          finalizeSessionEnd();
           return 0;
         }
         return prev - 1;
@@ -175,6 +233,49 @@ export default function YogaPage() {
 
     return () => clearInterval(timer);
   }, [isSessionStarted, isPaused, timeLeft]);
+
+  // Warm-up / Cool-down timer effect
+  useEffect(() => {
+    if (flowStage !== 'warmup' && flowStage !== 'cooldown') {
+      return;
+    }
+    if (isPaused || auxTimeLeft <= 0) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setAuxTimeLeft((prev) => Math.max(0, prev - 1));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [flowStage, isPaused, auxTimeLeft]);
+
+  // Step advancement for warm-up / cool-down
+  useEffect(() => {
+    if (flowStage === 'warmup' && auxTimeLeft === 0) {
+      if (warmupStepIndex < WARMUP_STEPS.length - 1) {
+        const nextIndex = warmupStepIndex + 1;
+        setWarmupStepIndex(nextIndex);
+        setAuxTimeLeft(WARMUP_STEPS[nextIndex].seconds);
+        setAuxAnimKey((k) => k + 1);
+      } else {
+        startPoseSession();
+      }
+    }
+  }, [flowStage, auxTimeLeft, warmupStepIndex]);
+
+  useEffect(() => {
+    if (flowStage === 'cooldown' && auxTimeLeft === 0) {
+      if (cooldownStepIndex < COOLDOWN_STEPS.length - 1) {
+        const nextIndex = cooldownStepIndex + 1;
+        setCooldownStepIndex(nextIndex);
+        setAuxTimeLeft(COOLDOWN_STEPS[nextIndex].seconds);
+        setAuxAnimKey((k) => k + 1);
+      } else {
+        finalizeSessionEnd();
+      }
+    }
+  }, [flowStage, auxTimeLeft, cooldownStepIndex]);
 
   // Phase management effect
   useEffect(() => {
@@ -210,15 +311,41 @@ export default function YogaPage() {
   }, []);
 
 
+  // Fetch user profile on component mount
+
+  const fetchUserProfile = async () => {
+
+    try {
+
+      // Use API route instead of direct backend call
+      const response = await authenticatedFetch('/api/auth/me');
+
+      if (response.ok) {
+
+        const profile = await response.json();
+
+        setUserProfile(profile);
+
+      }
+
+    } catch (error) {
+
+      // Error fetching user profile, using defaults
+
+    }
+
+  };
+
   // Fetch user profile and streak data on component mount
 
   useEffect(() => {
 
-    fetchUserProfile();
+    if (isAuthenticated) {
+      fetchUserProfile();
+      loadStreakData();
+    }
 
-    loadStreakData();
-
-  }, []);
+  }, [isAuthenticated]);
 
 
 
@@ -228,27 +355,8 @@ export default function YogaPage() {
     console.log('loadStreakData called');
     try {
 
-      const token = localStorage.getItem('access_token');
-
-      if (!token) return;
-
-
-
-      // Get username from token or profile
-
-      const response = await fetch('http://localhost:8000/api/auth/me', {
-
-        headers: {
-
-          'Authorization': `Bearer ${token}`,
-
-          'Content-Type': 'application/json'
-
-        }
-
-      });
-
-
+      // Use authenticated fetch instead of manual token handling
+      const response = await authenticatedFetch('/api/auth/me');
 
       if (response.ok) {
 
@@ -259,8 +367,7 @@ export default function YogaPage() {
 
 
         // Get streak data from database
-
-        const streakResponse = await fetch(`http://localhost:8000/api/yoga/streak/${username}`);
+        const streakResponse = await authenticatedFetch(`${apiBaseUrl}/api/yoga/streak/${username}`);
 
         if (streakResponse.ok) {
 
@@ -300,33 +407,97 @@ export default function YogaPage() {
 
 
 
+  // Handle Start button
+
+  const handleStart = () => {
+    // TODO: Re-enable warm-up later - skip directly to pose session
+    // startWarmup();
+    startPoseSession();
+  };
+
+  const startWarmup = () => {
+    setSessionSummary(null);
+    setCorrections([]);
+    setCurrentAccuracy(0);
+    setIsPaused(false);
+
+    setWarmupStepIndex(0);
+    setAuxTimeLeft(WARMUP_STEPS[0].seconds);
+    setAuxAnimKey(1);
+    setFlowStage('warmup');
+
+    // Ensure pose session is not running during warm-up
+    setIsSessionStarted(false);
+    setShouldPlayAnimation(false);
+  };
+
+  const startPoseSession = () => {
+    setShowWarmupSkipWarning(false);
+    setFlowStage('pose');
+    setIsSessionStarted(true);
+    setIsPaused(false);
+    setShouldPlayAnimation(true);
+
+    const poseSpec = POSE_SPEC[selectedPose];
+    if (poseSpec) {
+      setTotalTime(poseSpec.total);
+      setTimeLeft(poseSpec.total);
+      setCurrentPhase('in');
+    }
+
+    const currentPose = selectedPose;
+    setSelectedPose("");
+    setTimeout(() => {
+      setSelectedPose(currentPose);
+    }, 200);
+  };
+
+  const startCooldown = () => {
+    setIsSessionStarted(false);
+    setShouldPlayAnimation(false);
+    setIsPaused(false);
+
+    setCooldownStepIndex(0);
+    setAuxTimeLeft(COOLDOWN_STEPS[0].seconds);
+    setAuxAnimKey(1);
+    setFlowStage('cooldown');
+  };
+
+  const finalizeSessionEnd = () => {
+    console.log('🔄 Finalizing session end - resetting all states');
+    setFlowStage('setup');
+    setIsSessionStarted(false);
+    setIsPaused(false);
+    setShouldPlayAnimation(false);
+    setTimeLeft(0);
+    setCurrentPhase('in');
+    setPhaseTimeLeft(0);
+    setSessionPhase('idle');
+    // Don't reset sessionSummary here - let it show
+  };
+
+  // Effect to handle session end and ensure proper UI state
+  useEffect(() => {
+    if (sessionSummary && flowStage === 'setup') {
+      console.log('🎯 Session summary detected, ensuring proper setup state');
+      // Double-check all states are properly reset
+      setIsSessionStarted(false);
+      setShouldPlayAnimation(false);
+      setTimeLeft(0);
+      setCurrentPhase('in');
+      setPhaseTimeLeft(0);
+      setSessionPhase('idle');
+    }
+  }, [sessionSummary, flowStage]);
+
   // Update streak in database when session completes
 
   const updateStreak = async () => {
 
     try {
 
-      const token = localStorage.getItem('access_token');
-
-      if (!token) return;
-
-
-
-      // Get username from profile
-
-      const response = await fetch('http://localhost:8000/api/auth/me', {
-
-        headers: {
-
-          'Authorization': `Bearer ${token}`,
-
-          'Content-Type': 'application/json'
-
-        }
-
-      });
-
-
+      // Use authenticated fetch instead of manual token handling
+      const response = await authenticatedFetch('/api/auth/me');
 
       if (response.ok) {
 
@@ -360,18 +531,9 @@ export default function YogaPage() {
 
 
 
-        const sessionResponse = await fetch('http://localhost:8000/api/yoga/session', {
-
+        const sessionResponse = await authenticatedFetch(`${apiBaseUrl}/api/yoga/session`, {
           method: 'POST',
-
-          headers: {
-
-            'Content-Type': 'application/json'
-
-          },
-
           body: JSON.stringify(sessionData)
-
         });
 
 
@@ -388,59 +550,28 @@ export default function YogaPage() {
 
           }
 
+          return result;
+
+        } else {
+          const details = await sessionResponse.text().catch(() => '');
+          console.error('Failed to create yoga session for streak update:', {
+            status: sessionResponse.status,
+            details,
+          });
+          return { success: false, status: sessionResponse.status, details };
         }
 
       }
+
+      const details = await response.text().catch(() => '');
+      console.error('Failed to load profile for streak update:', { status: response.status, details });
+      return { success: false, status: response.status, details };
 
     } catch (error) {
 
       console.error('Error updating streak:', error);
 
-    }
-
-  };
-
-
-
-  const fetchUserProfile = async () => {
-
-    try {
-
-      const token = localStorage.getItem('access_token');
-
-      if (!token) {
-
-        return;
-
-      }
-
-
-
-      const response = await fetch('http://localhost:8000/api/auth/me', {
-
-        headers: {
-
-          'Authorization': `Bearer ${token}`,
-
-          'Content-Type': 'application/json'
-
-        }
-
-      });
-
-
-
-      if (response.ok) {
-
-        const profile = await response.json();
-
-        setUserProfile(profile);
-
-      }
-
-    } catch (error) {
-
-      // Error fetching user profile, using defaults
+      return { success: false, error: String((error as any)?.message || error) };
 
     }
 
@@ -469,48 +600,6 @@ export default function YogaPage() {
       setTimeout(() => setIsSessionStarted(true), 100);
 
     }
-
-  };
-
-
-
-  // Handle Start button
-
-  const handleStart = () => {
-
-    setIsSessionStarted(true);
-
-    setIsPaused(false);
-
-    setSessionSummary(null);
-
-    setCorrections([]);
-
-    setCurrentAccuracy(0);
-
-    setShouldPlayAnimation(true); // Start animation when session starts
-
-    // Initialize timer for current pose
-    const poseSpec = POSE_SPEC[selectedPose];
-    if (poseSpec) {
-      setTotalTime(poseSpec.total);
-      setTimeLeft(poseSpec.total);
-      setCurrentPhase('in');
-    }
-
-    
-
-    // Force avatar animation restart with a key change
-
-    const currentPose = selectedPose;
-
-    setSelectedPose(""); // Clear to force restart
-
-    setTimeout(() => {
-
-      setSelectedPose(currentPose); // Restore pose to trigger animation
-
-    }, 200); // Increased delay for better restart
 
   };
 
@@ -551,13 +640,9 @@ export default function YogaPage() {
   // Handle End Session button
 
   const handleEndSession = () => {
-
-    setIsSessionStarted(false);
-
-    setIsPaused(false);
-
-    setShouldPlayAnimation(false); // Stop animation when session ends
-
+    // TODO: Re-enable cool-down later - skip directly to session end
+    // startCooldown();
+    finalizeSessionEnd();
   };
 
 
@@ -567,6 +652,26 @@ export default function YogaPage() {
   const handleSessionEnd = useCallback((summary: SessionSummary | null) => {
 
     setSessionSummary(summary);
+
+    // Auto-scroll to session summary when session ends
+    if (summary) {
+      setTimeout(() => {
+        const summaryElement = document.getElementById('session-summary');
+        if (summaryElement) {
+          summaryElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+    }
+
+    // Stop TTS gracefully when session ends
+    try {
+      if (ttsRef.current) {
+        ttsRef.current.stop();
+        console.log('TTS stopped gracefully at session end');
+      }
+    } catch (error) {
+      console.log('TTS stop error at session end:', error);
+    }
 
     if (summary) {
 
@@ -615,6 +720,16 @@ export default function YogaPage() {
     }
 
   }, [selectedPose, userProfile?.weight, lastYogaDate, sessionStats.streak]);
+
+  const currentAuxStep = flowStage === 'warmup'
+    ? WARMUP_STEPS[warmupStepIndex]
+    : COOLDOWN_STEPS[cooldownStepIndex];
+
+  const formatAuxTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
 
 
@@ -730,13 +845,24 @@ export default function YogaPage() {
 
             >
 
-              <Avatar3D 
-                selectedPose={selectedPose} 
-                onlyInAnimation={shouldPlayAnimation} 
-                staticMode={!shouldPlayAnimation}
-                isTTSSpeaking={isTTSSpeaking} 
-                isPaused={isPaused} 
-              />
+              {flowStage === 'warmup' || flowStage === 'cooldown' ? (
+                <Avatar3D
+                  selectedPose={selectedPose}
+                  staticMode={true}
+                  playAnimationPath={currentAuxStep.path}
+                  playAnimationKey={auxAnimKey}
+                  isPaused={isPaused}
+                />
+              ) : (
+                <Avatar3D 
+                  selectedPose={selectedPose} 
+                  onlyInAnimation={shouldPlayAnimation} 
+                  staticMode={!shouldPlayAnimation}
+                  isTTSSpeaking={isTTSSpeaking} 
+                  isPaused={isPaused} 
+                  onSessionEnd={finalizeSessionEnd}
+                />
+              )}
 
               <div
 
@@ -756,7 +882,7 @@ export default function YogaPage() {
 
             </div>
 
-            {!isSessionStarted && (
+            {!isSessionStarted && flowStage === 'setup' && (
 
               <div className="text-center mt-2 text-[var(--ink-med)] text-sm">
 
@@ -782,30 +908,70 @@ export default function YogaPage() {
 
           }`}>
 
-            {!isSessionStarted && (
-
-              <div className="mb-4">
-
-                <h2
-
-                  className="text-[28px] font-bold leading-tight text-[var(--brand-neo)] text-center"
-
-                  style={{ fontFamily: 'var(--font-future)' }}
-
-                >
-
-                  Live Detection
-
-                </h2>
-
+            {flowStage === 'warmup' && (
+              <div className="mb-4 mt-2">
+                <div className="rounded-[var(--radius-lg)] border border-[var(--glass-stroke)] bg-[var(--glass)] p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[18px] font-semibold text-[var(--brand-neo)]">Warm-Up {warmupStepIndex + 1}/{WARMUP_STEPS.length}</div>
+                      <div className="text-[14px] text-[var(--ink-med)]">{currentAuxStep.label}{(currentAuxStep as any).isPlaceholder ? ' (placeholder)' : ''}</div>
+                    </div>
+                    <div className="text-[24px] font-bold text-[var(--brand-neo)] tabular-nums" style={{ fontFamily: 'var(--font-future)' }}>
+                      {formatAuxTime(auxTimeLeft)}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex gap-3 justify-center">
+                    <ControlButton label={isPaused ? '▶ Resume' : '⏸ Pause'} onClick={handlePause} />
+                    <ControlButton label="Skip Warm-Up" danger onClick={() => setShowWarmupSkipWarning(true)} />
+                  </div>
+                </div>
               </div>
-
             )}
 
+            {flowStage === 'cooldown' && (
+              <div className="mb-4 mt-2">
+                <div className="rounded-[var(--radius-lg)] border border-[var(--glass-stroke)] bg-[var(--glass)] p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[18px] font-semibold text-[var(--brand-neo)]">Cool-Down {cooldownStepIndex + 1}/{COOLDOWN_STEPS.length}</div>
+                      <div className="text-[14px] text-[var(--ink-med)]">{currentAuxStep.label}{(currentAuxStep as any).isPlaceholder ? ' (placeholder)' : ''}</div>
+                    </div>
+                    <div className="text-[24px] font-bold text-[var(--brand-neo)] tabular-nums" style={{ fontFamily: 'var(--font-future)' }}>
+                      {formatAuxTime(auxTimeLeft)}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex gap-3 justify-center">
+                    <ControlButton label={isPaused ? '▶ Resume' : '⏸ Pause'} onClick={handlePause} />
+                    <ControlButton
+                      label="Skip"
+                      disabled={cooldownStepIndex === COOLDOWN_STEPS.length - 1}
+                      onClick={() => {
+                        if (cooldownStepIndex < COOLDOWN_STEPS.length - 1) {
+                          const nextIndex = cooldownStepIndex + 1;
+                          setCooldownStepIndex(nextIndex);
+                          setAuxTimeLeft(COOLDOWN_STEPS[nextIndex].seconds);
+                          setAuxAnimKey((k) => k + 1);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
+            {!isSessionStarted && flowStage === 'setup' && (
+              <div className="mb-4">
+                <h2
+                  className="text-[28px] font-bold leading-tight text-[var(--brand-neo)] text-center"
+                  style={{ fontFamily: 'var(--font-future)' }}
+                >
+                  Live Detection
+                </h2>
+              </div>
+            )}
 
             {/* Session Timer & Phase - Show During Session */}
-            {isSessionStarted && (
+            {isSessionStarted && flowStage === 'pose' && (
               <div className="mb-4 mt-2">
                 <div className="flex flex-col items-center space-y-3">
                   <div className="text-3xl font-bold text-[var(--brand-neo)]" style={{ fontFamily: 'var(--font-future)' }}>
@@ -839,112 +1005,59 @@ export default function YogaPage() {
 
             {/* Session Timer & Phase - Hide During Session */}
 
-            {!isSessionStarted && sessionPhase !== 'idle' && (
-
+            {!isSessionStarted && flowStage === 'setup' && sessionPhase !== 'idle' && (
               <GlassCard title="Current Phase">
-
                 <div className="flex flex-col items-center justify-center p-2">
-
                   <div className="text-[20px] font-bold text-[var(--brand-neo)] capitalize mb-1">
-
                     {sessionPhase === 'in' ? 'Transitioning In' : sessionPhase === 'hold' ? 'Holding Pose' : 'Transitioning Out'}
-
                   </div>
-
                   <div className="text-[42px] font-black text-white tabular-nums">
-
                     {phaseTimeLeft}s
-
                   </div>
-
                   <div className="w-full h-1 bg-white/10 rounded-full mt-2 overflow-hidden">
-
                     <div
-
                       className="h-full bg-[var(--brand-neo)] transition-all duration-1000"
-
                       style={{
-
                         width: `${(phaseTimeLeft / 30) * 100}%`,
-
                         transitionTimingFunction: 'linear'
-
                       }}
-
                     />
-
                   </div>
-
                 </div>
-
               </GlassCard>
-
             )}
-
-
 
             {/* Pose Selector - Hide During Session */}
-
-            {!isSessionStarted && (
-
+            {!isSessionStarted && flowStage === 'setup' && (
               <div className="mt-4">
-
                 <GlassCard title="Pose Selector">
-
                   <div className="space-y-3">
-
                     <select
-
                       value={selectedPose}
-
                       onChange={handlePoseChange}
-
                       disabled={isSessionStarted}
-
                       className="w-full px-4 py-3 rounded-lg border border-[var(--glass-stroke)] bg-[var(--glass)] text-[var(--ink-hi)] text-[16px] focus:outline-none focus:ring-2 focus:ring-[var(--brand-neo)] focus:border-transparent transition-all disabled:opacity-50"
-
                       style={{
-
                         background: 'linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02))',
-
                         backdropFilter: 'blur(12px)',
-
                         colorScheme: 'dark',
-
                       }}
-
                     >
-
                       {POSE_OPTIONS.map((pose) => (
-
                         <option key={pose} value={pose} className="bg-[#0B132B] text-white">
-
                           {pose}
-
                         </option>
-
                       ))}
-
                     </select>
-
                     <div className="text-center text-[14px] text-[var(--ink-med)]">
-
                       Target pose: <span className="text-[var(--brand-neo)] font-semibold">{selectedPose}</span>
-
                     </div>
-
                   </div>
-
                 </GlassCard>
-
               </div>
-
             )}
 
-
-
             {/* Control Buttons - Always Visible */}
-
             <div className={`flex flex-wrap gap-3 justify-center transition-all duration-700 ease-in-out ${
 
               isSessionStarted 
@@ -954,195 +1067,103 @@ export default function YogaPage() {
                 : 'mt-4'
 
             }`}>
-
-              {!isSessionStarted ? (
-
+              {!isSessionStarted && flowStage === 'setup' ? (
                 <ControlButton
-
                   label="▶ Start"
-
                   active
-
                   onClick={handleStart}
-
                 />
-
               ) : (
-
                 <ControlButton
-
                   label={isPaused ? "▶ Resume" : "⏸ Pause"}
-
                   onClick={handlePause}
-
                 />
-
               )}
-
+              {flowStage === 'pose' && (
+                <ControlButton
+                  label="⏭ Next Pose"
+                  onClick={handleNextPose}
+                />
+              )}
               <ControlButton
-
-                label="⏭ Next Pose"
-
-                onClick={handleNextPose}
-
-              />
-
-              <ControlButton
-
                 label="⏹ End Session"
-
                 danger
-
                 onClick={handleEndSession}
-
-                disabled={!isSessionStarted}
-
+                disabled={flowStage !== 'pose'}
               />
-
             </div>
-
-
 
             {/* Hidden Camera Component - Background Processing */}
-
             <div className="hidden">
-
               <YogaCamera
-
                 selectedPose={selectedPose}
-
-                isStarted={isSessionStarted && !isPaused}
-
+                isStarted={flowStage === 'pose' && isSessionStarted && !isPaused}
                 onSessionEnd={handleSessionEnd}
-
                 onAccuracyUpdate={setCurrentAccuracy}
-
                 onCorrectionsUpdate={setCorrections}
-
                 onTTSSpeakingChange={handleTTSSpeakingChange}
-
                 onTTSTextChange={handleTTSTextChange}
-
                 currentPhase={currentPhase}
-
                 onPhaseChange={handlePhaseChange}
-
                 tolerance={10.0}
-
                 mirrorMode={true}
-
               />
-
             </div>
 
-
-
             {/* Session Stats - Hide During Session */}
-
-            {!isSessionStarted && (
-
+            {!isSessionStarted && flowStage === 'setup' && (
               <>
-
                 <GlassCard title="Session Stats" className="mt-4">
-
                   <ul className="space-y-1 text-[16px] text-[var(--ink-med)]">
-
                     <li>Duration <span className="float-right font-semibold">{sessionStats.duration} min</span></li>
-
                     <li>Calories burned <span className="float-right font-semibold">{sessionStats.calories} cl</span></li>
-
                     <li>Avg Accuracy <span className="float-right font-semibold text-[var(--brand-neo)]">{sessionStats.accuracy}%</span></li>
-
                     <li>Streak <span className="float-right font-semibold text-[var(--brand-neo)]">{sessionStats.streak} days</span></li>
-
                     {userProfile?.weight && (
-
                       <li className="text-xs text-[var(--ink-low)]">Weight: {userProfile.weight}kg</li>
-
                     )}
-
                   </ul>
-
                 </GlassCard>
-
-
 
                 {/* Streak Status Indicator */}
-
                 <GlassCard title="Streak Status" className="mt-4">
-
                   <div className="text-center">
-
                     <div className="text-[48px] font-black text-[var(--brand-neo)] mb-2">
-
                       🔥 {sessionStats.streak}
-
                     </div>
-
                     <div className="text-[14px] text-[var(--ink-med)]">
-
                       {sessionStats.streak === 0 ? (
-
                         <span>Start your yoga journey today!</span>
-
                       ) : sessionStats.streak === 1 ? (
-
                         <span>Great start! Keep it going!</span>
-
                       ) : sessionStats.streak < 7 ? (
-
                         <span>{sessionStats.streak} day streak - Building momentum!</span>
-
                       ) : sessionStats.streak < 30 ? (
-
                         <span>{sessionStats.streak} day streak - On fire! 🔥</span>
-
                       ) : (
-
                         <span>{sessionStats.streak} day streak - Yoga Master! 🏆</span>
-
                       )}
-
                     </div>
-
                     {lastYogaDate && (
-
                       <div className="text-[12px] text-[var(--ink-low)] mt-2">
-
                         Last practice: {new Date(lastYogaDate).toLocaleDateString()}
-
                       </div>
-
                     )}
-
                     {lastYogaDate === new Date().toISOString().split('T')[0] && (
-
                       <div className="text-[12px] text-green-400 mt-2">
-
                         ✅ Today's practice complete!
-
                       </div>
-
                     )}
-
                   </div>
-
                 </GlassCard>
-
               </>
-
             )}
 
-
-
             {/* Session Summary (when ended) */}
-
-            {sessionSummary && !isSessionStarted && (
-
-              <GlassCard title="Session Summary" className="mt-4">
-
+            {sessionSummary && !isSessionStarted && flowStage === 'setup' && (
+              <div id="session-summary">
+                <GlassCard title="Session Summary" className="mt-4">
                 <ul className="space-y-1 text-[14px] text-[var(--ink-med)]">
-
                   <li>Total Duration <span className="float-right font-semibold">{Math.round(sessionSummary.duration_seconds)}s</span></li>
 
                   <li>Frames Analyzed <span className="float-right font-semibold">{sessionSummary.frames_processed}</span></li>
@@ -1155,11 +1176,34 @@ export default function YogaPage() {
 
               </GlassCard>
 
+              </div>
             )}
 
           </div>
 
         </section>
+
+        {showWarmupSkipWarning && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="rounded-[var(--radius-lg)] border border-[var(--glass-stroke)] bg-[var(--glass)] p-6 max-w-[420px] mx-6">
+              <h3 className="text-[20px] font-semibold mb-2 text-[var(--brand-neo)]">Skip Warm-Up?</h3>
+              <div className="text-[14px] text-[var(--ink-med)]">
+                Skipping warm-up may reduce flexibility and increase injury risk.
+              </div>
+              <div className="mt-4 flex gap-3">
+                <ControlButton label="Cancel" onClick={() => setShowWarmupSkipWarning(false)} />
+                <ControlButton
+                  label="Skip Warm-Up"
+                  danger
+                  onClick={() => {
+                    setShowWarmupSkipWarning(false);
+                    startPoseSession();
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
 

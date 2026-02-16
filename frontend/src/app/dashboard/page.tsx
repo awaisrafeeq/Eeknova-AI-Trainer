@@ -1,13 +1,77 @@
 'use client';
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Avatar3D from '@/components/Avatar3D';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
+import { useAuthenticatedFetch } from '@/hooks/useAuth';
+
+type CardStats = {
+    progress: number;
+    accuracy: number;
+    calories: number;
+    history: string;
+};
+
+type DashboardStats = {
+    yoga: CardStats;
+    zumba: CardStats;
+    chess: CardStats;
+};
 
 export default function Page() {
     const router = useRouter();
+    const authenticatedFetch = useAuthenticatedFetch();
+    const [stats, setStats] = useState<DashboardStats | null>(null);
+    const [loadingStats, setLoadingStats] = useState(false);
+
+    const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8000';
+
+    const loadStats = useCallback(async () => {
+        try {
+            setLoadingStats(true);
+            const meRes = await authenticatedFetch('/api/auth/me');
+            if (!meRes.ok) return;
+            const me = await meRes.json();
+            const username = me?.username;
+            if (!username) return;
+
+            const statsRes = await authenticatedFetch(
+                `${apiBaseUrl}/api/dashboard/${encodeURIComponent(username)}`
+            );
+            if (!statsRes.ok) return;
+            const payload = await statsRes.json();
+            if (payload?.success && payload?.data) {
+                setStats(payload.data as DashboardStats);
+            }
+        } catch {
+            // ignore
+        } finally {
+            setLoadingStats(false);
+        }
+    }, [authenticatedFetch]);
+
+    useEffect(() => {
+        void loadStats();
+    }, [loadStats]);
+
+    useEffect(() => {
+        const onFocus = () => void loadStats();
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') void loadStats();
+        };
+        window.addEventListener('focus', onFocus);
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => {
+            window.removeEventListener('focus', onFocus);
+            document.removeEventListener('visibilitychange', onVisibility);
+        };
+    }, [loadStats]);
+
+    const yoga = stats?.yoga ?? { progress: 0, accuracy: 0, calories: 0, history: loadingStats ? 'Loading…' : '—' };
+    const zumba = stats?.zumba ?? { progress: 0, accuracy: 0, calories: 0, history: loadingStats ? 'Loading…' : '—' };
+    const chess = stats?.chess ?? { progress: 0, accuracy: 0, calories: 0, history: loadingStats ? 'Loading…' : '—' };
 
     return (
         <AuthGuard>
@@ -32,7 +96,7 @@ export default function Page() {
                                 backdropFilter: 'blur(12px)',
                             }}
                         >
-                            <Avatar3D onlyInAnimation={false} />
+                            <Avatar3D selectedPose="" onlyInAnimation={false} staticModelPath="/smile & greet_compressed.glb" />
                             <div
                                 className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-[42px] h-[18px] w-[60%]"
                                 style={{
@@ -80,26 +144,26 @@ export default function Page() {
                         <div className="space-y-5">
                             <DashboardCard
                                 title="Yoga"
-                                progress={46}
-                                accuracy={82}
-                                calories={105}
-                                history="2 days"
+                                progress={yoga.progress}
+                                accuracy={yoga.accuracy}
+                                calories={yoga.calories}
+                                history={yoga.history}
                                 href="/yoga"
                             />
                             <DashboardCard
                                 title="Zumba"
-                                progress={71}
-                                accuracy={88}
-                                calories={264}
-                                history="3 hrs ago"
-                                href='#'
+                                progress={zumba.progress}
+                                accuracy={zumba.accuracy}
+                                calories={zumba.calories}
+                                history={zumba.history}
+                                href='/zumba'
                             />
                             <DashboardCard
                                 title="Chess"
-                                progress={30}
-                                accuracy={76}
-                                calories={6}
-                                history="2 w ago"
+                                progress={chess.progress}
+                                accuracy={chess.accuracy}
+                                calories={chess.calories}
+                                history={chess.history}
                                 href='/chess'
                             />
 
@@ -135,6 +199,7 @@ function DashboardCard({
     history: string;
     href: string;
 }) {
+    const showCalories = title !== 'Chess';
     return (
         <Link href={href}>
         <div
@@ -162,10 +227,12 @@ function DashboardCard({
                 <li>
                     Accuracy <span className="float-right font-semibold">{accuracy}%</span>
                 </li>
-                <li>
-                    Calories burned{' '}
-                    <span className="float-right font-semibold">{calories} cl</span>
-                </li>
+                {showCalories && (
+                    <li>
+                        Calories burned{' '}
+                        <span className="float-right font-semibold">{calories} cl</span>
+                    </li>
+                )}
                 <li>
                     Session history{' '}
                     <span className="float-right font-semibold">{history}</span>

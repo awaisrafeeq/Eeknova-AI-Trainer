@@ -16,6 +16,8 @@ export default function AuthPage() {
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
 
+  const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8000';
+
   React.useEffect(() => {
     setMounted(true);
   }, []);
@@ -38,7 +40,7 @@ export default function AuthPage() {
         ? { username: authData.username, password: authData.password }
         : authData;
 
-      const response = await fetch(`http://localhost:8000${endpoint}`, {
+      const response = await fetch(`${apiBaseUrl}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -50,6 +52,13 @@ export default function AuthPage() {
 
       if (response.ok) {
         localStorage.setItem('access_token', data.access_token);
+        
+        // Also set cookie for server-side access
+        document.cookie = `access_token=${data.access_token}; path=/; max-age=3600; secure; samesite=strict`;
+        
+        console.log('✅ Token saved to localStorage and cookies');
+        console.log('🍪 Cookies after login:', document.cookie);
+        
         setMessage(isLogin ? 'Login successful!' : 'Registration successful!');
         setTimeout(() => {
           router.push('/');

@@ -1,10 +1,10 @@
 # database.py - SQLite Database Module with SQLAlchemy
 # Replaces in-memory user storage with persistent SQLite database
 
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, Text
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, Text, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 import json
 import logging
@@ -143,6 +143,129 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    finally:
+        db.close()
+
+
+def _format_relative_time(now: datetime, dt: Optional[datetime]) -> str:
+    if not dt:
+        return "—"
+    delta = now - dt
+    seconds = int(delta.total_seconds())
+    if seconds < 0:
+        seconds = 0
+    if seconds < 60:
+        return "Just now"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes} min ago"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours} hrs ago"
+    days = hours // 24
+    return f"{days} days ago"
+
+
+def get_dashboard_stats(username: str) -> Dict[str, Any]:
+    """Aggregate module stats for dashboard cards."""
+    db = SessionLocal()
+    try:
+        now = datetime.utcnow()
+
+        # ---------- Yoga ----------
+        streak = db.query(YogaStreak).filter(YogaStreak.username == username).first()
+        yoga_sessions_q = db.query(YogaSession).filter(
+            YogaSession.username == username,
+            YogaSession.completed == True,  # noqa: E712
+        )
+        yoga_last = yoga_sessions_q.order_by(YogaSession.session_date.desc()).first()
+        yoga_last_dt = yoga_last.session_date if yoga_last else (streak.last_practice_date if streak else None)
+
+        yoga_last_n = (
+            yoga_sessions_q.order_by(YogaSession.session_date.desc()).limit(10).all()
+        )
+        yoga_avg_acc = (
+            sum((s.average_accuracy or 0) for s in yoga_last_n) / len(yoga_last_n)
+            if yoga_last_n
+            else 0
+        )
+        yoga_cal_7d = (
+            db.query(func.coalesce(func.sum(YogaSession.calories_burned), 0))
+            .filter(
+                YogaSession.username == username,
+                YogaSession.completed == True,  # noqa: E712
+                YogaSession.session_date >= (now - timedelta(days=7)),
+            )
+            .scalar()
+            or 0
+        )
+
+        yoga_progress = 0
+        if streak and streak.total_sessions:
+            yoga_progress = min(100, int(streak.total_sessions * 5))
+
+        # ---------- Chess ----------
+        # Your frontend primarily persists chess progress via ModuleProgress, so use that for dashboard progress/history.
+        chess_module_ids = [
+            "identify_pieces",
+            "board_setup",
+            "pawn_movement",
+            "rook_movement",
+            "knight_movement",
+            "bishop_movement",
+            "queen_movement",
+            "king_movement",
+            "special_moves",
+            "check_checkmate_stalemate",
+        ]
+
+        chess_mp_rows = (
+            db.query(ModuleProgress)
+            .filter(ModuleProgress.username == username, ModuleProgress.module_id.in_(chess_module_ids))
+            .all()
+        )
+
+        if chess_mp_rows:
+            chess_progress = int(round(sum((r.progress_percentage or 0) for r in chess_mp_rows) / len(chess_mp_rows)))
+            chess_last_dt = max((r.last_accessed_date for r in chess_mp_rows if r.last_accessed_date), default=None)
+        else:
+            chess_progress = 0
+            chess_last_dt = None
+
+        # Keep accuracy from chess_progress table if present (some parts of the app may use it)
+        chess_rows = db.query(ChessProgress).filter(ChessProgress.username == username).all()
+        chess_best_acc = max((r.best_accuracy or 0) for r in chess_rows) if chess_rows else 0
+
+        # ---------- Zumba (no persistent history tables yet) ----------
+        # If ModuleProgress is being used for zumba, we can surface progress from it.
+        zumba_mp = (
+            db.query(ModuleProgress)
+            .filter(ModuleProgress.username == username, ModuleProgress.module_id == "zumba")
+            .first()
+        )
+        zumba_progress = int(zumba_mp.progress_percentage) if (zumba_mp and zumba_mp.progress_percentage) else 0
+        zumba_last_dt = zumba_mp.last_accessed_date if zumba_mp else None
+
+        return {
+            "yoga": {
+                "progress": int(max(0, min(100, yoga_progress))),
+                "accuracy": int(round(max(0, min(100, yoga_avg_acc)))),
+                "calories": int(max(0, yoga_cal_7d)),
+                "history": _format_relative_time(now, yoga_last_dt),
+            },
+            "zumba": {
+                "progress": int(max(0, min(100, zumba_progress))),
+                "accuracy": 0,
+                "calories": 0,
+                "history": _format_relative_time(now, zumba_last_dt),
+            },
+            "chess": {
+                "progress": int(max(0, min(100, chess_progress))),
+                "accuracy": int(round(max(0, min(100, chess_best_acc)))),
+                "calories": 0,
+                "history": _format_relative_time(now, chess_last_dt),
+            },
+        }
     finally:
         db.close()
 
@@ -435,7 +558,16 @@ def get_yoga_streak(username: str) -> Optional[Dict[str, Any]]:
             db.commit()
             db.refresh(new_streak)
             streak = new_streak
-        
+
+        now = datetime.now()
+        today = now.date()
+        if streak.last_practice_date:
+            last_practice = streak.last_practice_date.date()
+            diff_days = (today - last_practice).days
+            if diff_days >= 2 and streak.current_streak != 0:
+                streak.current_streak = 0
+                db.commit()
+
         return {
             "username": streak.username,
             "current_streak": streak.current_streak,
@@ -470,22 +602,20 @@ def update_yoga_streak(username: str, session_duration_seconds: int, session_min
                 total_minutes=0
             )
             db.add(streak)
-        
-        today = datetime.utcnow().date()
-        yesterday = today.replace(day=today.day - 1) if today.day > 1 else today.replace(month=today.month - 1, day=31)
+
+        now = datetime.now()
+        today = now.date()
         
         # Check if streak should be updated
         if streak.last_practice_date:
             last_practice = streak.last_practice_date.date()
-            
-            if last_practice == today:
-                # Already practiced today, no streak change
+
+            diff_days = (today - last_practice).days
+            if diff_days <= 0:
                 pass
-            elif last_practice == yesterday:
-                # Consecutive day, increment streak
+            elif diff_days == 1:
                 streak.current_streak += 1
             else:
-                # Missed days, reset streak
                 streak.current_streak = 1
         else:
             # First practice
@@ -494,7 +624,7 @@ def update_yoga_streak(username: str, session_duration_seconds: int, session_min
         # Update other stats
         streak.total_sessions += 1
         streak.total_minutes += session_minutes
-        streak.last_practice_date = datetime.utcnow()
+        streak.last_practice_date = now
         
         # Update longest streak if needed
         if streak.current_streak > streak.longest_streak:

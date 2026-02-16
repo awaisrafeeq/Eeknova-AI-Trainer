@@ -330,11 +330,11 @@ class LessonEngine:
             module_id="pawn_movement",
             exercise_type="basic_forward",
             board_position=self.engine.get_board_position(),
-            highlighted_squares=[chess.square_name(pawn_square)],
-            target_squares=[chess.square_name(sq) for sq in target_squares],
+            highlighted_squares=[],  # Remove pre-highlighted piece
+            target_squares=[],  # Remove pre-highlighted moves
             invalid_squares=[chess.square_name(sq) for sq in invalid_squares],
             selected_square=None,
-            instructions="Pawns move forward one square. Click where this pawn can move.",
+            instructions="Pawns move forward one square. Select a pawn first, then click where it can move.",
             feedback_message=None,
             is_correct=None,
             progress_current=exercise_number,
@@ -376,11 +376,11 @@ class LessonEngine:
             module_id="pawn_movement",
             exercise_type="initial_double",
             board_position=self.engine.get_board_position(),
-            highlighted_squares=[chess.square_name(pawn_square)],
-            target_squares=[chess.square_name(sq) for sq in target_squares],
+            highlighted_squares=[],  # Remove pre-highlighted piece
+            target_squares=[],  # Remove pre-highlighted moves
             invalid_squares=[chess.square_name(sq) for sq in invalid_squares],
             selected_square=None,
-            instructions="Pawns can move two squares forward from their starting position.",
+            instructions="Pawns can move two squares forward from their starting position. Select a pawn first, then click where it can move.",
             feedback_message=None,
             is_correct=None,
             progress_current=exercise_number,
@@ -424,11 +424,11 @@ class LessonEngine:
             module_id="pawn_movement",
             exercise_type="capture",
             board_position=self.engine.get_board_position(),
-            highlighted_squares=[chess.square_name(pawn_square)],
-            target_squares=[chess.square_name(sq) for sq in target_squares],
+            highlighted_squares=[],  # Remove pre-highlighted piece
+            target_squares=[],  # Remove pre-highlighted moves
             invalid_squares=[chess.square_name(sq) for sq in invalid_squares],
             selected_square=None,
-            instructions="Pawns capture diagonally forward. Click where this pawn can capture.",
+            instructions="Pawns capture diagonally forward. Select a pawn first, then capture the enemy piece.",
             feedback_message=None,
             is_correct=None,
             progress_current=exercise_number,
@@ -475,11 +475,11 @@ class LessonEngine:
             module_id="pawn_movement",
             exercise_type="blocked",
             board_position=self.engine.get_board_position(),
-            highlighted_squares=[chess.square_name(pawn_square)],
-            target_squares=[chess.square_name(sq) for sq in target_squares],
+            highlighted_squares=[],  # Remove pre-highlighted piece
+            target_squares=[],  # Remove pre-highlighted moves
             invalid_squares=[chess.square_name(sq) for sq in invalid_squares],
             selected_square=None,
-            instructions="Pawns cannot move if blocked. Is this pawn blocked? Click where it can move or the pawn if blocked.",
+            instructions="Pawns cannot move if blocked. Select a pawn and see if it's blocked or can capture.",
             feedback_message=None,
             is_correct=None,
             progress_current=exercise_number,
@@ -521,14 +521,11 @@ class LessonEngine:
             module_id="pawn_movement",
             exercise_type="en_passant",
             board_position=self.engine.get_board_position(),
-            highlighted_squares=[
-                chess.square_name(pawn_square),
-                chess.square_name(enemy_square)
-            ],
-            target_squares=[chess.square_name(sq) for sq in target_squares],
+            highlighted_squares=[],  # Remove pre-highlighted pieces
+            target_squares=[],  # Remove pre-highlighted moves
             invalid_squares=[],
             selected_square=None,
-            instructions="En passant: Special pawn capture when enemy pawn moves two squares.",
+            instructions="En passant: Special pawn capture when enemy pawn moves two squares. Select a white pawn first, then capture the enemy pawn.",
             feedback_message=None,
             is_correct=None,
             progress_current=exercise_number,
@@ -562,6 +559,9 @@ class LessonEngine:
     def handle_board_setup_placement(self, exercise: ExerciseState, square: str) -> ExerciseState:
         """Handle piece placement for board setup"""
         
+        print(f"🔍 DEBUG: Board setup placement called for square: {square}")
+        print(f"🔍 DEBUG: current_piece_type: {exercise.current_piece_type}")
+        
         if not exercise.current_piece_type:
             exercise.feedback_message = "Please select a piece to place first."
             exercise.is_correct = False
@@ -571,13 +571,31 @@ class LessonEngine:
         col = ord(square[0]) - ord('a')
         row = int(square[1]) - 1
         
+        print(f"🔍 DEBUG: Converted {square} to coordinates: ({col}, {row})")
+        
         piece_type = exercise.current_piece_type
-        piece_info = exercise.pieces_inventory[piece_type]
+        print(f"🔍 DEBUG: Getting piece_info for {piece_type}")
+        
+        try:
+            piece_info = exercise.pieces_inventory[piece_type]
+            print(f"🔍 DEBUG: piece_info retrieved successfully")
+        except Exception as e:
+            print(f"🔍 DEBUG: Error getting piece_info: {e}")
+            print(f"🔍 DEBUG: Available pieces_inventory keys: {list(exercise.pieces_inventory.keys()) if exercise.pieces_inventory else 'None'}")
+            exercise.feedback_message = "Error: Piece type not found in inventory"
+            exercise.is_correct = False
+            return exercise
+        
         piece_name = piece_type.replace('_', ' ').title()
+        
+        print(f"🔍 DEBUG: piece_type: {piece_type}, piece_name: {piece_name}")
+        print(f"🔍 DEBUG: Valid positions for this piece: {piece_info['positions']}")
         
         # Check how many of this piece type are already placed
         placed_count = sum(1 for p in exercise.placed_pieces.values() if p['type'] == piece_type)
         remaining = piece_info['count'] - placed_count
+        
+        print(f"🔍 DEBUG: placed_count: {placed_count}, remaining: {remaining}")
         
         if remaining <= 0:
             exercise.feedback_message = f"All {piece_name}s have been placed."
@@ -587,7 +605,8 @@ class LessonEngine:
         # Check if this position is correct for this piece type
         is_correct_position = (col, row) in piece_info['positions']
         
-            
+        print(f"🔍 DEBUG: is_correct_position: {is_correct_position}")
+        
         # Check if square is already occupied
         if square in exercise.placed_pieces:
             exercise.feedback_message = "This square is already occupied!"
@@ -600,6 +619,8 @@ class LessonEngine:
             exercise.is_correct = False
             # Don't place the piece, just return error
             return exercise
+        
+        print(f"🔍 DEBUG: Placing piece at {square}")
         
         # Only place piece if position is correct
         piece_symbol = piece_info['symbol']
@@ -617,8 +638,12 @@ class LessonEngine:
             'correct': is_correct_position
         }
         
+        print(f"🔍 DEBUG: Piece placed! Total placed pieces: {len(exercise.placed_pieces)}")
+        
         # Update progress
         exercise.progress_current = len(exercise.placed_pieces)
+        
+        print(f"🔍 DEBUG: Updated progress_current to: {exercise.progress_current}")
         
         # Provide feedback
         if is_correct_position:
@@ -637,14 +662,11 @@ class LessonEngine:
                 exercise.feedback_message = "Perfect! Board setup complete and correct!"
                 exercise.exercise_completed = True
                 exercise.module_completed = True
-            else:
-                exercise.feedback_message = "Board setup complete, but some pieces are in wrong positions. Please fix them."
-                exercise.exercise_completed = False
         
+        print(f"🔍 DEBUG: Function completed successfully")
         return exercise
     
     def handle_board_setup_remove_piece(self, exercise: ExerciseState, square: str) -> ExerciseState:
-        """Handle piece removal for board setup"""
         if square in exercise.placed_pieces:
             removed_piece = exercise.placed_pieces[square]
             del exercise.placed_pieces[square]
@@ -687,6 +709,17 @@ class LessonEngine:
             'black_king': {'count': 1, 'positions': [(4, 7)], 'symbol': 'k', 'color': 'black'}
         }
         
+        # Define highlighted squares (all squares where pieces should be placed)
+        highlighted_squares = []
+        target_squares = []
+        
+        for piece_type, info in pieces_inventory.items():
+            for position in info['positions']:
+                # Convert tuple coordinates to string format (e.g., "a1", "h8")
+                square_str = f"{chr(ord('a') + position[0])}{position[1] + 1}"
+                highlighted_squares.append(square_str)
+                target_squares.append(square_str)
+        
         # Create instructions with piece list
         piece_list = []
         for piece_type, info in pieces_inventory.items():
@@ -721,39 +754,48 @@ class LessonEngine:
     # ---- Identify Pieces Lessons ----
     
     def create_identify_pieces_exercise(self, question_number: int) -> ExerciseState:
-        """Create piece identification exercise"""
+        """Create piece identification exercise using chess learning system logic"""
         self.engine.reset_board()
         
-        # Pick a random piece and highlight it
+        # Set up a standard chess position with pieces
+        self.engine.board.set_fen(chess.STARTING_FEN)
+        
+        # Piece names mapping
+        piece_names = {
+            chess.PAWN: "Pawn",
+            chess.KNIGHT: "Knight",
+            chess.BISHOP: "Bishop",
+            chess.ROOK: "Rook",
+            chess.QUEEN: "Queen",
+            chess.KING: "King"
+        }
+        
+        # Generate question using chess learning system logic
         piece_types = [chess.PAWN, chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN, chess.KING]
         colors = [chess.WHITE, chess.BLACK]
         
-        piece_type = random.choice(piece_types)
-        color = random.choice(colors)
+        # Select a piece type based on question number (cycle through pieces)
+        piece_type = piece_types[question_number % len(piece_types)]
+        color = colors[question_number % len(colors)]
         
-        # Find squares with this piece
-        squares = [s for s in chess.SQUARES if self.engine.board.piece_at(s) and 
-                   self.engine.board.piece_at(s).piece_type == piece_type and 
-                   self.engine.board.piece_at(s).color == color]
+        # Find all squares with this piece type and color
+        matching_squares = []
+        for square in chess.SQUARES:
+            piece = self.engine.board.piece_at(square)
+            if piece and piece.piece_type == piece_type and piece.color == color:
+                matching_squares.append(square)
         
-        if squares:
-            selected_square = random.choice(squares)
+        if matching_squares:
+            # Select a random square from matching pieces
+            selected_square = random.choice(matching_squares)
             self.engine.highlight_square(chess.square_name(selected_square))
             
-            piece_names = {
-                chess.PAWN: "Pawn",
-                chess.KNIGHT: "Knight",
-                chess.BISHOP: "Bishop",
-                chess.ROOK: "Rook",
-                chess.QUEEN: "Queen",
-                chess.KING: "King"
-            }
+            # Generate multiple choice options
+            correct_answer = piece_names[piece_type]
+            other_pieces = [name for pt, name in piece_names.items() if pt != piece_type]
+            wrong_answers = random.sample(other_pieces, 3)
             
-            correct_name = piece_names[piece_type]
-            other_names = [name for pt, name in piece_names.items() if pt != piece_type]
-            wrong_answers = random.sample(other_names, 3)
-            
-            options = [correct_name] + wrong_answers
+            options = [correct_answer] + wrong_answers
             random.shuffle(options)
             
             return ExerciseState(
@@ -765,7 +807,7 @@ class LessonEngine:
                 target_squares=[],
                 invalid_squares=[],
                 selected_square=None,
-                instructions=f"What is the highlighted piece?|{','.join(options)}|{correct_name}",
+                instructions=f"What is the highlighted piece?|{','.join(options)}|{correct_answer}",
                 feedback_message=None,
                 is_correct=None,
                 progress_current=question_number,
@@ -775,7 +817,43 @@ class LessonEngine:
                 module_completed=False
             )
         
-        return self.create_identify_pieces_exercise(question_number)
+        # Fallback if no pieces found - create a default exercise
+        return self._create_default_identify_exercise(question_number)
+    
+    def _create_default_identify_exercise(self, question_number: int) -> ExerciseState:
+        """Create a default identify pieces exercise with guaranteed pieces"""
+        self.engine.reset_board()
+        
+        # Set up a standard chess position with pieces
+        self.engine.board.set_fen(chess.STARTING_FEN)
+        
+        # Always use a specific piece for fallback
+        # Highlight a1 (white rook) as it's guaranteed to exist
+        selected_square = chess.A1
+        self.engine.highlight_square(chess.square_name(selected_square))
+        
+        options = ["Rook", "Knight", "Bishop", "Queen"]
+        correct_answer = "Rook"
+        random.shuffle(options)
+        
+        return ExerciseState(
+            exercise_id=f"identify_pieces_{question_number}",
+            module_id="identify_pieces",
+            exercise_type="identify_pieces",
+            board_position=self.engine.get_board_position(),
+            highlighted_squares=[chess.square_name(selected_square)],
+            target_squares=[],
+            invalid_squares=[],
+            selected_square=None,
+            instructions=f"What is the highlighted piece?|{','.join(options)}|{correct_answer}",
+            feedback_message=None,
+            is_correct=None,
+            progress_current=question_number,
+            progress_total=12,
+            hint_available=True,
+            exercise_completed=False,
+            module_completed=False
+        )
     
     def check_answer(self, exercise: ExerciseState, answer: str) -> bool:
         """Check answer for identification exercises"""
@@ -812,11 +890,11 @@ class LessonEngine:
                 module_id="knight_movement",
                 exercise_type="basic",
                 board_position=self.engine.get_board_position(),
-                highlighted_squares=[chess.square_name(knight_square)],
-                target_squares=[chess.square_name(sq) for sq in target_squares],
+                highlighted_squares=[],  # Remove pre-highlighted piece
+                target_squares=[],  # Remove pre-highlighted moves
                 invalid_squares=[],
                 selected_square=None,
-                instructions="Knights move in an L-shape: 2 squares in one direction, then 1 square perpendicular. Click any square the knight can move to.",
+                instructions="Knights move in an L-shape: 2 squares in one direction, then 1 square perpendicular. Select a knight first, then click any square it can move to.",
                 feedback_message=None,
                 is_correct=None,
                 progress_current=exercise_number,
@@ -846,11 +924,11 @@ class LessonEngine:
                 module_id="knight_movement",
                 exercise_type="capture",
                 board_position=self.engine.get_board_position(),
-                highlighted_squares=[chess.square_name(knight_square)],
-                target_squares=[chess.square_name(sq) for sq in target_squares],
+                highlighted_squares=[],  # Remove pre-highlighted piece
+                target_squares=[],  # Remove pre-highlighted moves
                 invalid_squares=[],
                 selected_square=None,
-                instructions="Knights capture by jumping over pieces. Capture the black pawn with your knight.",
+                instructions="Knights capture by jumping over pieces. Select a knight first, then capture the black pawn.",
                 feedback_message=None,
                 is_correct=None,
                 progress_current=exercise_number,
@@ -887,11 +965,11 @@ class LessonEngine:
                 module_id="rook_movement",
                 exercise_type="basic",
                 board_position=self.engine.get_board_position(),
-                highlighted_squares=[chess.square_name(rook_square)],
-                target_squares=[chess.square_name(sq) for sq in target_squares],
+                highlighted_squares=[],  # Remove pre-highlighted piece
+                target_squares=[],  # Remove pre-highlighted moves
                 invalid_squares=[],
                 selected_square=None,
-                instructions="Rooks move in straight lines: horizontally or vertically any number of squares. Click any square the rook can move to.",
+                instructions="Rooks move in straight lines: horizontally or vertically any number of squares. Select a rook first, then click any square it can move to.",
                 feedback_message=None,
                 is_correct=None,
                 progress_current=exercise_number,
@@ -928,11 +1006,11 @@ class LessonEngine:
                 module_id="bishop_movement",
                 exercise_type="basic",
                 board_position=self.engine.get_board_position(),
-                highlighted_squares=[chess.square_name(bishop_square)],
-                target_squares=[chess.square_name(sq) for sq in target_squares],
+                highlighted_squares=[],  # Remove pre-highlighted piece
+                target_squares=[],  # Remove pre-highlighted moves
                 invalid_squares=[],
                 selected_square=None,
-                instructions="Bishops move diagonally any number of squares. Click any square the bishop can move to.",
+                instructions="Bishops move diagonally any number of squares. Select a bishop first, then click any square it can move to.",
                 feedback_message=None,
                 is_correct=None,
                 progress_current=exercise_number,
@@ -969,11 +1047,11 @@ class LessonEngine:
                 module_id="queen_movement",
                 exercise_type="basic",
                 board_position=self.engine.get_board_position(),
-                highlighted_squares=[chess.square_name(queen_square)],
-                target_squares=[chess.square_name(sq) for sq in target_squares],
+                highlighted_squares=[],  # Remove pre-highlighted piece
+                target_squares=[],  # Remove pre-highlighted moves
                 invalid_squares=[],
                 selected_square=None,
-                instructions="The Queen is the most powerful piece! She combines rook and bishop moves. Click any square the queen can move to.",
+                instructions="The Queen is the most powerful piece! She combines rook and bishop moves. Select a queen first, then click any square she can move to.",
                 feedback_message=None,
                 is_correct=None,
                 progress_current=exercise_number,
@@ -1010,11 +1088,11 @@ class LessonEngine:
                 module_id="king_movement",
                 exercise_type="basic",
                 board_position=self.engine.get_board_position(),
-                highlighted_squares=[chess.square_name(king_square)],
-                target_squares=[chess.square_name(sq) for sq in target_squares],
+                highlighted_squares=[],  # Remove pre-highlighted piece
+                target_squares=[],  # Remove pre-highlighted moves
                 invalid_squares=[],
                 selected_square=None,
-                instructions="The King can move one square in any direction. Protect your king! Click any square the king can move to.",
+                instructions="The King can move one square in any direction. Protect your king! Select a king first, then click any square it can move to.",
                 feedback_message=None,
                 is_correct=None,
                 progress_current=exercise_number,
@@ -1082,11 +1160,11 @@ class LessonEngine:
             module_id="special_moves",
             exercise_type="castling",
             board_position=self.engine.get_board_position(),
-            highlighted_squares=[chess.square_name(king_square)],
+            highlighted_squares=[],  # Remove pre-highlighted piece
             target_squares=[chess.square_name(sq) for sq in target_squares],
             invalid_squares=[],
             selected_square=None,
-            instructions="Castling: Special king move for safety. Move king two squares towards rook.",
+            instructions="Castling: Special king move for safety. Select a king first, then move it two squares towards rook.",
             feedback_message=None,
             is_correct=None,
             progress_current=exercise_number,
@@ -1110,11 +1188,11 @@ class LessonEngine:
             module_id="special_moves",
             exercise_type="promotion",
             board_position=self.engine.get_board_position(),
-            highlighted_squares=[chess.square_name(pawn_square)],
+            highlighted_squares=[],  # Remove pre-highlighted piece
             target_squares=[chess.square_name(sq) for sq in target_squares],
             invalid_squares=[],
             selected_square=None,
-            instructions="Promotion: When pawn reaches the end, it becomes a stronger piece.",
+            instructions="Promotion: When pawn reaches the end, it becomes a stronger piece. Select the pawn and move it to the end rank.",
             feedback_message=None,
             is_correct=None,
             progress_current=exercise_number,
@@ -1166,11 +1244,11 @@ class LessonEngine:
             module_id="check_checkmate_stalemate",
             exercise_type="check",
             board_position=self.engine.get_board_position(),
-            highlighted_squares=sorted(set(highlighted_squares)),
-            target_squares=sorted(set(target_squares)),
+            highlighted_squares=[],  # Remove pre-highlighted pieces
+            target_squares=[],  # Remove pre-highlighted moves
             invalid_squares=[],
             selected_square=None,
-            instructions="Check: When king is under attack. Find the checking move.",
+            instructions="Check: When king is under attack. Select a white piece and find a move that puts the black king in check.",
             feedback_message=None,
             is_correct=None,
             progress_current=exercise_number,
@@ -1206,11 +1284,11 @@ class LessonEngine:
             module_id="check_checkmate_stalemate",
             exercise_type="checkmate",
             board_position=self.engine.get_board_position(),
-            highlighted_squares=sorted(set(highlighted_squares)),
-            target_squares=sorted(set(target_squares)),
+            highlighted_squares=[],  # Remove pre-highlighted pieces
+            target_squares=[],  # Remove pre-highlighted moves
             invalid_squares=[],
             selected_square=None,
-            instructions="Checkmate: When king is trapped and under attack. Find the checkmating move.",
+            instructions="Checkmate: When king is trapped and under attack. Select a white piece and find a move that checkmates the black king.",
             feedback_message=None,
             is_correct=None,
             progress_current=exercise_number,
@@ -1246,11 +1324,11 @@ class LessonEngine:
             module_id="check_checkmate_stalemate",
             exercise_type="stalemate",
             board_position=self.engine.get_board_position(),
-            highlighted_squares=sorted(set(highlighted_squares)),
-            target_squares=sorted(set(target_squares)),
+            highlighted_squares=[],  # Remove pre-highlighted pieces
+            target_squares=[],  # Remove pre-highlighted moves
             invalid_squares=[],
             selected_square=None,
-            instructions="Stalemate: When king is not under attack but has no legal moves. It's a draw.",
+            instructions="Stalemate: When king is not under attack but has no legal moves. Select a white piece and find a move that causes stalemate.",
             feedback_message=None,
             is_correct=None,
             progress_current=exercise_number,

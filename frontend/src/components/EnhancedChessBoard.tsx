@@ -18,6 +18,41 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
     const [showFeedback, setShowFeedback] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    useEffect(() => {
+        console.log('🔍 DEBUG: useEffect triggered with:', {
+            is_correct: exercise?.is_correct,
+            exercise_completed: exercise?.exercise_completed,
+            module_completed: exercise?.module_completed,
+            selectedAnswer: selectedAnswer,
+            showFeedback: showFeedback
+        });
+        
+        if (!showFeedback || !selectedAnswer) {
+            console.log('🔍 DEBUG: Skipping useEffect - no feedback or selected answer');
+            return;
+        }
+
+        if (exercise?.is_correct === true && exercise.exercise_completed && !exercise.module_completed) {
+            console.log('🔍 DEBUG: Correct answer detected, setting 2s timeout for next');
+            const t = setTimeout(() => {
+                console.log('🔍 DEBUG: 2s timeout finished, calling next');
+                onAction('next');
+            }, 2000);
+            return () => clearTimeout(t);
+        }
+
+        if (exercise?.is_correct === false) {
+            console.log('🔍 DEBUG: Wrong answer detected, setting 3s timeout for reset');
+            const t = setTimeout(() => {
+                console.log('🔍 DEBUG: 3s timeout finished, resetting for retry');
+                setShowFeedback(false);
+                setSelectedAnswer(null);
+                setIsSubmitting(false);
+            }, 3000);
+            return () => clearTimeout(t);
+        }
+    }, [exercise?.is_correct, exercise?.exercise_completed, exercise?.module_completed, onAction, selectedAnswer, showFeedback]);
+
     // Reset states when exercise changes
     useEffect(() => {
         console.log('🔍 DEBUG: Exercise changed, resetting states');
@@ -25,13 +60,15 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
         console.log('🔍 DEBUG: Previous selectedAnswer:', selectedAnswer);
         console.log('🔍 DEBUG: Previous showFeedback:', showFeedback);
         console.log('🔍 DEBUG: Previous isSubmitting:', isSubmitting);
+        console.log('🔍 DEBUG: New progress_current:', exercise?.progress_current);
+        console.log('🔍 DEBUG: New progress_total:', exercise?.progress_total);
         
         setSelectedAnswer(null);
         setShowFeedback(false);
         setSelectedSquare(null);
         setHoveredSquare(null);
         setIsSubmitting(false);
-    }, [exercise?.exercise_id, exercise?.progress_current]); // Add progress_current as trigger
+    }, [exercise?.exercise_id]);
 
     // Check if this is an identify pieces exercise
     const isIdentifyPiecesExercise = exercise?.exercise_type === 'identify_pieces';
@@ -42,6 +79,12 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
     // Calculate progress for Board Setup
     const boardSetupProgress = isBoardSetupExercise ? 
         Math.round((exercise.progress_current / exercise.progress_total) * 100) : 0;
+
+    // Handle piece selection for board setup
+    const handlePieceSelection = (pieceType: string) => {
+        console.log('Piece selected:', pieceType);
+        onAction('select_piece', { piece_type: pieceType });
+    };
 
     // Parse options for identify pieces exercises
     const getIdentifyPiecesOptions = () => {
@@ -61,6 +104,11 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
         console.log('🔍 DEBUG: progress_current:', exercise.progress_current);
         console.log('🔍 DEBUG: progress_total:', exercise.progress_total);
         console.log('🔍 DEBUG: isSubmitting:', isSubmitting);
+
+        if (isIdentifyPiecesExercise && exercise.exercise_completed) {
+            console.log('🔍 DEBUG: Identify pieces exercise already completed, ignoring answer selection');
+            return;
+        }
         
         // PREVENT ANY ACTIONS IF MODULE IS COMPLETED
         if (exercise.module_completed) {
@@ -104,33 +152,12 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
         // Submit answer only once
         console.log('🔍 DEBUG: Submitting answer to backend');
         onAction('submit_answer', { answer });
-        
-        // Auto-progress after showing feedback
-        setTimeout(() => {
-            // PREVENT AUTO-PROGRESS IF MODULE IS COMPLETED
-            if (exercise.module_completed) {
-                console.log('🔍 DEBUG: Module completed, not auto-progressing');
-                return;
-            }
-            
-            // PREVENT AUTO-PROGRESS IF EXERCISE IS COMPLETED AT 100%
-            if (exercise.exercise_completed && exercise.progress_current === exercise.progress_total) {
-                console.log('🔍 DEBUG: Exercise completed at 100%, not auto-progressing');
-                return;
-            }
-            
-            // AUTO-PROGRESS ON CORRECT ANSWER
-            if (exercise.exercise_completed && !exercise.module_completed) {
-                console.log('🔍 DEBUG: Auto-progressing to next exercise');
-                onAction('next');
-            }
-        }, 2000);
     };
 
     const handleSquareInteraction = (square: string) => {
-        console.log('Square clicked:', square);
-        console.log('Target squares:', exercise.target_squares);
-        console.log('Is target:', exercise.target_squares.includes(square));
+        console.log('🔍 DEBUG: Square clicked:', square);
+        console.log('🔍 DEBUG: Target squares:', exercise.target_squares);
+        console.log('🔍 DEBUG: Is target:', exercise.target_squares.includes(square));
         
         if (isIdentifyPiecesExercise) {
             // For identify pieces, don't handle square clicks - only answer buttons
@@ -139,6 +166,7 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
         
         if (isBoardSetupExercise) {
             // For board setup, handle piece placement
+            console.log('🔍 DEBUG: Board setup - calling place_piece action');
             onAction('place_piece', { square });
             return;
         }
@@ -148,11 +176,6 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
     };
 
     // Board setup specific functions
-    const handlePieceSelection = (pieceType: string) => {
-        console.log('Piece selected:', pieceType);
-        onAction('select_piece', { piece_type: pieceType });
-    };
-
     const getBoardSetupPieces = () => {
         if (!isBoardSetupExercise || !exercise?.pieces_inventory) {
             console.log('🔍 DEBUG: No pieces_inventory or not board setup exercise');
@@ -359,6 +382,16 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
                 {isHighlighted && isIdentifyPiecesExercise && (
                     <div className="absolute inset-0 border-4 border-yellow-400 rounded pointer-events-none animate-pulse" />
                 )}
+
+                {/* Highlight for movement lessons (possible moves) */}
+                {isHighlighted && !isIdentifyPiecesExercise && !isBoardSetupExercise && (
+                    <motion.div
+                        className="absolute inset-0 bg-green-400 opacity-60 rounded"
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ type: "spring", stiffness: 300 }}
+                    />
+                )}
             </motion.div>
         );
     };
@@ -390,8 +423,10 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
                     <div className="grid grid-cols-2 gap-4">
                         {getIdentifyPiecesOptions().map((option, index) => {
                             const isSelected = selectedAnswer === option;
-                            const isCorrect = exercise.is_correct && isSelected;
-                            const isWrong = !exercise.is_correct && isSelected;
+                            const isCorrect = exercise.is_correct === true && isSelected;
+                            const isWrong = exercise.is_correct === false && isSelected;
+                            
+                            console.log(`🔍 DEBUG: Option ${option}: isSelected=${isSelected}, isCorrect=${isCorrect}, isWrong=${isWrong}, exercise.is_correct=${exercise.is_correct}`);
                             
                             return (
                                 <motion.button
@@ -617,7 +652,7 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
                                 width: `${(exercise.progress_current / exercise.progress_total) * 100}%` 
                             }}
                             transition={{ type: "spring", stiffness: 100 }}
-                            key={`progress-${exercise.progress_current}`} // Force re-render on progress change
+                            key={`progress-${exercise.progress_current}-${exercise.progress_total}-${exercise.exercise_id}`} // Add exercise_id for extra trigger
                         />
                     </div>
                 </div>

@@ -25,6 +25,7 @@ import sys
 # Import database functions
 from database import (
     init_db, get_yoga_streak, update_yoga_streak, create_yoga_session,
+    get_dashboard_stats,
     get_chess_progress, update_chess_progress,
     get_module_progress, update_module_progress,
     get_user_profile,
@@ -1256,6 +1257,17 @@ async def create_yoga_session_endpoint(session_data: Dict[str, Any]):
             return {"success": False, "message": "Failed to create session"}
     except Exception as e:
         logger.error(f"Error creating yoga session: {e}")
+        return {"success": False, "message": str(e)}
+
+
+@app.get("/api/dashboard/{username}")
+async def get_dashboard_stats_endpoint(username: str):
+    """Get aggregated dashboard stats for user"""
+    try:
+        data = get_dashboard_stats(username)
+        return {"success": True, "data": data}
+    except Exception as e:
+        logger.error(f"Error getting dashboard stats: {e}")
         return {"success": False, "message": str(e)}
 
 @app.get("/api/chess/progress/{username}")

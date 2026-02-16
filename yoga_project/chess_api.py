@@ -142,6 +142,15 @@ class ChessSessionManager:
                     session["completed"] = True
                     return
                 exercise = self.lesson_engine.create_identify_pieces_exercise(exercise_num)
+                if exercise is None:
+                    # Fallback to a simple exercise if creation fails
+                    print(f"Warning: create_identify_pieces_exercise returned None for exercise_num {exercise_num}")
+                    exercise = self.lesson_engine.create_pawn_exercise("basic_forward", 0)
+                    exercise.module_id = "identify_pieces"
+                    exercise.exercise_type = "identify_pieces"
+                    exercise.exercise_id = f"identify_pieces_{exercise_num}"
+                    exercise.progress_current = exercise_num
+                    exercise.progress_total = 12
             elif module_id == "board_setup":
                 exercise = self.lesson_engine.create_board_setup_exercise()
             elif module_id == "pawn_movement":
@@ -161,17 +170,17 @@ class ChessSessionManager:
                 exercise = self.lesson_engine.create_rook_exercise(exercise_type, exercise_num)
             elif module_id == "bishop_movement":
                 # Cycle through bishop exercise types
-                exercise_types = ["basic"]
+                exercise_types = ["basic", "capture"]
                 exercise_type = exercise_types[exercise_num % len(exercise_types)]
                 exercise = self.lesson_engine.create_bishop_exercise(exercise_type, exercise_num)
             elif module_id == "queen_movement":
                 # Cycle through queen exercise types
-                exercise_types = ["basic"]
+                exercise_types = ["basic", "capture"]
                 exercise_type = exercise_types[exercise_num % len(exercise_types)]
                 exercise = self.lesson_engine.create_queen_exercise(exercise_type, exercise_num)
             elif module_id == "king_movement":
                 # Cycle through king exercise types
-                exercise_types = ["basic"]
+                exercise_types = ["basic", "castling"]
                 exercise_type = exercise_types[exercise_num % len(exercise_types)]
                 exercise = self.lesson_engine.create_king_exercise(exercise_type, exercise_num)
             elif module_id == "special_moves":
@@ -185,13 +194,18 @@ class ChessSessionManager:
                 exercise_type = exercise_types[exercise_num % len(exercise_types)]
                 exercise = self.lesson_engine.create_check_checkmate_stalemate_exercise(exercise_type, exercise_num)
             elif module_id == "gameplay":
-                # Cycle through game modes: Human vs AI, AI vs AI, Human vs Human
+                # Cycle through game modes
                 game_modes = ["human_vs_ai", "ai_vs_ai", "human_vs_human"]
                 game_mode = game_modes[exercise_num % len(game_modes)]
                 exercise = self.lesson_engine.create_gameplay_exercise(game_mode, exercise_num)
             else:
                 # Default to basic exercise for other modules
                 exercise = self.lesson_engine.create_pawn_exercise("basic_forward", exercise_num)
+            
+            # Ensure exercise is not None before setting
+            if exercise is None:
+                print(f"Error: Exercise creation returned None for module {module_id}, exercise_num {exercise_num}")
+                exercise = self.lesson_engine.create_pawn_exercise("basic_forward", 0)
             
             session["current_exercise_state"] = exercise
             
@@ -394,6 +408,17 @@ class ChessSessionManager:
                                 exercise.selected_square = square
                                 exercise.is_correct = True
                                 exercise.feedback_message = "King selected. Choose castling destination (g1 or c1)."
+                                
+                                # Show castling squares as highlights
+                                castling_squares = []
+                                if square == "e1":
+                                    # Check for kingside castling
+                                    if self.lesson_engine.engine.board.has_kingside_castling_rights(chess.WHITE):
+                                        castling_squares.append("g1")
+                                    # Check for queenside castling  
+                                    if self.lesson_engine.engine.board.has_queenside_castling_rights(chess.WHITE):
+                                        castling_squares.append("c1")
+                                exercise.highlighted_squares = castling_squares
                             else:
                                 exercise.is_correct = False
                                 exercise.feedback_message = "Please select the white king on e1 to start castling."
@@ -454,41 +479,88 @@ class ChessSessionManager:
                                 exercise.selected_square = square
                                 exercise.is_correct = True
                                 exercise.feedback_message = "Pawn selected. Move to the end rank to promote!"
+                                
+                                # Show promotion square as highlight
+                                promotion_square = None
+                                if piece.color == chess.WHITE and chess.square_rank(chess.parse_square(square)) == 6:
+                                    promotion_square = chess.square_name(chess.parse_square(square) + 8)
+                                exercise.highlighted_squares = [promotion_square] if promotion_square else []
                             else:
                                 exercise.is_correct = False
                                 exercise.feedback_message = "Please select a pawn to promote."
                     
                     elif exercise.exercise_type == "en_passant":
-                        if square in exercise.target_squares:
-                            exercise.is_correct = True
-                            exercise.feedback_message = "En passant capture successful! ♟️"
-                            exercise.exercise_completed = True
-                            exercise.progress_current = exercise.progress_total
-                            
-                            session["completed_exercises"] += 1
-                            
-                            session["current_exercise"] += 1
-                            
-                            if session["completed_exercises"] >= 5:  
-                                exercise.module_completed = True
-                                session["completed"] = True
-                                session["current_exercise_state"].module_completed = True
+                        from_square = exercise.selected_square
+                        if from_square:
+                            if square in exercise.target_squares:
+                                exercise.is_correct = True
+                                exercise.feedback_message = "En passant capture successful! ♟️"
+                                exercise.exercise_completed = True
+                                exercise.progress_current = exercise.progress_total
+                                
+                                session["completed_exercises"] += 1
+                                
+                                session["current_exercise"] += 1
+                                
+                                if session["completed_exercises"] >= 5:  
+                                    exercise.module_completed = True
+                                    session["completed"] = True
+                                    session["current_exercise_state"].module_completed = True
+                                else:
+                                    self._create_next_exercise(session_id)
                             else:
-                                self._create_next_exercise(session_id)
+                                exercise.is_correct = False
+                                exercise.feedback_message = "That's not the correct en passant square. Try again!"
                         else:
-                            exercise.is_correct = False
-                            exercise.feedback_message = "That's not the correct en passant square. Try again!"
+                            # First move - select the white pawn
+                            piece = self.lesson_engine.engine.board.piece_at(chess.parse_square(square))
+                            if piece and piece.piece_type == chess.PAWN and piece.color == chess.WHITE:
+                                exercise.selected_square = square
+                                exercise.is_correct = True
+                                exercise.feedback_message = "White pawn selected. Choose the en passant capture square."
+                                
+                                # Show en_passant target square as highlight
+                                exercise.highlighted_squares = exercise.target_squares
+                            else:
+                                exercise.is_correct = False
+                                exercise.feedback_message = "Please select the white pawn for en passant."
+
+                elif exercise.module_id == "board_setup":
+                    # For board setup, handle piece placement
+                    if exercise.current_piece_type:
+                        # Place the selected piece
+                        exercise = self.lesson_engine.handle_board_setup_placement(exercise, square)
+                    else:
+                        # No piece selected, show message
+                        exercise.feedback_message = "Please select a piece type first!"
+                        exercise.is_correct = False
 
                 elif exercise.module_id == "check_checkmate_stalemate":
                     if not exercise.selected_square:
                         piece = self.lesson_engine.engine.board.piece_at(chess.parse_square(square))
-                        if piece and piece.color == self.lesson_engine.engine.board.turn:
+                        if piece and piece.color == chess.WHITE:  # Use chess.WHITE for lessons instead of board.turn
                             exercise.selected_square = square
                             exercise.is_correct = True
                             exercise.feedback_message = "Piece selected. Now choose the correct move."
+                            
+                            # Show specific target moves as highlighted squares (only check/checkmate/stalemate moves)
+                            target_moves = []
+                            for move in self.lesson_engine.engine.board.legal_moves:
+                                if move.from_square == chess.parse_square(square):
+                                    test_board = self.lesson_engine.engine.board.copy()
+                                    test_board.push(move)
+                                    
+                                    if exercise.exercise_type == "check" and test_board.is_check() and not test_board.is_checkmate():
+                                        target_moves.append(move)
+                                    elif exercise.exercise_type == "checkmate" and test_board.is_checkmate():
+                                        target_moves.append(move)
+                                    elif exercise.exercise_type == "stalemate" and test_board.is_stalemate():
+                                        target_moves.append(move)
+                            
+                            exercise.highlighted_squares = [chess.square_name(move.to_square) for move in target_moves]
                         else:
                             exercise.is_correct = False
-                            exercise.feedback_message = "Select a piece of the current player."
+                            exercise.feedback_message = "Select a white piece to move."
                     else:
                         from_square = exercise.selected_square
                         if square == from_square:
@@ -550,19 +622,63 @@ class ChessSessionManager:
                                 exercise.is_correct = False
                                 exercise.feedback_message = "Illegal move! Try again."
                 
-                else:
-                    if square in exercise.target_squares:
-                        exercise.is_correct = True
-                        exercise.feedback_message = "Correct! Well done! ✅"
-                        exercise.exercise_completed = True
-                        session["completed_exercises"] += 1
-                        session["current_exercise"] += 1
-                        if session["completed_exercises"] >= session["total_exercises"]:
-                            exercise.module_completed = True
-                            session["completed"] = True
+                elif exercise.module_id in ["pawn_movement", "rook_movement", "knight_movement", "bishop_movement", "queen_movement", "king_movement", "special_moves", "check_checkmate_stalemate"]:
+                    # Handle piece selection and movement for lessons
+                    print(f"🔍 DEBUG: Handling piece selection for {exercise.module_id}")
+                    if not exercise.selected_square:
+                        # First click - select the piece
+                        print(f"🔍 DEBUG: First click - selecting piece at {square}")
+                        piece = self.lesson_engine.engine.board.piece_at(chess.parse_square(square))
+                        print(f"🔍 DEBUG: Piece at {square}: {piece}")
+                        if piece and piece.color == chess.WHITE:  # Only allow selecting white pieces for lessons
+                            exercise.selected_square = square
+                            exercise.is_correct = True
+                            exercise.feedback_message = f"Selected {piece.symbol}. Now click where it can move."
+                            
+                            # Show possible moves as highlighted squares
+                            legal_moves = list(self.lesson_engine.engine.board.legal_moves)
+                            highlighted_moves = [m.to_square for m in legal_moves if m.from_square == chess.parse_square(square)]
+                            exercise.highlighted_squares = [chess.square_name(sq) for sq in highlighted_moves]
+                            print(f"🔍 DEBUG: Highlighted moves: {exercise.highlighted_squares}")
+                        else:
+                            exercise.is_correct = False
+                            exercise.feedback_message = "Please select a white piece to move."
                     else:
-                        exercise.is_correct = False
-                        exercise.feedback_message = "That's not the correct square. Try again!"
+                        # Second click - try to move to the selected square
+                        print(f"🔍 DEBUG: Second click - moving from {exercise.selected_square} to {square}")
+                        from_square = exercise.selected_square
+                        
+                        # Check if the target square is in highlighted squares (legal moves)
+                        target_square_int = chess.parse_square(square)
+                        highlighted_squares_int = [chess.parse_square(sq) for sq in exercise.highlighted_squares]
+                        
+                        if target_square_int in highlighted_squares_int:
+                            # Valid move - complete the exercise
+                            move = chess.Move.from_uci(f"{from_square}{square}")
+                            if move in self.lesson_engine.engine.board.legal_moves:
+                                self.lesson_engine.engine.board.push(move)
+                                exercise.board_position = self.lesson_engine.engine.get_board_position()
+                                
+                                exercise.selected_square = None
+                                exercise.highlighted_squares = []  # Clear highlights
+                                exercise.is_correct = True
+                                exercise.feedback_message = "Correct move!"
+                                exercise.exercise_completed = True
+                                
+                                # Update progress
+                                session["completed_exercises"] += 1
+                                session["current_exercise"] += 1
+                                
+                                if session["completed_exercises"] >= session["total_exercises"]:
+                                    exercise.module_completed = True
+                                    session["completed"] = True
+                        else:
+                            exercise.is_correct = False
+                            exercise.feedback_message = "That's not a valid move for this piece."
+                            
+                            # Clear selection on invalid move
+                            exercise.selected_square = None
+                            exercise.highlighted_squares = []
         
         elif action_type == "select_option":
             option_index = payload.get("index")
@@ -584,8 +700,8 @@ class ChessSessionManager:
         elif action_type == "submit_answer":
             answer = payload.get("answer")
             if exercise.exercise_type == "identify_pieces" and answer:
-                if exercise.is_correct is not None:
-                    return
+                if exercise.exercise_completed:
+                    return exercise
                 
                 is_correct = self.lesson_engine.check_answer(exercise, answer)
                 exercise.is_correct = is_correct
@@ -595,13 +711,15 @@ class ChessSessionManager:
                 if is_correct:
                     exercise.feedback_message = f"Correct! Well done! That is a {answer}."
                     session["completed_exercises"] += 1
-                    session["current_exercise"] += 1  
+                    session["current_exercise"] += 1
+                    
+                    # Update progress_current for identify_pieces
+                    exercise.progress_current = session["completed_exercises"]
                     
                     if session["completed_exercises"] >= self._get_total_exercises(session["module_id"]):
                         exercise.module_completed = True
                         session["completed"] = True
-                    else:
-                        self._create_next_exercise(session_id)
+                    # Note: Don't create next exercise here for identify_pieces - let frontend show feedback first
                 else:
                     exercise.feedback_message = f"Wrong. That is not a {answer}."
         
@@ -713,7 +831,9 @@ class ChessSessionManager:
                     exercise.feedback_message = "❌ AI has no valid moves!"
                     print("AI move failed - no valid moves or error occurred")
         else:
-            exercise.progress_current = session["completed_exercises"]
+            # Only update progress_current for non-board_setup exercises
+            if exercise.exercise_type != "board_setup":
+                exercise.progress_current = session["completed_exercises"]
         
         return session["current_exercise_state"]
     
@@ -730,6 +850,7 @@ class ChessSessionManager:
 
     def _get_hint_for_exercise(self, exercise: ExerciseState) -> str:
         """Get hint message for an exercise"""
+        # Pawn movement lesson types
         if exercise.exercise_type == "basic_forward":
             return "Pawns move forward one square toward the opponent."
         elif exercise.exercise_type == "initial_double":
@@ -740,10 +861,46 @@ class ChessSessionManager:
             return "A pawn cannot move forward if another piece blocks its path."
         elif exercise.exercise_type == "en_passant":
             return "En passant is a special capture when an enemy pawn moves two squares."
+
+        # Piece identification
         elif exercise.exercise_type == "identify_pieces":
             return "Look at the shape and position of the highlighted piece."
+
+        # Board setup
         elif exercise.exercise_type == "board_setup":
             return "Remember: Rooks in corners, knights next to them, then bishops, queen on her color."
+
+        # Movement modules often use generic exercise_type values like "basic" / "capture".
+        # Use module_id to provide accurate hints.
+        if exercise.module_id == "rook_movement":
+            return "Rooks move any number of squares in straight lines (up, down, left, right). They cannot jump over pieces."
+        if exercise.module_id == "knight_movement":
+            return "Knights move in an L-shape (2 squares then 1). Knights CAN jump over pieces."
+        if exercise.module_id == "bishop_movement":
+            return "Bishops move diagonally any number of squares. They stay on the same color squares and cannot jump over pieces."
+        if exercise.module_id == "queen_movement":
+            return "The queen moves like a rook + bishop combined: straight lines or diagonals, any number of squares."
+        if exercise.module_id == "king_movement":
+            return "The king moves exactly 1 square in any direction. Don’t move into check."
+
+        # Special moves module
+        if exercise.module_id == "special_moves":
+            if exercise.exercise_type == "castling":
+                return "Castling: move the king two squares toward the rook, then the rook jumps next to the king. It’s only allowed if neither piece moved and the king doesn’t pass through check."
+            if exercise.exercise_type == "promotion":
+                return "Promotion: when a pawn reaches the last rank, it must be promoted (usually to a queen)."
+            return "Special moves include castling, en passant, and pawn promotion."
+
+        # Check / checkmate / stalemate module
+        if exercise.module_id == "check_checkmate_stalemate":
+            if exercise.exercise_type == "check":
+                return "Check means the king is under attack. The player must respond by moving the king, capturing the attacker, or blocking the attack."
+            if exercise.exercise_type == "checkmate":
+                return "Checkmate means the king is in check and there is no legal move to escape."
+            if exercise.exercise_type == "stalemate":
+                return "Stalemate means the player is NOT in check but has no legal moves. It’s a draw."
+            return "Focus on king safety: check, checkmate, and stalemate depend on legal moves available."
+
         else:
             return "Think about how this piece normally moves in chess."
     

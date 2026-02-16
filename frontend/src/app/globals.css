@@ -53,3 +53,41 @@ body {
 @keyframes drift{ 0%{ transform: translateY(0) } 50%{ transform: translateY(-20px) } 100%{ transform: translateY(0) } }
 .btn-glass{ background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02)); backdrop-filter: blur(10px); }
 .btn-glow{ box-shadow: var(--glow-neo); border-color: rgba(25,227,255,.7) }
+
+body[data-eeknova-assistant-active="true"] .avatar-wrap{
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 70;
+}
+
+body[data-eeknova-assistant-active="true"] .avatar-wrap *{
+  pointer-events: auto;
+  visibility: visible;
+}
+
+body[data-eeknova-assistant-active="true"] {
+  background: var(--bg-gradient);
+  overflow: hidden;
+}
+
+body[data-eeknova-assistant-active="true"] *{
+  pointer-events: none;
+  visibility: hidden;
+}
+
+body[data-eeknova-assistant-active="true"] .avatar-wrap{
+  visibility: visible;
+  pointer-events: auto;
+}
+
+body[data-eeknova-assistant-active="true"] [data-eeknova-assistant-ui="true"]{
+  visibility: visible;
+  pointer-events: auto;
+}
+
+body[data-eeknova-assistant-active="true"] [data-eeknova-assistant-ui="true"] *{
+  visibility: visible;
+  pointer-events: auto;
+}

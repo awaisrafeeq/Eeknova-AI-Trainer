@@ -70,12 +70,8 @@ export default function YogaCamera({
 
   // Initialize TTS
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      ttsRef.current = new TTSFeedback(onTTSSpeakingChange, onTTSTextChange);
-      console.log('TTS initialized');
-    } else {
-      console.warn('TTS not supported in this browser');
-    }
+    ttsRef.current = new TTSFeedback(onTTSSpeakingChange, onTTSTextChange);
+    console.log('TTS initialized');
   }, [onTTSSpeakingChange, onTTSTextChange]);
 
   useEffect(() => {
@@ -121,8 +117,9 @@ export default function YogaCamera({
 
     const fetchInstructions = async () => {
       try {
+        const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8000';
         const response = await fetch(
-          `http://localhost:8000/api/yoga/instructions/${encodeURIComponent(selectedPose)}`
+          `${apiBaseUrl}/api/yoga/instructions/${encodeURIComponent(selectedPose)}`
         );
         if (!response.ok) {
           setInstructionSet(null);
@@ -214,7 +211,7 @@ export default function YogaCamera({
         setAccuracy(null);
         setSessionStartTime(null);
         
-        // Disconnect WebSocket
+        // Disconnect WebSocket gracefully without sending close message
         if (wsRef.current) {
           wsRef.current.disconnect();
           wsRef.current = null;
@@ -333,7 +330,14 @@ export default function YogaCamera({
       prevPhaseRef.current = null;
       clearGuidedTimeouts();
       isGuidedPhaseRef.current = false;
-      ttsRef.current?.stop();
+      
+      // Gracefully stop TTS without abort error
+      try {
+        ttsRef.current?.stop();
+      } catch (error) {
+        console.log('TTS stop error (safe):', error);
+      }
+      
       stopAnalysis();
     }
 
