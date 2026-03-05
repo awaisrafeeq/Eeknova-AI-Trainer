@@ -14,7 +14,7 @@ import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 
 
 
-function CameraControls() {
+function CameraControls({ target }: { target?: [number, number, number] }) {
 
   const { camera, gl } = useThree();
 
@@ -38,15 +38,86 @@ function CameraControls() {
 
     controls.current.maxPolarAngle = Math.PI / 2;
 
+    if (target) {
+      controls.current.target.set(target[0], target[1], target[2]);
+      controls.current.update();
+    }
+
 
 
     return () => controls.current?.dispose();
 
-  }, [camera, gl]);
+  }, [camera, gl, target?.[0], target?.[1], target?.[2]]);
 
 
 
   useFrame(() => controls.current?.update());
+
+  return null;
+
+}
+
+function AutoFitCamera({ object, referenceSize, cameraZoom, onTargetChange }: { object: THREE.Object3D | null; referenceSize: THREE.Vector3 | null; cameraZoom: number; onTargetChange: (t: [number, number, number]) => void }) {
+
+  const { camera, size } = useThree();
+
+  useEffect(() => {
+
+    if (!object) return;
+
+    try {
+
+      const box = new THREE.Box3().setFromObject(object);
+      const center = new THREE.Vector3();
+      const boxSize = new THREE.Vector3();
+
+      box.getCenter(center);
+      box.getSize(boxSize);
+
+      const effectiveSize = referenceSize
+        ? new THREE.Vector3(
+            Math.max(referenceSize.x, boxSize.x),
+            Math.max(referenceSize.y, boxSize.y),
+            Math.max(referenceSize.z, boxSize.z)
+          )
+        : boxSize;
+
+      const aspect = size.width / Math.max(1, size.height);
+      const perspective = camera as THREE.PerspectiveCamera;
+      const vFov = (perspective.fov * Math.PI) / 180;
+
+      const fitHeightDistance = (effectiveSize.y * 0.5) / Math.tan(vFov * 0.5);
+      const hFov = 2 * Math.atan(Math.tan(vFov * 0.5) * aspect);
+      const fitWidthDistance = (effectiveSize.x * 0.5) / Math.tan(hFov * 0.5);
+
+      let distance = Math.max(fitHeightDistance, fitWidthDistance);
+      const margin = aspect < 0.8 ? 1.85 : 1.25;
+      distance *= margin;
+
+      // Zoom the fitted framing without changing the container size.
+      const zoom = Number.isFinite(cameraZoom) && cameraZoom > 0 ? cameraZoom : 1;
+      distance /= zoom;
+
+      // Bias the target slightly downward so raised arms/hands stay in frame on portrait displays
+      const target = center.clone();
+      target.y -= effectiveSize.y * 0.12;
+
+      // Many GLB rigs have an off-center pivot/bounds; keep framing centered horizontally.
+      target.x = 0;
+
+      perspective.position.set(0, target.y, target.z + distance);
+      perspective.near = Math.max(0.01, distance / 100);
+      perspective.far = Math.max(1000, distance * 100);
+      perspective.updateProjectionMatrix();
+      perspective.lookAt(target);
+
+      onTargetChange([target.x, target.y, target.z]);
+
+    } catch {
+
+    }
+
+  }, [object, referenceSize, cameraZoom, camera, size.width, size.height, onTargetChange]);
 
   return null;
 
@@ -103,7 +174,11 @@ const POSE_ANIMATIONS: Record<string, PoseAnimation> = {
     outPath: "/Downward Dog Pose/out_compressed.glb",
 
   },
-
+  "Triangle": {
+    inPath: "/Triangle/in_compressed.glb",
+    mainPath: "/Triangle/main_compressed.glb",
+    outPath: "/Triangle/out_compressed.glb",
+  },
   "Warrior Pose": {
 
     inPath: "/Warrior Pose/in_compressed.glb",
@@ -197,13 +272,15 @@ interface Avatar3DProps {
   staticModelPath?: string;
   playAnimationPath?: string;
   playAnimationKey?: number;
+  cameraZoom?: number;
   onTTSSpeaking?: (speaking: boolean) => void;
   onError?: (error: string) => void;
   onSessionEnd?: () => void;
   assistantModeActive?: boolean;
+  onModelLoaded?: (model: THREE.Object3D | null) => void;
 }
 
-function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, onError, onTTSSpeaking, onSessionEnd }: Avatar3DProps) {
+function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, onError, onTTSSpeaking, onSessionEnd, onModelLoaded }: Avatar3DProps) {
 
   const [model, setModel] = useState<THREE.Group | null>(null);
 
@@ -411,6 +488,8 @@ function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = fals
       meshRef.current = loadedModel;
 
       setModel(loadedModel);
+
+      onModelLoaded?.(loadedModel);
 
       findJawBone(loadedModel);
 
@@ -990,7 +1069,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = fals
 
     };
 
-  }, [selectedPose, staticMode, staticModelPath]);
+  }, [selectedPose, staticMode, staticModelPath, playAnimationKey]);
 
 
 
@@ -1611,17 +1690,43 @@ interface Avatar3DProps {
 
   playAnimationKey?: number; // Increment to trigger one-shot animation
 
+  cameraZoom?: number;
+
   onSessionEnd?: () => void; // Callback when OUT animation completes
+
+  onModelLoaded?: (model: THREE.Object3D | null) => void;
 
 }
 
 
 
-export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, onTTSSpeaking, onError, onSessionEnd }: Avatar3DProps) {
+export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, cameraZoom = 1, onTTSSpeaking, onError, onSessionEnd }: Avatar3DProps) {
 
   const [webglSupported, setWebglSupported] = useState(true);
 
   const [error, setError] = useState<string | null>(null);
+
+  const [fitObject, setFitObject] = useState<THREE.Object3D | null>(null);
+  const [cameraTarget, setCameraTarget] = useState<[number, number, number]>([0, 0, 0]);
+  const referenceSizeRef = useRef<THREE.Vector3 | null>(null);
+
+  useEffect(() => {
+    if (!fitObject) return;
+    try {
+      const box = new THREE.Box3().setFromObject(fitObject);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      if (!referenceSizeRef.current) {
+        referenceSizeRef.current = size;
+      } else {
+        referenceSizeRef.current = new THREE.Vector3(
+          Math.max(referenceSizeRef.current.x, size.x),
+          Math.max(referenceSizeRef.current.y, size.y),
+          Math.max(referenceSizeRef.current.z, size.z)
+        );
+      }
+    } catch {}
+  }, [fitObject]);
 
 
 
@@ -1664,7 +1769,8 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
             <directionalLight position={[-5, 5, 5]} intensity={0.8} />
             <pointLight position={[0, 2, 2]} intensity={0.6} />
             <hemisphereLight args={[0xffffff, 0x444444, 0.3]} />
-            <CameraControls />
+            <AutoFitCamera object={fitObject} referenceSize={referenceSizeRef.current} cameraZoom={cameraZoom} onTargetChange={setCameraTarget} />
+            <CameraControls target={cameraTarget} />
             <Suspense fallback={null}>
               <YogaModel
                 selectedPose={selectedPose}
@@ -1677,6 +1783,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
                 playAnimationKey={playAnimationKey}
                 onError={setError}
                 onTTSSpeaking={onTTSSpeaking}
+                onModelLoaded={setFitObject}
               />
             </Suspense>
           </Canvas>

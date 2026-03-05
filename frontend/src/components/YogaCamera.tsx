@@ -1,20 +1,35 @@
 'use client';
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   YogaPoseWebSocket,
   TTSFeedback,
-  startSession,
-  stopSession,
-  analyzeFrame,
   updateSessionPose,
   drawSkeleton,
   PoseAnalysisResult,
   SessionSummary,
 } from '@/lib/yogaApi';
 
+let globalTTS: TTSFeedback | null = null;
+let globalLastSpoken: { text: string; atMs: number } | null = null;
+let globalTTSHandlersInstalled = false;
+const globalCallbacks = {
+  onSpeaking: null as null | ((speaking: boolean) => void),
+  onText: null as null | ((text: string) => void),
+  onGuidedEnd: null as null | (() => void),
+  onReleaseEnd: null as null | (() => void),
+  shouldIgnoreSpeakingFalse: null as null | (() => boolean),
+  clearIgnoreSpeakingFalse: null as null | (() => void),
+  isGuidedPending: null as null | (() => boolean),
+  clearGuidedPending: null as null | (() => void),
+  isReleasePending: null as null | (() => boolean),
+  clearReleasePending: null as null | (() => void),
+};
+
 interface YogaCameraProps {
   selectedPose: string;
-  isStarted: boolean;
+  shouldAnalyze: boolean;
+  playGuidedInstructions: boolean;
+  playReleaseInstructions: boolean;
   onSessionEnd: (summary: SessionSummary | null) => void;
   onAccuracyUpdate: (accuracy: number) => void;
   onCorrectionsUpdate: (corrections: string[]) => void;
@@ -22,13 +37,17 @@ interface YogaCameraProps {
   currentPhase?: 'in' | 'hold' | 'out';
   onTTSSpeakingChange?: (speaking: boolean) => void;
   onTTSTextChange?: (text: string) => void;
+  onGuidedInstructionsEnd?: () => void;
+  onReleaseInstructionsEnd?: () => void;
   tolerance?: number;
   mirrorMode?: boolean;
 }
 
 export default function YogaCamera({
   selectedPose,
-  isStarted,
+  shouldAnalyze,
+  playGuidedInstructions,
+  playReleaseInstructions,
   onSessionEnd,
   onAccuracyUpdate,
   onCorrectionsUpdate,
@@ -36,6 +55,8 @@ export default function YogaCamera({
   currentPhase,
   onTTSSpeakingChange,
   onTTSTextChange,
+  onGuidedInstructionsEnd,
+  onReleaseInstructionsEnd,
   tolerance = 10.0,
   mirrorMode = true,
 }: YogaCameraProps) {
@@ -64,19 +85,140 @@ export default function YogaCamera({
   const entryPlayedRef = useRef(false);
   const releasePlayedRef = useRef(false);
   const instructionPoseRef = useRef<string | null>(null);
+  const suppressSessionEndRef = useRef(false);
+  const ignoreSpeakingFalseRef = useRef(false);
   const isGuidedPhaseRef = useRef(false);
+  const pendingGuidedEndRef = useRef(false);
+  const pendingReleaseEndRef = useRef(false);
   const guidedTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const prevPhaseRef = useRef<'in' | 'hold' | 'out' | 'idle' | null>(null);
+  const correctionsGivenRef = useRef(0);
+  const lastCorrectionSpokenRef = useRef<{ text: string; atMs: number } | null>(null);
+
+  const onTTSSpeakingChangeRef = useRef<YogaCameraProps['onTTSSpeakingChange']>(onTTSSpeakingChange);
+  const onTTSTextChangeRef = useRef<YogaCameraProps['onTTSTextChange']>(onTTSTextChange);
+  const onGuidedInstructionsEndRef = useRef<YogaCameraProps['onGuidedInstructionsEnd']>(onGuidedInstructionsEnd);
+  const onReleaseInstructionsEndRef = useRef<YogaCameraProps['onReleaseInstructionsEnd']>(onReleaseInstructionsEnd);
+  const ttsInitializedRef = useRef(false);
+
+  const playGuidedInstructionsRef = useRef(playGuidedInstructions);
+  const playReleaseInstructionsRef = useRef(playReleaseInstructions);
+
+  useEffect(() => {
+    playGuidedInstructionsRef.current = playGuidedInstructions;
+  }, [playGuidedInstructions]);
+
+  useEffect(() => {
+    playReleaseInstructionsRef.current = playReleaseInstructions;
+  }, [playReleaseInstructions]);
+
+  useEffect(() => {
+    onTTSSpeakingChangeRef.current = onTTSSpeakingChange;
+  }, [onTTSSpeakingChange]);
+
+  useEffect(() => {
+    onTTSTextChangeRef.current = onTTSTextChange;
+  }, [onTTSTextChange]);
+
+  useEffect(() => {
+    onGuidedInstructionsEndRef.current = onGuidedInstructionsEnd;
+  }, [onGuidedInstructionsEnd]);
+
+  useEffect(() => {
+    onReleaseInstructionsEndRef.current = onReleaseInstructionsEnd;
+  }, [onReleaseInstructionsEnd]);
+
+  useEffect(() => {
+    // Keep singleton callbacks in sync with the latest refs for this mounted component.
+    globalCallbacks.onSpeaking = (speaking: boolean) => onTTSSpeakingChangeRef.current?.(speaking);
+    globalCallbacks.onText = (text: string) => onTTSTextChangeRef.current?.(text);
+    globalCallbacks.onGuidedEnd = () => {
+      console.log('[YogaCamera] Guided instructions ended');
+      onGuidedInstructionsEndRef.current?.();
+    };
+    globalCallbacks.onReleaseEnd = () => {
+      console.log('[YogaCamera] Release instructions ended');
+      onReleaseInstructionsEndRef.current?.();
+    };
+    globalCallbacks.shouldIgnoreSpeakingFalse = () => ignoreSpeakingFalseRef.current;
+    globalCallbacks.clearIgnoreSpeakingFalse = () => {
+      ignoreSpeakingFalseRef.current = false;
+    };
+    globalCallbacks.isGuidedPending = () => pendingGuidedEndRef.current;
+    globalCallbacks.clearGuidedPending = () => {
+      pendingGuidedEndRef.current = false;
+      isGuidedPhaseRef.current = false;
+    };
+    globalCallbacks.isReleasePending = () => pendingReleaseEndRef.current;
+    globalCallbacks.clearReleasePending = () => {
+      pendingReleaseEndRef.current = false;
+    };
+  });
+
+  const safeStopTTS = () => {
+    try {
+      if (ttsRef.current) {
+        ignoreSpeakingFalseRef.current = true;
+        ttsRef.current.stop();
+      }
+    } catch (error) {
+      console.log('TTS stop error (safe):', error);
+    }
+  };
 
   // Initialize TTS
   useEffect(() => {
-    ttsRef.current = new TTSFeedback(onTTSSpeakingChange, onTTSTextChange);
-    console.log('TTS initialized');
-  }, [onTTSSpeakingChange, onTTSTextChange]);
+    if (ttsInitializedRef.current) {
+      return;
+    }
+    ttsInitializedRef.current = true;
+
+    if (!globalTTSHandlersInstalled) {
+      const speakingHandler = (speaking: boolean) => {
+        globalCallbacks.onSpeaking?.(speaking);
+
+        if (speaking) {
+          return;
+        }
+
+        // If we manually stopped TTS (cleanup / transition), don't treat it as "finished speaking".
+        if (globalCallbacks.shouldIgnoreSpeakingFalse?.()) {
+          globalCallbacks.clearIgnoreSpeakingFalse?.();
+        }
+
+        if (globalCallbacks.isGuidedPending?.()) {
+          globalCallbacks.clearGuidedPending?.();
+          globalCallbacks.onGuidedEnd?.();
+          return;
+        }
+
+        if (globalCallbacks.isReleasePending?.()) {
+          globalCallbacks.clearReleasePending?.();
+          globalCallbacks.onReleaseEnd?.();
+        }
+      };
+
+      const textHandler = (text: string) => {
+        globalCallbacks.onText?.(text);
+      };
+
+      if (!globalTTS) {
+        globalTTS = new TTSFeedback(speakingHandler, textHandler);
+        console.log('TTS initialized');
+      }
+
+      globalTTSHandlersInstalled = true;
+    }
+
+    // Always point this component's ref at the singleton
+    ttsRef.current = globalTTS;
+
+    // Ensure latest handlers are used after HMR / rerenders via refs
+  }, []);
 
   useEffect(() => {
     return () => {
-      ttsRef.current?.stop();
+      safeStopTTS();
     };
   }, []);
 
@@ -89,16 +231,42 @@ export default function YogaCamera({
     if (!ttsRef.current) return;
     clearGuidedTimeouts();
     isGuidedPhaseRef.current = true;
-    lines.forEach((line) => ttsRef.current?.speak(line));
-    if (lines.length > 0) {
-      const totalMs = lines.length * 1800;
-      const timeoutId = setTimeout(() => {
-        isGuidedPhaseRef.current = false;
-      }, totalMs);
-      guidedTimeoutsRef.current.push(timeoutId);
-    } else {
+    const combined = lines.map((l) => l.trim()).filter(Boolean).join(' ');
+    if (!combined) {
       isGuidedPhaseRef.current = false;
+      onGuidedInstructionsEndRef.current?.();
+      return;
     }
+
+    const now = Date.now();
+    const last = globalLastSpoken;
+    if (last && last.text === combined && now - last.atMs < 2000) {
+      return;
+    }
+    globalLastSpoken = { text: combined, atMs: now };
+
+    pendingGuidedEndRef.current = true;
+    ttsRef.current.speak(combined, true);
+  };
+
+  const queueReleaseLines = (lines: string[]) => {
+    if (!ttsRef.current) return;
+    clearGuidedTimeouts();
+    const combined = lines.map((l) => l.trim()).filter(Boolean).join(' ');
+    if (!combined) {
+      onReleaseInstructionsEndRef.current?.();
+      return;
+    }
+
+    const now = Date.now();
+    const last = globalLastSpoken;
+    if (last && last.text === combined && now - last.atMs < 2000) {
+      return;
+    }
+    globalLastSpoken = { text: combined, atMs: now };
+
+    pendingReleaseEndRef.current = true;
+    ttsRef.current.speak(combined, true);
   };
 
   // Load guided instructions for the selected pose
@@ -192,17 +360,21 @@ export default function YogaCamera({
       if (result.type === 'analysis_stopped') {
         const summary: SessionSummary | null = result.summary || {
           session_id: result.session_id || 'websocket-session',
-          duration_seconds: result.duration_seconds || (sessionStartTime ? Math.floor((Date.now() - sessionStartTime) / 1000) : 0),
+          duration_seconds:
+            result.duration_seconds ||
+            (sessionStartTime ? Math.floor((Date.now() - sessionStartTime) / 1000) : 0),
           frames_processed: result.frames_processed || 0,
           average_accuracy: result.average_accuracy || 0,
-          corrections_given: result.corrections_given || 0,
-          pose_name: result.pose_name
+          corrections_given: Math.max(result.corrections_given || 0, correctionsGivenRef.current),
+          pose_name: result.pose_name,
         };
-        
+
         console.log('Session ended from WebSocket:', summary);
         onSessionEnd(summary);
-        ttsRef.current?.speak('Session ended. Great workout!', true);
-        
+        if (!(playGuidedInstructionsRef.current || playReleaseInstructionsRef.current)) {
+          ttsRef.current?.speak('Session ended. Great workout!', true);
+        }
+
         // Stop analysis without calling onSessionEnd again
         setIsAnalyzing(false);
         setIsConnected(false);
@@ -210,12 +382,13 @@ export default function YogaCamera({
         setCurrentPose(null);
         setAccuracy(null);
         setSessionStartTime(null);
-        
+
         // Disconnect WebSocket gracefully without sending close message
         if (wsRef.current) {
           wsRef.current.disconnect();
           wsRef.current = null;
         }
+
         return;
       }
 
@@ -228,28 +401,34 @@ export default function YogaCamera({
           onAccuracyUpdate(result.accuracy);
         }
 
-        // Handle corrections and TTS
         if (result.corrections && result.corrections.length > 0) {
-          if (isGuidedPhaseRef.current) {
-            return;
-          }
           onCorrectionsUpdate(result.corrections);
-          console.log('Speaking corrections:', result.corrections);
-          // Add delay to avoid TTS conflicts
-          setTimeout(() => {
-            ttsRef.current?.speakCorrections(result.corrections || []);
-          }, 200);
-        } else if (result.accuracy && result.accuracy >= 80) {
-          // Good pose feedback (less frequent)
-          if (Math.random() < 0.1) {
-            console.log('Speaking good feedback');
-            setTimeout(() => {
-              ttsRef.current?.speak('Great form! Keep it up!');
-            }, 300);
+
+          // Speak correction feedback (if enabled)
+          // During guided/release instruction phases, suppress feedback TTS to avoid overlapping.
+          if (ttsEnabled && !(playGuidedInstructionsRef.current || playReleaseInstructionsRef.current)) {
+            if (result.accuracy !== null && result.accuracy !== undefined && result.accuracy < 80) {
+              // Only speak the first correction to avoid overwhelming
+              const correctionText = result.corrections[0];
+              const voiceCorrection = correctionText
+                .replace(/Adjust your/i, '')
+                .replace(/:\s*/g, ': ')
+                .replace(/\(by [\d\.]+°\)/g, '')
+                .trim();
+
+              // Count corrections based on what we actually speak (de-dupe repeated spam)
+              const now = Date.now();
+              const last = lastCorrectionSpokenRef.current;
+              if (!last || last.text !== voiceCorrection || now - last.atMs > 3000) {
+                correctionsGivenRef.current += 1;
+                lastCorrectionSpokenRef.current = { text: voiceCorrection, atMs: now };
+              }
+
+              ttsRef.current?.speak(voiceCorrection);
+            }
           }
         }
 
-        // Update session stats
         if (result.session_stats) {
           setFrameCount(result.session_stats.frames_processed);
           setAvgAccuracy(result.session_stats.average_accuracy);
@@ -259,39 +438,30 @@ export default function YogaCamera({
         if (result.keypoints && overlayCanvasRef.current) {
           const ctx = overlayCanvasRef.current.getContext('2d');
           if (ctx) {
-            ctx.clearRect(
-              0,
-              0,
-              overlayCanvasRef.current.width,
-              overlayCanvasRef.current.height
-            );
+            ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height);
             drawSkeleton(ctx, result.keypoints, result.angle_status);
           }
         }
       } else {
         setPoseDetected(false);
         setCurrentPose(null);
+        setAccuracy(null);
 
         // Clear overlay
         if (overlayCanvasRef.current) {
           const ctx = overlayCanvasRef.current.getContext('2d');
           if (ctx) {
-            ctx.clearRect(
-              0,
-              0,
-              overlayCanvasRef.current.width,
-              overlayCanvasRef.current.height
-            );
+            ctx.clearRect(0, 0, overlayCanvasRef.current.width, overlayCanvasRef.current.height);
           }
         }
       }
     },
-    [onAccuracyUpdate, onCorrectionsUpdate, onSessionEnd]
+    [onAccuracyUpdate, onCorrectionsUpdate, onSessionEnd, sessionStartTime, ttsEnabled]
   );
 
-  // Speak entry instructions once at session start
+  // Speak entry instructions once when guided instructions phase starts
   useEffect(() => {
-    if (!isStarted || !instructionSet || !ttsRef.current) {
+    if (!playGuidedInstructions || !instructionSet || !ttsRef.current) {
       clearGuidedTimeouts();
       isGuidedPhaseRef.current = false;
       return;
@@ -299,43 +469,39 @@ export default function YogaCamera({
 
     if (!entryPlayedRef.current && instructionSet.entry.length > 0) {
       entryPlayedRef.current = true;
-      ttsRef.current.stop();
+      safeStopTTS();
       queueGuidedLines(instructionSet.entry);
     }
-  }, [instructionSet, isStarted]);
+  }, [instructionSet, playGuidedInstructions, onGuidedInstructionsEnd]);
 
-  // Speak exit instructions once when entering out phase
+  // Speak release instructions once when release phase starts
   useEffect(() => {
-    if (!isStarted || !instructionSet || !ttsRef.current) {
+    if (!playReleaseInstructions || !instructionSet || !ttsRef.current) {
       return;
     }
 
-    const prevPhase = prevPhaseRef.current;
-    prevPhaseRef.current = currentPhase || null;
-
-    if (currentPhase === 'out' && prevPhase !== 'out' && !releasePlayedRef.current) {
+    if (!releasePlayedRef.current && instructionSet.release.length > 0) {
       releasePlayedRef.current = true;
-      ttsRef.current.stop();
-      queueGuidedLines(instructionSet.release || []);
+      safeStopTTS();
+      queueReleaseLines(instructionSet.release);
     }
-  }, [currentPhase, instructionSet, isStarted]);
+  }, [instructionSet, playReleaseInstructions, onReleaseInstructionsEnd]);
 
-  // Start/Stop analysis based on isStarted prop
   useEffect(() => {
-    if (isStarted && isCameraReady) {
+    prevPhaseRef.current = currentPhase || null;
+  }, [currentPhase]);
+
+  // Start/Stop analysis based on shouldAnalyze prop
+  useEffect(() => {
+    if (shouldAnalyze && isCameraReady) {
       startAnalysis();
-    } else if (!isStarted) {
-      entryPlayedRef.current = false;
-      releasePlayedRef.current = false;
+    } else if (!shouldAnalyze) {
       prevPhaseRef.current = null;
-      clearGuidedTimeouts();
-      isGuidedPhaseRef.current = false;
-      
-      // Gracefully stop TTS without abort error
-      try {
-        ttsRef.current?.stop();
-      } catch (error) {
-        console.log('TTS stop error (safe):', error);
+      if (!playGuidedInstructions && !playReleaseInstructions) {
+        clearGuidedTimeouts();
+        isGuidedPhaseRef.current = false;
+
+        safeStopTTS();
       }
       
       stopAnalysis();
@@ -344,14 +510,14 @@ export default function YogaCamera({
     return () => {
       stopAnalysis();
     };
-  }, [isStarted, isCameraReady]);
+  }, [shouldAnalyze, isCameraReady, playGuidedInstructions]);
 
   // Handle pose changes during active session
   const prevSelectedPoseRef = useRef<string>('');
   
   useEffect(() => {
     // Only handle pose changes if session is active and pose actually changed
-    if (isStarted && isCameraReady && wsRef.current?.isConnected() && 
+    if (shouldAnalyze && isCameraReady && wsRef.current?.isConnected() && 
         selectedPose && selectedPose !== prevSelectedPoseRef.current) {
       
       const apiPoseName = convertPoseNameToApi(selectedPose);
@@ -360,7 +526,7 @@ export default function YogaCamera({
       
       prevSelectedPoseRef.current = selectedPose;
     }
-  }, [selectedPose, isStarted, isCameraReady]);
+  }, [selectedPose, shouldAnalyze, isCameraReady]);
 
   // Convert pose name to API format
   const convertPoseNameToApi = (poseName: string): string => {
@@ -376,6 +542,9 @@ export default function YogaCamera({
     }
 
     try {
+      correctionsGivenRef.current = 0;
+      lastCorrectionSpokenRef.current = null;
+
       // Clear any existing session
       if (sessionIdRef.current) {
         wsRef.current?.stopAnalysis();
@@ -444,43 +613,43 @@ export default function YogaCamera({
     const finalDuration = sessionStartTime ? Math.floor((Date.now() - sessionStartTime) / 1000) : 0;
     console.log('Final session duration:', finalDuration, 'seconds');
 
-  // Stop WebSocket analysis
+    // Stop WebSocket analysis
     if (wsRef.current) {
       try {
         wsRef.current.stopAnalysis();
-        
+
         // Wait for WebSocket session end, if not received, create local summary
         setTimeout(() => {
-          if (isAnalyzing) { // Only if WebSocket didn't end the session
+          if (isAnalyzing) {
             const summary: SessionSummary = {
               session_id: 'local-session',
               duration_seconds: finalDuration,
               frames_processed: frameCount,
               average_accuracy: avgAccuracy,
-              corrections_given: (lastResult as any)?.corrections?.length || 0,
-              pose_name: selectedPose
+              corrections_given: correctionsGivenRef.current,
+              pose_name: selectedPose,
             };
-            
+
             console.log('Final session summary (local):', summary);
             onSessionEnd(summary);
-            ttsRef.current?.speak('Session ended. Great workout!', true);
+            if (!(playGuidedInstructionsRef.current || playReleaseInstructionsRef.current)) {
+              ttsRef.current?.speak('Session ended. Great workout!', true);
+            }
           }
         }, 1000);
-        
       } catch (err) {
         console.error('Failed to stop session:', err);
-        // Still provide summary even on error
         const summary: SessionSummary = {
           session_id: 'local-session',
           duration_seconds: finalDuration,
           frames_processed: frameCount,
           average_accuracy: avgAccuracy,
-          corrections_given: (lastResult as any)?.corrections?.length || 0,
-          pose_name: selectedPose
+          corrections_given: correctionsGivenRef.current,
+          pose_name: selectedPose,
         };
         onSessionEnd(summary);
       }
-      
+
       // Disconnect WebSocket after a delay
       setTimeout(() => {
         if (wsRef.current) {
@@ -496,6 +665,8 @@ export default function YogaCamera({
     setCurrentPose(null);
     setAccuracy(null);
     setSessionStartTime(null);
+    correctionsGivenRef.current = 0;
+    lastCorrectionSpokenRef.current = null;
 
     // Clear overlay
     if (overlayCanvasRef.current) {
@@ -679,7 +850,7 @@ export default function YogaCamera({
       </div>
 
       {/* Analysis status bar */}
-      {isStarted && (
+      {shouldAnalyze && (
         <div className="mt-2 flex justify-center">
           <div className="flex items-center gap-2 text-sm text-[var(--ink-med)]">
             <div

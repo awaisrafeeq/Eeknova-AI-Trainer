@@ -39,6 +39,7 @@ const POSE_OPTIONS = [
   "Downward Dog",
 
   "Warrior Pose",
+  "Triangle Pose",
 
   "Mountain Pose",
 
@@ -95,12 +96,34 @@ export default function YogaPage() {
   const ttsRef = useRef<TTSFeedback | null>(null);
 
   const [selectedPose, setSelectedPose] = useState<string>("Mountain Pose");
+  const [poseRestartKey, setPoseRestartKey] = useState(0);
+
+  const [isPortraitDisplay, setIsPortraitDisplay] = useState(false);
+
+  useEffect(() => {
+    const compute = () => {
+      if (typeof window === 'undefined') return;
+      const w = window.innerWidth || 1;
+      const h = window.innerHeight || 1;
+      // Holobox/portrait displays are typically very tall (e.g. 2160x3840)
+      setIsPortraitDisplay(h / w >= 1.6);
+    };
+
+    compute();
+    window.addEventListener('resize', compute);
+    return () => window.removeEventListener('resize', compute);
+  }, []);
 
   const [isSessionStarted, setIsSessionStarted] = useState(false);
 
   const [isPaused, setIsPaused] = useState(false);
 
-  const [flowStage, setFlowStage] = useState<'setup' | 'warmup' | 'pose' | 'cooldown'>('setup');
+  const [isStageTransitioning, setIsStageTransitioning] = useState(false);
+
+  const [flowStage, setFlowStage] = useState<'setup' | 'instructions' | 'warmup' | 'pose' | 'release' | 'cooldown'>('setup');
+
+  const isInstructionStage = flowStage === 'instructions' || flowStage === 'release';
+  const isAvatarFullStage = flowStage !== 'setup';
 
   const WARMUP_STEPS = [
     {
@@ -169,7 +192,8 @@ export default function YogaPage() {
 
   const [corrections, setCorrections] = useState<string[]>([]);
 
-  const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null);
+  const [sessionSummary, setSessionSummary] = useState<any>(null);
+  const pendingSessionSummaryRef = useRef<any>(null);
 
   const [energyLevel, setEnergyLevel] = useState(82);
 
@@ -184,6 +208,12 @@ export default function YogaPage() {
   const [lastYogaDate, setLastYogaDate] = useState<string | null>(null);
 
   const [shouldPlayAnimation, setShouldPlayAnimation] = useState(false); // Control animation playback
+
+  const [shouldAnalyze, setShouldAnalyze] = useState(false); // Control analysis
+
+  const [playGuidedInstructions, setPlayGuidedInstructions] = useState(false); // Control guided instructions
+
+  const [playReleaseInstructions, setPlayReleaseInstructions] = useState(false);
 
   // Timer state for pose duration
   const [totalTime, setTotalTime] = useState(0);
@@ -224,7 +254,12 @@ export default function YogaPage() {
         if (prev <= 1) {
           // TODO: Re-enable cool-down later - skip directly to session end
           // startCooldown();
-          finalizeSessionEnd();
+          setIsSessionStarted(false);
+          setShouldAnalyze(false);
+          setShouldPlayAnimation(false);
+          setPlayGuidedInstructions(false);
+          setPlayReleaseInstructions(true);
+          setFlowStage('release');
           return 0;
         }
         return prev - 1;
@@ -410,9 +445,18 @@ export default function YogaPage() {
   // Handle Start button
 
   const handleStart = () => {
-    // TODO: Re-enable warm-up later - skip directly to pose session
-    // startWarmup();
-    startPoseSession();
+    setSessionSummary(null);
+    setCorrections([]);
+    setCurrentAccuracy(0);
+    setIsPaused(false);
+    setShowWarmupSkipWarning(false);
+
+    setFlowStage('instructions');
+    setIsSessionStarted(false);
+    setShouldPlayAnimation(false);
+    setShouldAnalyze(false);
+    setPlayGuidedInstructions(true);
+    setPlayReleaseInstructions(false);
   };
 
   const startWarmup = () => {
@@ -437,6 +481,9 @@ export default function YogaPage() {
     setIsSessionStarted(true);
     setIsPaused(false);
     setShouldPlayAnimation(true);
+    setShouldAnalyze(true);
+    setPlayGuidedInstructions(false);
+    setPlayReleaseInstructions(false);
 
     const poseSpec = POSE_SPEC[selectedPose];
     if (poseSpec) {
@@ -445,11 +492,7 @@ export default function YogaPage() {
       setCurrentPhase('in');
     }
 
-    const currentPose = selectedPose;
-    setSelectedPose("");
-    setTimeout(() => {
-      setSelectedPose(currentPose);
-    }, 200);
+    setPoseRestartKey((k) => k + 1);
   };
 
   const startCooldown = () => {
@@ -469,6 +512,9 @@ export default function YogaPage() {
     setIsSessionStarted(false);
     setIsPaused(false);
     setShouldPlayAnimation(false);
+    setShouldAnalyze(false);
+    setPlayGuidedInstructions(false);
+    setPlayReleaseInstructions(false);
     setTimeLeft(0);
     setCurrentPhase('in');
     setPhaseTimeLeft(0);
@@ -647,10 +693,7 @@ export default function YogaPage() {
 
 
 
-  // Handle session end callback
-
-  const handleSessionEnd = useCallback((summary: SessionSummary | null) => {
-
+  const applySessionSummary = useCallback((summary: SessionSummary | null) => {
     setSessionSummary(summary);
 
     // Auto-scroll to session summary when session ends
@@ -720,6 +763,20 @@ export default function YogaPage() {
     }
 
   }, [selectedPose, userProfile?.weight, lastYogaDate, sessionStats.streak]);
+
+  // Handle session end callback
+  const handleSessionEnd = useCallback(
+    (summary: SessionSummary | null) => {
+      // If we're in release stage, don't show/end yet. Wait until release TTS finishes.
+      if (flowStage === 'release' || playReleaseInstructions) {
+        pendingSessionSummaryRef.current = summary;
+        return;
+      }
+
+      applySessionSummary(summary);
+    },
+    [applySessionSummary, flowStage, playReleaseInstructions]
+  );
 
   const currentAuxStep = flowStage === 'warmup'
     ? WARMUP_STEPS[warmupStepIndex]
@@ -807,13 +864,13 @@ export default function YogaPage() {
 
 
 
-        <section className="relative grid grid-cols-12 gap-4 md:gap-6 mt-8">
+        <section className="relative grid grid-cols-12 gap-4 md:gap-6 mt-20 md:mt-24">
 
           {/* Avatar Section - Dynamic Positioning */}
 
           <div className={`col-span-12 relative transition-all duration-700 ease-in-out ${
 
-            isSessionStarted 
+            isSessionStarted || isAvatarFullStage 
 
               ? 'lg:col-span-12 lg:col-start-1' 
 
@@ -823,25 +880,21 @@ export default function YogaPage() {
 
             <div
 
-              className={`avatar-wrap relative rounded-[var(--radius-lg)] border border-[var(--glass-stroke)] transition-all duration-700 ease-in-out ${
+              className={`avatar-wrap relative transition-all duration-700 ease-in-out ${
 
-                isSessionStarted 
+                isSessionStarted || isAvatarFullStage 
 
-                  ? 'h-[55vh] lg:mx-auto lg:max-w-xl mt-2 scale-105' 
+                  ? (isPortraitDisplay
 
-                  : 'h-[50vh] mt-8'
+                      ? 'h-[82vh] mx-auto mt-2 scale-105'
 
-              }`}
+                      : 'h-[55vh] lg:mx-auto lg:max-w-xl mt-2 scale-105')
 
-              style={{
+                  : (isPortraitDisplay ? 'h-[74vh] mt-8' : 'h-[50vh] mt-8')
 
-                background:
+              } ${isStageTransitioning ? 'opacity-0 scale-[0.99]' : 'opacity-100'}`}
 
-                  'linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02))',
-
-                backdropFilter: 'blur(12px)',
-
-              }}
+              style={{ background: 'transparent' }}
 
             >
 
@@ -852,6 +905,7 @@ export default function YogaPage() {
                   playAnimationPath={currentAuxStep.path}
                   playAnimationKey={auxAnimKey}
                   isPaused={isPaused}
+                  cameraZoom={1}
                 />
               ) : (
                 <Avatar3D 
@@ -860,29 +914,15 @@ export default function YogaPage() {
                   staticMode={!shouldPlayAnimation}
                   isTTSSpeaking={isTTSSpeaking} 
                   isPaused={isPaused} 
+                  playAnimationKey={poseRestartKey}
+                  cameraZoom={flowStage === 'setup' && !isSessionStarted ? 1.30 : 1}
                   onSessionEnd={finalizeSessionEnd}
                 />
               )}
 
-              <div
-
-                className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-[42px] h-[18px] w-[60%]"
-
-                style={{
-
-                  filter: 'blur(10px)',
-
-                  background:
-
-                    'radial-gradient(closest-side, rgba(25,227,255,.35), transparent)',
-
-                }}
-
-              />
-
             </div>
 
-            {!isSessionStarted && flowStage === 'setup' && (
+            {/* {!isSessionStarted && flowStage === 'setup' && (
 
               <div className="text-center mt-2 text-[var(--ink-med)] text-sm">
 
@@ -890,7 +930,7 @@ export default function YogaPage() {
 
               </div>
 
-            )}
+            )} */}
 
           </div>
 
@@ -900,7 +940,7 @@ export default function YogaPage() {
 
           <div className={`col-span-12 relative transition-all duration-700 ease-in-out ${
 
-            isSessionStarted 
+            isSessionStarted || isAvatarFullStage 
 
               ? 'lg:col-span-12 lg:col-start-1' 
 
@@ -1057,7 +1097,8 @@ export default function YogaPage() {
               </div>
             )}
 
-            {/* Control Buttons - Always Visible */}
+            {/* Control Buttons - Visible only during detection/pose stage */}
+            {!isInstructionStage && (
             <div className={`flex flex-wrap gap-3 justify-center transition-all duration-700 ease-in-out ${
 
               isSessionStarted 
@@ -1089,15 +1130,37 @@ export default function YogaPage() {
                 label="⏹ End Session"
                 danger
                 onClick={handleEndSession}
-                disabled={flowStage !== 'pose'}
+                disabled={flowStage === 'setup'}
               />
             </div>
+            )}
 
             {/* Hidden Camera Component - Background Processing */}
             <div className="hidden">
               <YogaCamera
                 selectedPose={selectedPose}
-                isStarted={flowStage === 'pose' && isSessionStarted && !isPaused}
+                shouldAnalyze={flowStage === 'pose' && isSessionStarted && !isPaused && shouldAnalyze}
+                playGuidedInstructions={flowStage === 'instructions' && playGuidedInstructions && !isPaused}
+                playReleaseInstructions={flowStage === 'release' && playReleaseInstructions && !isPaused}
+                onGuidedInstructionsEnd={() => {
+                  // Smooth transition into detection/animation
+                  setIsStageTransitioning(true);
+                  setTimeout(() => {
+                    setPlayGuidedInstructions(false);
+                    startPoseSession();
+                    setTimeout(() => setIsStageTransitioning(false), 350);
+                  }, 220);
+                }}
+                onReleaseInstructionsEnd={() => {
+                  setPlayReleaseInstructions(false);
+
+                  if (!sessionSummary && pendingSessionSummaryRef.current) {
+                    applySessionSummary(pendingSessionSummaryRef.current);
+                    pendingSessionSummaryRef.current = null;
+                  }
+
+                  finalizeSessionEnd();
+                }}
                 onSessionEnd={handleSessionEnd}
                 onAccuracyUpdate={setCurrentAccuracy}
                 onCorrectionsUpdate={setCorrections}
