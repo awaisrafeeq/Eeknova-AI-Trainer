@@ -94,6 +94,8 @@ export default function YogaCamera({
   const prevPhaseRef = useRef<'in' | 'hold' | 'out' | 'idle' | null>(null);
   const correctionsGivenRef = useRef(0);
   const lastCorrectionSpokenRef = useRef<{ text: string; atMs: number } | null>(null);
+  const prevPlayGuidedRef = useRef(false);
+  const prevPlayReleaseRef = useRef(false);
 
   const onTTSSpeakingChangeRef = useRef<YogaCameraProps['onTTSSpeakingChange']>(onTTSSpeakingChange);
   const onTTSTextChangeRef = useRef<YogaCameraProps['onTTSTextChange']>(onTTSTextChange);
@@ -461,36 +463,50 @@ export default function YogaCamera({
 
   // Speak entry instructions once when guided instructions phase starts
   useEffect(() => {
-    if (!playGuidedInstructions || !instructionSet || !ttsRef.current) {
+    const shouldPlay = playGuidedInstructions && !!instructionSet && !!ttsRef.current;
+
+    if (shouldPlay && !prevPlayGuidedRef.current) {
+      entryPlayedRef.current = false;
+      pendingGuidedEndRef.current = false;
+      isGuidedPhaseRef.current = false;
+      globalLastSpoken = null;
+    }
+    prevPlayGuidedRef.current = playGuidedInstructions;
+
+    if (!shouldPlay) {
       clearGuidedTimeouts();
       isGuidedPhaseRef.current = false;
       return;
     }
 
-    if (!entryPlayedRef.current && instructionSet.entry.length > 0) {
+    if (!entryPlayedRef.current && instructionSet!.entry.length > 0) {
       entryPlayedRef.current = true;
       safeStopTTS();
-      queueGuidedLines(instructionSet.entry);
+      queueGuidedLines(instructionSet!.entry);
     }
-  }, [instructionSet, playGuidedInstructions, onGuidedInstructionsEnd]);
+  }, [instructionSet, playGuidedInstructions]);
 
   // Speak release instructions once when release phase starts
   useEffect(() => {
-    if (!playReleaseInstructions || !instructionSet || !ttsRef.current) {
+    const shouldPlay = playReleaseInstructions && !!instructionSet && !!ttsRef.current;
+
+    if (shouldPlay && !prevPlayReleaseRef.current) {
+      releasePlayedRef.current = false;
+      pendingReleaseEndRef.current = false;
+      globalLastSpoken = null;
+    }
+    prevPlayReleaseRef.current = playReleaseInstructions;
+
+    if (!shouldPlay) {
       return;
     }
 
-    if (!releasePlayedRef.current && instructionSet.release.length > 0) {
+    if (!releasePlayedRef.current && instructionSet!.release.length > 0) {
       releasePlayedRef.current = true;
       safeStopTTS();
-      queueReleaseLines(instructionSet.release);
+      queueReleaseLines(instructionSet!.release);
     }
-  }, [instructionSet, playReleaseInstructions, onReleaseInstructionsEnd]);
-
-  useEffect(() => {
-    prevPhaseRef.current = currentPhase || null;
-  }, [currentPhase]);
-
+  }, [instructionSet, playReleaseInstructions]);
   // Start/Stop analysis based on shouldAnalyze prop
   useEffect(() => {
     if (shouldAnalyze && isCameraReady) {
@@ -600,14 +616,14 @@ export default function YogaCamera({
 
   // Stop analysis
   const stopAnalysis = async () => {
-    // Prevent multiple calls
-    if (!isAnalyzing) return;
-    
-    // Stop frame capture
+    // Always clear frame capture, even if not analyzing
     if (frameIntervalRef.current) {
       clearInterval(frameIntervalRef.current);
       frameIntervalRef.current = null;
     }
+    
+    // Prevent multiple WebSocket calls
+    if (!isAnalyzing) return;
 
     // Calculate final session duration before stopping
     const finalDuration = sessionStartTime ? Math.floor((Date.now() - sessionStartTime) / 1000) : 0;

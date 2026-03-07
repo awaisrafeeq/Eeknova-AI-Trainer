@@ -215,6 +215,19 @@ export default function YogaPage() {
 
   const [playReleaseInstructions, setPlayReleaseInstructions] = useState(false);
 
+  const transitionToRelease = useCallback(() => {
+    setIsStageTransitioning(true);
+    setTimeout(() => {
+      setIsSessionStarted(false);
+      setShouldAnalyze(false);
+      setShouldPlayAnimation(false);
+      setPlayGuidedInstructions(false);
+      setPlayReleaseInstructions(true);
+      setFlowStage('release');
+      setTimeout(() => setIsStageTransitioning(false), 350);
+    }, 220);
+  }, []);
+
   // Timer state for pose duration
   const [totalTime, setTotalTime] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -254,12 +267,7 @@ export default function YogaPage() {
         if (prev <= 1) {
           // TODO: Re-enable cool-down later - skip directly to session end
           // startCooldown();
-          setIsSessionStarted(false);
-          setShouldAnalyze(false);
-          setShouldPlayAnimation(false);
-          setPlayGuidedInstructions(false);
-          setPlayReleaseInstructions(true);
-          setFlowStage('release');
+          transitionToRelease();
           return 0;
         }
         return prev - 1;
@@ -267,7 +275,7 @@ export default function YogaPage() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isSessionStarted, isPaused, timeLeft]);
+  }, [isSessionStarted, isPaused, timeLeft, transitionToRelease]);
 
   // Warm-up / Cool-down timer effect
   useEffect(() => {
@@ -846,7 +854,11 @@ export default function YogaPage() {
 
 
 
-      <div className="mx-auto max-w-[1400px] px-6 md:px-8 py-6 md:py-8 relative">
+      <div className={`mx-auto py-6 md:py-8 relative ${
+        isPortraitDisplay
+          ? 'w-full max-w-none px-3 md:px-4'
+          : 'max-w-[1400px] px-6 md:px-8'
+      }`}>
 
         {/* Back Button */}
 
@@ -864,7 +876,11 @@ export default function YogaPage() {
 
 
 
-        <section className="relative grid grid-cols-12 gap-4 md:gap-6 mt-20 md:mt-24">
+        <section className={`relative grid grid-cols-12 mt-20 md:mt-24 ${
+          isSessionStarted && flowStage === 'pose'
+            ? 'gap-2 md:gap-3'
+            : 'gap-4 md:gap-6'
+        }`}>
 
           {/* Avatar Section - Dynamic Positioning */}
 
@@ -886,11 +902,15 @@ export default function YogaPage() {
 
                   ? (isPortraitDisplay
 
-                      ? 'h-[82vh] mx-auto mt-2 scale-105'
+                      ? (isSessionStarted && flowStage === 'pose'
+                          ? 'h-[80vh] mx-auto mt-0 scale-110'
+                          : 'h-[82vh] mx-auto mt-2 scale-110')
 
-                      : 'h-[55vh] lg:mx-auto lg:max-w-xl mt-2 scale-105')
+                      : (isSessionStarted && flowStage === 'pose'
+                          ? 'h-[50vh] lg:mx-auto lg:max-w-xl mt-0 scale-105'
+                          : 'h-[55vh] lg:mx-auto lg:max-w-xl mt-2 scale-105'))
 
-                  : (isPortraitDisplay ? 'h-[74vh] mt-8' : 'h-[50vh] mt-8')
+                  : (isPortraitDisplay ? 'h-[74vh] mt-4' : 'h-[50vh] mt-8')
 
               } ${isStageTransitioning ? 'opacity-0 scale-[0.99]' : 'opacity-100'}`}
 
@@ -915,8 +935,19 @@ export default function YogaPage() {
                   isTTSSpeaking={isTTSSpeaking} 
                   isPaused={isPaused} 
                   playAnimationKey={poseRestartKey}
-                  cameraZoom={flowStage === 'setup' && !isSessionStarted ? 1.30 : 1}
-                  onSessionEnd={finalizeSessionEnd}
+                  cameraTargetYOffset={
+                    isPortraitDisplay && flowStage === 'setup' && !isSessionStarted ? -0.35 : 0
+                  }
+                  cameraZoom={
+                    flowStage === 'setup' && !isSessionStarted
+                      ? (isPortraitDisplay ? 1.40 : 1.30)
+                      : (isSessionStarted && flowStage === 'pose' ? (isPortraitDisplay ? 1.55 : 1.45) : 1)
+                  }
+                  onSessionEnd={() => {
+                    if (flowStage === 'pose') {
+                      transitionToRelease();
+                    }
+                  }}
                 />
               )}
 
@@ -1152,14 +1183,18 @@ export default function YogaPage() {
                   }, 220);
                 }}
                 onReleaseInstructionsEnd={() => {
-                  setPlayReleaseInstructions(false);
+                  setIsStageTransitioning(true);
+                  setTimeout(() => {
+                    setPlayReleaseInstructions(false);
 
-                  if (!sessionSummary && pendingSessionSummaryRef.current) {
-                    applySessionSummary(pendingSessionSummaryRef.current);
-                    pendingSessionSummaryRef.current = null;
-                  }
+                    if (!sessionSummary && pendingSessionSummaryRef.current) {
+                      applySessionSummary(pendingSessionSummaryRef.current);
+                      pendingSessionSummaryRef.current = null;
+                    }
 
-                  finalizeSessionEnd();
+                    finalizeSessionEnd();
+                    setTimeout(() => setIsStageTransitioning(false), 350);
+                  }, 220);
                 }}
                 onSessionEnd={handleSessionEnd}
                 onAccuracyUpdate={setCurrentAccuracy}
