@@ -19,16 +19,16 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
-        console.log('🔍 DEBUG: useEffect triggered with:', {
-            is_correct: exercise?.is_correct,
-            exercise_completed: exercise?.exercise_completed,
-            module_completed: exercise?.module_completed,
-            selectedAnswer: selectedAnswer,
-            showFeedback: showFeedback
-        });
+        // console.log('🔍 DEBUG: useEffect triggered with:', {
+        //     is_correct: exercise?.is_correct,
+        //     exercise_completed: exercise?.exercise_completed,
+        //     module_completed: exercise?.module_completed,
+        //     selectedAnswer: selectedAnswer,
+        //     showFeedback: showFeedback
+        // });
         
         if (!showFeedback || !selectedAnswer) {
-            console.log('🔍 DEBUG: Skipping useEffect - no feedback or selected answer');
+            // console.log('🔍 DEBUG: Skipping useEffect - no feedback or selected answer');
             return;
         }
 
@@ -55,13 +55,13 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
 
     // Reset states when exercise changes
     useEffect(() => {
-        console.log('🔍 DEBUG: Exercise changed, resetting states');
-        console.log('🔍 DEBUG: New exercise ID:', exercise?.exercise_id);
-        console.log('🔍 DEBUG: Previous selectedAnswer:', selectedAnswer);
-        console.log('🔍 DEBUG: Previous showFeedback:', showFeedback);
-        console.log('🔍 DEBUG: Previous isSubmitting:', isSubmitting);
-        console.log('🔍 DEBUG: New progress_current:', exercise?.progress_current);
-        console.log('🔍 DEBUG: New progress_total:', exercise?.progress_total);
+        // console.log('🔍 DEBUG: Exercise changed, resetting states');
+        // console.log('🔍 DEBUG: New exercise ID:', exercise?.exercise_id);
+        // console.log('🔍 DEBUG: Previous selectedAnswer:', selectedAnswer);
+        // console.log('🔍 DEBUG: Previous showFeedback:', showFeedback);
+        // console.log('🔍 DEBUG: Previous isSubmitting:', isSubmitting);
+        // console.log('🔍 DEBUG: New progress_current:', exercise?.progress_current);
+        // console.log('🔍 DEBUG: New progress_total:', exercise?.progress_total);
         
         setSelectedAnswer(null);
         setShowFeedback(false);
@@ -82,7 +82,7 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
 
     // Handle piece selection for board setup
     const handlePieceSelection = (pieceType: string) => {
-        console.log('Piece selected:', pieceType);
+        // console.log('Piece selected:', pieceType);
         onAction('select_piece', { piece_type: pieceType });
     };
 
@@ -95,48 +95,48 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
     };
 
     const handleAnswerSelect = (answer: string) => {
-        console.log('🔍 DEBUG: handleAnswerSelect called');
-        console.log('🔍 DEBUG: Answer:', answer);
-        console.log('🔍 DEBUG: showFeedback:', showFeedback);
-        console.log('🔍 DEBUG: selectedAnswer:', selectedAnswer);
-        console.log('🔍 DEBUG: exercise.module_completed:', exercise.module_completed);
-        console.log('🔍 DEBUG: exercise.exercise_completed:', exercise.exercise_completed);
-        console.log('🔍 DEBUG: progress_current:', exercise.progress_current);
-        console.log('🔍 DEBUG: progress_total:', exercise.progress_total);
-        console.log('🔍 DEBUG: isSubmitting:', isSubmitting);
+        // console.log('🔍 DEBUG: handleAnswerSelect called');
+        // console.log('🔍 DEBUG: Answer:', answer);
+        // console.log('🔍 DEBUG: showFeedback:', showFeedback);
+        // console.log('🔍 DEBUG: selectedAnswer:', selectedAnswer);
+        // console.log('🔍 DEBUG: exercise.module_completed:', exercise.module_completed);
+        // console.log('🔍 DEBUG: exercise.exercise_completed:', exercise.exercise_completed);
+        // console.log('🔍 DEBUG: progress_current:', exercise.progress_current);
+        // console.log('🔍 DEBUG: progress_total:', exercise.progress_total);
+        // console.log('🔍 DEBUG: isSubmitting:', isSubmitting);
 
         if (isIdentifyPiecesExercise && exercise.exercise_completed) {
-            console.log('🔍 DEBUG: Identify pieces exercise already completed, ignoring answer selection');
+            // console.log('🔍 DEBUG: Identify pieces exercise already completed, ignoring answer selection');
             return;
         }
         
         // PREVENT ANY ACTIONS IF MODULE IS COMPLETED
         if (exercise.module_completed) {
-            console.log('🔍 DEBUG: Module already completed, ignoring all interactions');
+            // console.log('🔍 DEBUG: Module already completed, ignoring all interactions');
             return;
         }
         
         // PREVENT ANY ACTIONS IF EXERCISE IS COMPLETED AT 100%
         if (exercise.exercise_completed && exercise.progress_current === exercise.progress_total) {
-            console.log('🔍 DEBUG: Exercise completed at 100%, ignoring all interactions');
+            // console.log('🔍 DEBUG: Exercise completed at 100%, ignoring all interactions');
             return;
         }
         
         // PREVENT MULTIPLE SUBMISSIONS
         if (isSubmitting) {
-            console.log('🔍 DEBUG: Already submitting, ignoring duplicate click');
+            // console.log('🔍 DEBUG: Already submitting, ignoring duplicate click');
             return;
         }
         
         // Prevent multiple submissions for the same answer
         if (selectedAnswer === answer) {
-            console.log('🔍 DEBUG: Same answer already selected, ignoring');
+            // console.log('🔍 DEBUG: Same answer already selected, ignoring');
             return;
         }
         
         // Set feedback immediately to prevent double-clicks
         if (showFeedback) {
-            console.log('🔍 DEBUG: Already showing feedback, ignoring click');
+            // console.log('🔍 DEBUG: Already showing feedback, ignoring click');
             return;
         }
         
@@ -145,19 +145,19 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
         setShowFeedback(true);
         setSelectedAnswer(answer);
         
-        console.log('🔍 DEBUG: Setting selectedAnswer to:', answer);
-        console.log('🔍 DEBUG: Setting showFeedback to true');
-        console.log('🔍 DEBUG: Setting isSubmitting to true');
+        // console.log('🔍 DEBUG: Setting selectedAnswer to:', answer);
+        // console.log('🔍 DEBUG: Setting showFeedback to true');
+        // console.log('🔍 DEBUG: Setting isSubmitting to true');
         
         // Submit answer only once
-        console.log('🔍 DEBUG: Submitting answer to backend');
+        // console.log('🔍 DEBUG: Submitting answer to backend');
         onAction('submit_answer', { answer });
     };
 
     const handleSquareInteraction = (square: string) => {
-        console.log('🔍 DEBUG: Square clicked:', square);
-        console.log('🔍 DEBUG: Target squares:', exercise.target_squares);
-        console.log('🔍 DEBUG: Is target:', exercise.target_squares.includes(square));
+        // console.log('🔍 DEBUG: Square clicked:', square);
+        // console.log('🔍 DEBUG: Target squares:', exercise.target_squares);
+        // console.log('🔍 DEBUG: Is target:', exercise.target_squares.includes(square));
         
         if (isIdentifyPiecesExercise) {
             // For identify pieces, don't handle square clicks - only answer buttons
@@ -166,7 +166,7 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
         
         if (isBoardSetupExercise) {
             // For board setup, handle piece placement
-            console.log('🔍 DEBUG: Board setup - calling place_piece action');
+            // console.log('🔍 DEBUG: Board setup - calling place_piece action');
             onAction('place_piece', { square });
             return;
         }
@@ -178,7 +178,7 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
     // Board setup specific functions
     const getBoardSetupPieces = () => {
         if (!isBoardSetupExercise || !exercise?.pieces_inventory) {
-            console.log('🔍 DEBUG: No pieces_inventory or not board setup exercise');
+            // console.log('🔍 DEBUG: No pieces_inventory or not board setup exercise');
             return [];
         }
         
@@ -198,7 +198,7 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
             };
         });
         
-        console.log('🔍 DEBUG: All pieces:', pieces);
+        // console.log('🔍 DEBUG: All pieces:', pieces);
         return pieces;
     };
 
@@ -280,15 +280,15 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
         let isLegalMove = false;
         if (exercise?.module_id === 'gameplay' && exercise?.selected_square) {
             // Only show legal moves if a piece is selected
-            console.log('Selected square:', exercise.selected_square);
-            console.log('Legal moves:', exercise.board_position?.legal_moves);
-            console.log('Checking square:', square.name);
+            // console.log('Selected square:', exercise.selected_square);
+            // console.log('Legal moves:', exercise.board_position?.legal_moves);
+            // console.log('Checking square:', square.name);
             
             isLegalMove = exercise?.board_position?.legal_moves?.some((move: any) => {
                 const moveStr = typeof move === 'string' ? move : move.toString();
                 const isMatch = moveStr.startsWith(exercise.selected_square) && moveStr.endsWith(square.name);
                 if (isMatch) {
-                    console.log('Found legal move:', moveStr);
+                    // console.log('Found legal move:', moveStr);
                 }
                 return isMatch;
             }) || false;
@@ -426,7 +426,7 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
                             const isCorrect = exercise.is_correct === true && isSelected;
                             const isWrong = exercise.is_correct === false && isSelected;
                             
-                            console.log(`🔍 DEBUG: Option ${option}: isSelected=${isSelected}, isCorrect=${isCorrect}, isWrong=${isWrong}, exercise.is_correct=${exercise.is_correct}`);
+                            // console.log(`🔍 DEBUG: Option ${option}: isSelected=${isSelected}, isCorrect=${isCorrect}, isWrong=${isWrong}, exercise.is_correct=${exercise.is_correct}`);
                             
                             return (
                                 <motion.button
@@ -632,12 +632,12 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
             {exercise.module_id !== 'gameplay' && (
                 <div className="w-full max-w-md">
                     {(() => {
-                        console.log('🔍 DEBUG: Progress bar rendering for', exercise.module_id, {
-                            progress_current: exercise.progress_current,
-                            progress_total: exercise.progress_total,
-                            percentage: Math.round((exercise.progress_current / exercise.progress_total) * 100),
-                            boardSetupProgress: boardSetupProgress
-                        });
+                        // console.log('🔍 DEBUG: Progress bar rendering for', exercise.module_id, {
+                        //     progress_current: exercise.progress_current,
+                        //     progress_total: exercise.progress_total,
+                        //     percentage: Math.round((exercise.progress_current / exercise.progress_total) * 100),
+                        //     boardSetupProgress: boardSetupProgress
+                        // });
                         return null;
                     })()}
                     <div className="flex justify-between text-sm text-gray-600 mb-2">

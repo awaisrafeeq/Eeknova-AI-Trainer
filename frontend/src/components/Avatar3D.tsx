@@ -1325,8 +1325,8 @@ function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = fals
               blendshapeMeshRef.current = child;
               blendshapeNamesRef.current = child.morphTargetDictionary ? Object.keys(child.morphTargetDictionary) : [];
               originalBlendshapesRef.current = [...(child.morphTargetInfluences || [])];
-              console.log('🎭 Found blendshape mesh for chess avatar:', child.name, 'with', blendshapeNamesRef.current.length, 'blendshapes', hasMainFaceBlendshapes ? '(MAIN FACE)' : '(secondary)');
-              console.log('🎭 Available blendshapes:', blendshapeNamesRef.current);
+              // console.log('🎭 Found blendshape mesh for chess avatar:', child.name, 'with', blendshapeNamesRef.current.length, 'blendshapes', hasMainFaceBlendshapes ? '(MAIN FACE)' : '(secondary)');
+              // console.log('🎭 Available blendshapes:', blendshapeNamesRef.current);
               if (hasMainFaceBlendshapes) mainBodyMeshFound = true;
             }
           }
@@ -1460,7 +1460,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = fals
 
         // Debug: Log available blendshapes once
         if (Math.floor(time * 2) % 8 === 0 && Math.floor((time - 0.01) * 2) % 8 !== 0) {
-          console.log('🎭 Available blendshapes:', blendshapeNamesRef.current.slice(0, 30));
+          // console.log('🎭 Available blendshapes:', blendshapeNamesRef.current.slice(0, 30));
         }
 
         // Directly drive key ARKit mouth targets for visible motion
@@ -1471,15 +1471,15 @@ function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = fals
 
           // Debug: Log what we're trying to set
           if (Math.floor(time * 3) % 6 === 0) {
-            console.log('👄 Lip-sync values:', {
-              jawOpen: (dict as any).jawOpen,
-              jawAmount: jawAmount.toFixed(3),
-              mouthClose: (dict as any).mouthClose,
-              upperUpL: (dict as any).mouthUpperUpLeft,
-              lowerDownL: (dict as any).mouthLowerDownLeft,
-              funnel: (dict as any).mouthFunnel,
-              teeth: (dict as any).teeth
-            });
+            // console.log('👄 Lip-sync values:', {
+            //   jawOpen: (dict as any).jawOpen,
+            //   jawAmount: jawAmount.toFixed(3),
+            //   mouthClose: (dict as any).mouthClose,
+            //   upperUpL: (dict as any).mouthUpperUpLeft,
+            //   lowerDownL: (dict as any).mouthLowerDownLeft,
+            //   funnel: (dict as any).mouthFunnel,
+            //   teeth: (dict as any).teeth
+            // });
           }
 
           // Jaw open - STRONGER for visible jaw movement

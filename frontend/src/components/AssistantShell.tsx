@@ -211,7 +211,7 @@ export default function AssistantShell() {
           const now = Date.now();
           if (now - micMeterLastLogAtRef.current > 2500) {
             micMeterLastLogAtRef.current = now;
-            console.log('[MicMeter]', { ctxState: ctx.state, rms, peak, level: lvl });
+            // console.log('[MicMeter]', { ctxState: ctx.state, rms, peak, level: lvl });
           }
         } catch {}
         micMeterRafRef.current = requestAnimationFrame(tick);
@@ -275,7 +275,7 @@ export default function AssistantShell() {
     
     // Prevent multiple rapid starts
     if (speechRecIsRunningRef.current) {
-      console.log('[WakeWord] Already running, ignoring start call');
+      // console.log('[WakeWord] Already running, ignoring start call');
       return;
     }
     
@@ -291,14 +291,14 @@ export default function AssistantShell() {
 
     speechRecShouldRunRef.current = true;
     if (!speechRecRef.current) {
-      console.log('[WakeWord] Creating NEW SpeechRecognition instance');
+      // console.log('[WakeWord] Creating NEW SpeechRecognition instance');
       const rec = new SR();
       rec.continuous = true;
       rec.interimResults = true;
       rec.lang = 'en-US';
 
       rec.onstart = () => {
-        console.log('[WakeWord] SpeechRecognition STARTED');
+        // console.log('[WakeWord] SpeechRecognition STARTED');
         speechRecIsRunningRef.current = true;
         setWakeStatus('listening');
         setWakeLastError('');
@@ -308,7 +308,7 @@ export default function AssistantShell() {
         try {
           // If wake word detection is disabled, just log and return
           if (!wakeWordEnabled) {
-            console.log('[WakeWord] Detection disabled, ignoring result');
+            // console.log('[WakeWord] Detection disabled, ignoring result');
             return;
           }
 
@@ -341,7 +341,7 @@ export default function AssistantShell() {
             const now = Date.now();
             if (now - lastExitTriggerAtRef.current < 2500) return;
             lastExitTriggerAtRef.current = now;
-            console.log('[WakeWord] Exit command detected, closing assistant');
+            // console.log('[WakeWord] Exit command detected, closing assistant');
             closeAssistantRef.current?.();
             return;
           }
@@ -356,7 +356,7 @@ export default function AssistantShell() {
           if (now - lastWakeTriggerAtRef.current < 8000) return;
           lastWakeTriggerAtRef.current = now;
           if (!openRef.current) {
-            console.log('[WakeWord] Wake command detected, opening assistant');
+            // console.log('[WakeWord] Wake command detected, opening assistant');
             openAssistant();
           }
           if (USE_REALTIME) {
@@ -369,7 +369,7 @@ export default function AssistantShell() {
 
       rec.onerror = (e: any) => {
         const err = String(e?.error || 'unknown');
-        console.log('[WakeWord] SpeechRecognition ERROR:', { error: err, event: e });
+        // console.log('[WakeWord] SpeechRecognition ERROR:', { error: err, event: e });
         if (err === 'no-speech') {
           // Common benign event; keep listening/restarting silently
           setWakeStatus('listening');
@@ -379,7 +379,7 @@ export default function AssistantShell() {
           setWakeLastError(err);
         }
         if (err !== 'no-speech') {
-          console.log('[WakeWord] error:', e);
+          // console.log('[WakeWord] error:', e);
         }
         // Some errors need user gesture / permission. We won't spin in a tight loop.
         speechRecShouldRunRef.current = wakeWordEnabled;
@@ -389,28 +389,28 @@ export default function AssistantShell() {
       };
 
       rec.onend = () => {
-        console.log('[WakeWord] SpeechRecognition ENDED - shouldRun:', speechRecShouldRunRef.current);
+        // console.log('[WakeWord] SpeechRecognition ENDED - shouldRun:', speechRecShouldRunRef.current);
         speechRecIsRunningRef.current = false;
         if (!speechRecShouldRunRef.current) return;
         // Restart after a short delay to avoid rapid loops
         window.setTimeout(() => {
           if (!speechRecShouldRunRef.current || speechRecIsRunningRef.current) return;
-          console.log('[WakeWord] Auto-restarting SpeechRecognition');
+          // console.log('[WakeWord] Auto-restarting SpeechRecognition');
           try {
             rec.start();
           } catch (e) {
-            console.error('[WakeWord] Failed to restart:', e);
+            // console.error('[WakeWord] Failed to restart:', e);
           }
         }, 350);
       };
 
       speechRecRef.current = rec;
     } else {
-      console.log('[WakeWord] Reusing existing SpeechRecognition instance');
+      // console.log('[WakeWord] Reusing existing SpeechRecognition instance');
     }
 
     try {
-      console.log('[WakeWord] Starting SpeechRecognition');
+      // console.log('[WakeWord] Starting SpeechRecognition');
       speechRecRef.current.start();
     } catch {}
   }, [USE_REALTIME, open, openAssistant, wakeWordEnabled]);

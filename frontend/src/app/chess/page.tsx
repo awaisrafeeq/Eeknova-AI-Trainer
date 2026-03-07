@@ -74,6 +74,36 @@ export default function ChessPage() {
   const [chessAnimKey, setChessAnimKey] = useState(0);
   const lastCorrectRef = useRef(false);
   const hasPlayedInitialRef = useRef(false); // Prevent initial animation on load
+  const openingSpokenRef = useRef(false);
+  const lastSpokenMessageRef = useRef<string>('');
+
+  const sanitizeTtsText = (text: string): string => {
+    let t = String(text || '').trim();
+    if (!t) return '';
+
+    const pieceNameFromSymbol = (symRaw: string): string => {
+      const sym = String(symRaw || '').trim();
+      const isWhite = sym === sym.toUpperCase();
+      const s = sym.toUpperCase();
+      const name =
+        s === 'P' ? 'pawn' :
+        s === 'R' ? 'rook' :
+        s === 'N' ? 'knight' :
+        s === 'B' ? 'bishop' :
+        s === 'Q' ? 'queen' :
+        s === 'K' ? 'king' : 'piece';
+      return `${isWhite ? 'white' : 'black'} ${name}`;
+    };
+
+    t = t.replace(
+      /Selected\s+<bound method\s+Piece\.symbol\s+of\s+Piece\.from_symbol\('([^']+)'\)>/gi,
+      (_m, sym) => `Selected ${pieceNameFromSymbol(sym)}.`
+    );
+    t = t.replace(/<bound method[^>]*>/gi, '');
+    t = t.replace(/\.{2,}/g, '.');
+    t = t.replace(/\s{2,}/g, ' ').trim();
+    return t;
+  };
 
   // TTS for chess feedback
   const ttsRef = useRef<TTSFeedback | null>(null);
@@ -115,6 +145,49 @@ export default function ChessPage() {
   }, []);
 
   useEffect(() => {
+    if (view !== 'lesson' || !sessionId) {
+      openingSpokenRef.current = false;
+      return;
+    }
+
+    if (!openingSpokenRef.current && ttsRef.current) {
+      ttsRef.current.speak('Would you like to practice today?', true);
+      openingSpokenRef.current = true;
+    }
+  }, [view, sessionId]);
+
+  useEffect(() => {
+    if (view !== 'lesson' || !exercise || !ttsRef.current) return;
+    const msg = String(exercise.feedback_message || '').trim();
+    if (!msg) return;
+
+    const type = String((exercise as any).exercise_type || '').toLowerCase();
+    if (exercise.is_correct === true && exercise.exercise_completed === true && (type === 'identify_pieces' || type === 'board_setup')) {
+      return;
+    }
+
+    const normalized = msg.toLowerCase();
+    const isHint = normalized.startsWith('hint:');
+    let speakText = isHint ? msg.replace(/^hint:\s*/i, '').trim() : msg;
+    speakText = sanitizeTtsText(speakText);
+
+    if (isHint) {
+      const pieceType = String((exercise as any).current_piece_type || '').toLowerCase();
+      const isPawn = pieceType.includes('pawn');
+      if (isPawn) {
+        speakText = `Hint: Focus on the pawn's shape and its forward movement rules. ${speakText}`;
+      } else {
+        speakText = `Hint: ${speakText}`;
+      }
+    }
+
+    if (!speakText) return;
+    if (lastSpokenMessageRef.current === speakText) return;
+    lastSpokenMessageRef.current = speakText;
+    ttsRef.current.speak(speakText, true);
+  }, [view, exercise?.feedback_message, exercise?.current_piece_type]);
+
+  useEffect(() => {
     const loadModules = async () => {
       try {
         const mods = await getChessModules();
@@ -150,7 +223,16 @@ export default function ChessPage() {
       
       // Trigger TTS IMMEDIATELY when correct move detected
       if (ttsRef.current) {
-        ttsRef.current.speak('Good move!', true); // Priority speak
+        const type = String(exercise.exercise_type || '').toLowerCase();
+        const backendMsg = sanitizeTtsText(String((exercise as any).feedback_message || '').trim());
+
+        // If backend already provides a correct feedback line (e.g. "Correct move!"), don't speak our own.
+        if (!(type === 'identify_pieces' || type === 'board_setup') && backendMsg) {
+          // Do nothing; feedback-message effect will speak it.
+        } else {
+          const phrase = (type === 'identify_pieces' || type === 'board_setup') ? 'Perfect!' : 'Good move!';
+          ttsRef.current.speak(phrase, true); // Priority speak
+        }
       }
       
       setChessAnimKey((prev: number) => prev + 1);
@@ -492,6 +574,7 @@ export default function ChessPage() {
     setLoading(true);
     setError(null);
     setExercise(null);
+    lastSpokenMessageRef.current = '';
     
     console.log('🔍 DEBUG: Starting lesson for module:', moduleId);
     
@@ -511,6 +594,9 @@ export default function ChessPage() {
       setView('lesson');
     } catch (e: any) {
       setError(e.message || 'Failed to start lesson');
+      if (ttsRef.current) {
+        ttsRef.current.speak(e.message || 'Failed to start lesson', true);
+      }
     } finally {
       setLoading(false);
     }
@@ -545,7 +631,10 @@ export default function ChessPage() {
       
       // Trigger TTS for bad move if incorrect
       if (state.is_correct === false && ttsRef.current) {
-        ttsRef.current.speak('Bad move!', true); // Priority speak
+        const msg = String(state.feedback_message || '').trim();
+        if (!msg) {
+          ttsRef.current.speak('Wrong position.', true); // Priority speak
+        }
       }
       
       // Auto-progress if exercise is completed BUT module is not completed
@@ -558,6 +647,9 @@ export default function ChessPage() {
       }
     } catch (e: any) {
       setError(e.message || 'Failed to apply move');
+      if (ttsRef.current) {
+        ttsRef.current.speak(e.message || 'Failed to apply move', true);
+      }
     }
   };
 
@@ -598,6 +690,9 @@ export default function ChessPage() {
       }
     } catch (e: any) {
       setError(e.message || 'Failed to apply action');
+      if (ttsRef.current) {
+        ttsRef.current.speak(e.message || 'Failed to apply action', true);
+      }
     }
   };
 
@@ -622,7 +717,7 @@ export default function ChessPage() {
           {/* Avatar Section - Top */}
           <div className="relative">
             <div
-              className="avatar-wrap relative h-[40vh] rounded-[var(--radius-lg)] border border-[var(--glass-stroke)]"
+              className="avatar-wrap relative h-[30vh] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--glass-stroke)]"
               style={{
                 background: 'linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02))',
                 backdropFilter: 'blur(12px)',
@@ -635,6 +730,8 @@ export default function ChessPage() {
                 playAnimationPath="/Encouraging Gesture_compressed.glb"
                 playAnimationKey={chessAnimKey}
                 isTTSSpeaking={isTTSSpeaking}
+                cameraZoom={3.15}
+                cameraTargetYOffset={1.85}
               />
               <div
                 className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-[42px] h-[18px] w-[60%]"
