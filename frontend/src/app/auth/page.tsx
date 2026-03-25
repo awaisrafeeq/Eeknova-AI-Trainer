@@ -16,7 +16,7 @@ export default function AuthPage() {
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
 
-  const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8000';
+  const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8002';
 
   React.useEffect(() => {
     setMounted(true);

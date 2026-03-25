@@ -52,7 +52,7 @@ function Particles() {
 export default function ChessPage() {
   const router = useRouter();
 
-  const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8000';
+  const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8002';
 
   const [modules, setModules] = useState<ChessModule[]>([]);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);

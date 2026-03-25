@@ -1,8 +1,8 @@
 ﻿// Yoga Pose Detection API Client
 // Connects to the FastAPI backend for real-time pose analysis
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8000';
-const WS_BASE_URL = process.env.NEXT_PUBLIC_YOGA_WS_URL || 'ws://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8002';
+const WS_BASE_URL = process.env.NEXT_PUBLIC_YOGA_WS_URL || 'ws://localhost:8002';
 
 export interface SessionStartRequest {
   pose_name?: string;

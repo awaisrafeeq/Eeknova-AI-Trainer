@@ -316,6 +316,7 @@ const POSE_ANIMATIONS: Record<string, PoseAnimation> = {
 interface Avatar3DProps {
   selectedPose?: string;
   onlyInAnimation?: boolean;
+  onlyOutAnimation?: boolean;
   isTTSSpeaking?: boolean;
   isPaused?: boolean;
   staticMode?: boolean;
@@ -329,11 +330,12 @@ interface Avatar3DProps {
   onTTSSpeaking?: (speaking: boolean) => void;
   onError?: (error: string) => void;
   onSessionEnd?: () => void;
+  onPhaseChange?: (phase: 'in' | 'main' | 'out') => void; // New prop to notify parent of phase changes
   assistantModeActive?: boolean;
   onModelLoaded?: (model: THREE.Object3D | null) => void;
 }
 
-function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onError, onTTSSpeaking, onSessionEnd, onModelLoaded }: Avatar3DProps) {
+function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onError, onTTSSpeaking, onSessionEnd, onPhaseChange, onModelLoaded }: Avatar3DProps) {
 
   const [model, setModel] = useState<THREE.Group | null>(null);
 
@@ -703,6 +705,16 @@ function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = fals
 
       return;
 
+    } else if (onlyOutAnimation) {
+
+      console.log(`Animation should play for ${selectedPose} (onlyOutAnimation=true)`);
+
+      // Play OUT animation when onlyOutAnimation is true
+
+      playAnimationSequence(pose, 'out');
+
+      return;
+
     } else if (onlyInAnimation) {
 
       console.log(`Animation should play for ${selectedPose} (onlyInAnimation=true)`);
@@ -1023,6 +1035,8 @@ function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = fals
                 // Use spec duration for 'In' 
 
                 animationTimeoutRef.current = setTimeout(() => {
+                  // Notify parent that we're transitioning to MAIN phase
+                  onPhaseChange?.('main');
 
                   playAnimationSequence(pose, 'main');
 
@@ -1033,6 +1047,8 @@ function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = fals
                 // Use spec duration for 'Hold'
 
                 animationTimeoutRef.current = setTimeout(() => {
+                  // Notify parent that we're transitioning to OUT phase
+                  onPhaseChange?.('out');
 
                   playAnimationSequence(pose, 'out');
 
@@ -1120,6 +1136,9 @@ function YogaModel({ selectedPose, onlyInAnimation = false, isTTSSpeaking = fals
         findJawBone(loadedModel);
 
         setCurrentAnimation(type);
+
+        // Notify parent of phase change
+        onPhaseChange?.(type);
 
         console.log(`Successfully loaded ${type} animation for ${selectedPose}`);
 
@@ -1870,7 +1889,7 @@ interface Avatar3DProps {
 
 
 
-export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, cameraZoom = 1, cameraTargetYOffset = 0, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onTTSSpeaking, onError, onSessionEnd }: Avatar3DProps) {
+export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, cameraZoom = 1, cameraTargetYOffset = 0, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onTTSSpeaking, onError, onSessionEnd, onPhaseChange }: Avatar3DProps) {
 
   const [webglSupported, setWebglSupported] = useState(true);
 
@@ -1945,6 +1964,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
               <YogaModel
                 selectedPose={selectedPose}
                 onlyInAnimation={onlyInAnimation}
+                onlyOutAnimation={onlyOutAnimation}
                 isTTSSpeaking={isTTSSpeaking}
                 isPaused={isPaused}
                 staticMode={staticMode}
@@ -1956,6 +1976,8 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
                 onError={setError}
                 onTTSSpeaking={onTTSSpeaking}
                 onModelLoaded={setFitObject}
+                onSessionEnd={onSessionEnd}
+                onPhaseChange={onPhaseChange}
               />
             </Suspense>
           </Canvas>

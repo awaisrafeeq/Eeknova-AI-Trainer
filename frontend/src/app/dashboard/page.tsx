@@ -26,7 +26,7 @@ export default function Page() {
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [loadingStats, setLoadingStats] = useState(false);
 
-    const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8000';
+    const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8002';
 
     const loadStats = useCallback(async () => {
         try {
@@ -96,7 +96,7 @@ export default function Page() {
                                 backdropFilter: 'blur(12px)',
                             }}
                         >
-                            <Avatar3D selectedPose="" onlyInAnimation={false} staticModelPath="/smile & greet_compressed.glb" />
+                            <Avatar3D selectedPose="" onlyInAnimation={false} staticModelPath="/smile_greet_compressed.glb" />
                             <div
                                 className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-[42px] h-[18px] w-[60%]"
                                 style={{

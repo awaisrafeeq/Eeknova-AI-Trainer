@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Forward request to backend
-    const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8000';
+    const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8002';
     const backendUrl = `${apiBaseUrl}/api/auth/me`;
     
     const response = await fetch(backendUrl, {

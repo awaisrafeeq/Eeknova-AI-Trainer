@@ -1,6 +1,6 @@
 // chessApi.ts - Chess Learning API client
 
-const CHESS_API_BASE_URL = process.env.NEXT_PUBLIC_YOGA_API_URL || process.env.NEXT_PUBLIC_CHESS_API_URL || 'http://localhost:8000';
+const CHESS_API_BASE_URL = process.env.NEXT_PUBLIC_YOGA_API_URL || process.env.NEXT_PUBLIC_CHESS_API_URL || 'http://localhost:8002';
 
 export interface ChessModule {
   id: string;

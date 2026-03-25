@@ -83,13 +83,67 @@ const MET_VALUES: Record<string, number> = {
 
 };
 
+// POSE_ANIMATIONS mapping for pose preview
+const POSE_ANIMATIONS: Record<string, { inPath: string; mainPath: string; outPath: string }> = {
+  "Downward Dog": {
+    inPath: "/Downward Dog Pose/in_compressed.glb",
+    mainPath: "/Downward Dog Pose/main_compressed.glb",
+    outPath: "/Downward Dog Pose/out_compressed.glb",
+  },
+  "Triangle Pose": {
+    inPath: "/Triangle/in_compressed.glb",
+    mainPath: "/Triangle/main_compressed.glb",
+    outPath: "/Triangle/out_compressed.glb",
+  },
+  "Warrior Pose": {
+    inPath: "/Warrior Pose/in_compressed.glb",
+    mainPath: "/Warrior Pose/main_compressed.glb",
+    outPath: "/Warrior Pose/out_compressed.glb",
+  },
+  "Mountain Pose": {
+    inPath: "/Mountain Pose/in_compressed.glb",
+    mainPath: "/Mountain Pose/main_compressed.glb",
+    outPath: "/Mountain Pose/out_compressed.glb",
+  },
+  "Tree Pose": {
+    inPath: "/Tree Pose/in_compressed.glb",
+    mainPath: "/Tree Pose/main_compressed.glb",
+    outPath: "/Tree Pose/out_compressed.glb",
+  },
+  "Cat And Camel Pose": {
+    inPath: "/Cat And Camel Pose/in_compressed.glb",
+    mainPath: "/Cat And Camel Pose/main_compressed.glb",
+    outPath: "/Cat And Camel Pose/out_compressed.glb",
+  },
+  "Child Pose": {
+    inPath: "/Child Pose/in_compressed.glb",
+    mainPath: "/Child Pose/main_compressed.glb",
+    outPath: "/Child Pose/out_compressed.glb",
+  },
+  "Cobra Pose": {
+    inPath: "/Cobra Pose/in_compressed.glb",
+    mainPath: "/Cobra Pose/main_compressed.glb",
+    outPath: "/Cobra Pose/out_compressed.glb",
+  },
+  "Seated Forward": {
+    inPath: "/Seated Forward Pose/in_compressed.glb",
+    mainPath: "/Seated Forward Pose/main_compressed.glb",
+    outPath: "/Seated Forward Pose/out_compressed.glb",
+  },
+  "Warrior 1": {
+    inPath: "/Warrior 1 Pose/in_compressed.glb",
+    mainPath: "/Warrior 1 Pose/main_compressed.glb",
+    outPath: "/Warrior 1 Pose/out_compressed.glb",
+  },
+};
+
 
 
 export default function YogaPage() {
 
   const { user, isLoading: authLoading, isAuthenticated } = useAuth();
   const authenticatedFetch = useAuthenticatedFetch();
-  const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8000';
+  const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8002';
   const router = useRouter();
 
   // TTS reference for cleanup
@@ -232,6 +286,7 @@ export default function YogaPage() {
   const [totalTime, setTotalTime] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
   const [currentPhase, setCurrentPhase] = useState<'in' | 'hold' | 'out'>('in');
+  const [timerActive, setTimerActive] = useState(false); // Timer only active during MAIN phase
 
   // TTS feedback state
   const [currentTTSFeedback, setCurrentTTSFeedback] = useState<string>('');
@@ -258,15 +313,13 @@ export default function YogaPage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Timer effect for countdown and phase management
+  // Timer effect for countdown - only runs during MAIN phase
   useEffect(() => {
-    if (!isSessionStarted || isPaused || timeLeft <= 0) return;
+    if (!isSessionStarted || isPaused || !timerActive || timeLeft <= 0) return;
 
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          // TODO: Re-enable cool-down later - skip directly to session end
-          // startCooldown();
           transitionToRelease();
           return 0;
         }
@@ -275,7 +328,7 @@ export default function YogaPage() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isSessionStarted, isPaused, timeLeft, transitionToRelease]);
+  }, [isSessionStarted, isPaused, timeLeft, transitionToRelease, timerActive]);
 
   // Warm-up / Cool-down timer effect
   useEffect(() => {
@@ -320,23 +373,19 @@ export default function YogaPage() {
     }
   }, [flowStage, auxTimeLeft, cooldownStepIndex]);
 
-  // Phase management effect
+  // Phase management effect - handles timer activation for MAIN phase
   useEffect(() => {
     if (!isSessionStarted || isPaused) return;
 
     const poseSpec = POSE_SPEC[selectedPose];
     if (!poseSpec) return;
 
-    const elapsedTime = totalTime - timeLeft;
-    
-    if (elapsedTime < poseSpec.in) {
-      setCurrentPhase('in');
-    } else if (elapsedTime < poseSpec.in + poseSpec.hold) {
-      setCurrentPhase('hold');
-    } else {
-      setCurrentPhase('out');
+    // When currentPhase changes to 'hold', activate timer
+    if (currentPhase === 'hold' && !timerActive) {
+      setTimeLeft(poseSpec.hold); // Initialize timer for MAIN phase
+      setTimerActive(true);
     }
-  }, [timeLeft, totalTime, selectedPose, isSessionStarted, isPaused]);
+  }, [currentPhase, selectedPose, isSessionStarted, isPaused, timerActive]);
 
 
 
@@ -495,9 +544,11 @@ export default function YogaPage() {
 
     const poseSpec = POSE_SPEC[selectedPose];
     if (poseSpec) {
-      setTotalTime(poseSpec.total);
-      setTimeLeft(poseSpec.total);
+      // Timer only starts for MAIN (hold) phase, not IN
+      setTotalTime(poseSpec.hold);
+      setTimeLeft(0); // Timer not started yet
       setCurrentPhase('in');
+      setTimerActive(false); // Will be activated when entering MAIN phase
     }
 
     setPoseRestartKey((k) => k + 1);
@@ -525,6 +576,7 @@ export default function YogaPage() {
     setPlayReleaseInstructions(false);
     setTimeLeft(0);
     setCurrentPhase('in');
+    setTimerActive(false); // Reset timer active state
     setPhaseTimeLeft(0);
     setSessionPhase('idle');
     // Don't reset sessionSummary here - let it show
@@ -633,28 +685,43 @@ export default function YogaPage() {
 
 
 
-  // Handle pose selection change
+  // Generate MAIN animation path for pose preview in setup stage
+  const getMainPosePath = (poseName: string): string | undefined => {
+    const poseKey = poseName as keyof typeof POSE_ANIMATIONS;
+    const poseAnim = POSE_ANIMATIONS[poseKey];
+    return poseAnim?.mainPath;
+  };
 
+  // Track pose changes for preview animation
+  const [previewAnimKey, setPreviewAnimKey] = useState(0);
+
+  // Get zoom level based on pose type
+  // Standing poses: zoom in (1.6), Warrior/laying poses: zoom out (1.3)
+  const getPoseZoom = (poseName: string, isPortrait: boolean): number => {
+    const standingPoses = ['Mountain Pose', 'Tree Pose'];
+    const widePoses = ['Warrior Pose', 'Warrior 1', 'Downward Dog', 'Child Pose', 'Cobra Pose', 'Cat And Camel Pose', 'Seated Forward', 'Triangle Pose'];
+    
+    if (standingPoses.includes(poseName)) {
+      return isPortrait ? 1.6 : 1.5; // Zoom in for standing poses
+    } else if (widePoses.includes(poseName)) {
+      return isPortrait ? 1.3 : 1.2; // Zoom out for wide/laying poses
+    }
+    return isPortrait ? 1.45 : 1.35; // Default
+  };
+
+  // Handle pose selection change with preview
   const handlePoseChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-
     const newPose = e.target.value;
-
     setSelectedPose(newPose);
-
     setCurrentPoseIndex(POSE_OPTIONS.indexOf(newPose));
-
-
+    // Trigger preview animation change
+    setPreviewAnimKey(k => k + 1);
 
     // If session is running, we need to restart with new pose
-
     if (isSessionStarted) {
-
       setIsSessionStarted(false);
-
       setTimeout(() => setIsSessionStarted(true), 100);
-
     }
-
   };
 
 
@@ -895,27 +962,18 @@ export default function YogaPage() {
           }`}>
 
             <div
-
-              className={`avatar-wrap relative transition-all duration-700 ease-in-out ${
-
+              className={`avatar-wrap relative flex items-end justify-center transition-all duration-700 ease-in-out w-full ${
                 isSessionStarted || isAvatarFullStage 
-
                   ? (isPortraitDisplay
-
                       ? (isSessionStarted && flowStage === 'pose'
-                          ? 'h-[80vh] mx-auto mt-0 scale-110'
-                          : 'h-[82vh] mx-auto mt-2 scale-110')
-
+                          ? 'h-[95vh] scale-110'
+                          : 'h-[95vh] scale-110')
                       : (isSessionStarted && flowStage === 'pose'
-                          ? 'h-[50vh] lg:mx-auto lg:max-w-xl mt-0 scale-105'
-                          : 'h-[55vh] lg:mx-auto lg:max-w-xl mt-2 scale-105'))
-
-                  : (isPortraitDisplay ? 'h-[74vh] mt-4' : 'h-[50vh] mt-8')
-
+                          ? 'h-[85vh] scale-105'
+                          : 'h-[85vh] scale-105'))
+                  : (isPortraitDisplay ? 'h-[90vh]' : 'h-[75vh]')
               } ${isStageTransitioning ? 'opacity-0 scale-[0.99]' : 'opacity-100'}`}
-
               style={{ background: 'transparent' }}
-
             >
 
               {flowStage === 'warmup' || flowStage === 'cooldown' ? (
@@ -927,25 +985,42 @@ export default function YogaPage() {
                   isPaused={isPaused}
                   cameraZoom={1}
                 />
+              ) : flowStage === 'setup' && !isSessionStarted ? (
+                // Pose Preview: Show MAIN pose animation when selecting from dropdown
+                <Avatar3D
+                  selectedPose={selectedPose}
+                  staticMode={false}
+                  playAnimationPath={getMainPosePath(selectedPose)}
+                  playAnimationKey={previewAnimKey}
+                  isPaused={false}
+                  cameraTargetYOffset={isPortraitDisplay ? -0.35 : 0}
+                  cameraZoom={getPoseZoom(selectedPose, isPortraitDisplay)}
+                />
               ) : (
                 <Avatar3D 
                   selectedPose={selectedPose} 
-                  onlyInAnimation={shouldPlayAnimation} 
-                  staticMode={!shouldPlayAnimation}
+                  onlyInAnimation={flowStage === 'pose' && shouldPlayAnimation} 
+                  onlyOutAnimation={flowStage === 'release' && playReleaseInstructions}
+                  staticMode={flowStage !== 'pose' && flowStage !== 'release'}
                   isTTSSpeaking={isTTSSpeaking} 
                   isPaused={isPaused} 
                   playAnimationKey={poseRestartKey}
-                  cameraTargetYOffset={
-                    isPortraitDisplay && flowStage === 'setup' && !isSessionStarted ? -0.35 : 0
-                  }
+                  cameraTargetYOffset={0}
                   cameraZoom={
-                    flowStage === 'setup' && !isSessionStarted
-                      ? (isPortraitDisplay ? 1.40 : 1.30)
-                      : (isSessionStarted && flowStage === 'pose' ? (isPortraitDisplay ? 1.55 : 1.45) : 1)
+                    (flowStage === 'pose' || flowStage === 'release') 
+                      ? getPoseZoom(selectedPose, isPortraitDisplay)
+                      : 1
                   }
+                  onPhaseChange={(phase) => {
+                    // Map 'main' to 'hold' for timer activation
+                    setCurrentPhase(phase === 'main' ? 'hold' : phase);
+                  }}
                   onSessionEnd={() => {
                     if (flowStage === 'pose') {
                       transitionToRelease();
+                    } else if (flowStage === 'release') {
+                      // OUT animation completed during release, finalize session
+                      finalizeSessionEnd();
                     }
                   }}
                 />
@@ -1041,20 +1116,16 @@ export default function YogaPage() {
               </div>
             )}
 
-            {/* Session Timer & Phase - Show During Session */}
-            {isSessionStarted && flowStage === 'pose' && (
+            {/* Session Timer - Show ONLY during MAIN (hold) phase */}
+            {isSessionStarted && flowStage === 'pose' && currentPhase === 'hold' && (
               <div className="mb-4 mt-2">
                 <div className="flex flex-col items-center space-y-3">
                   <div className="text-3xl font-bold text-[var(--brand-neo)]" style={{ fontFamily: 'var(--font-future)' }}>
                     {formatTime(timeLeft)}
                   </div>
                   <div className="flex items-center space-x-4 text-xs">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      currentPhase === 'in' ? 'bg-blue-500 text-white' : 
-                      currentPhase === 'hold' ? 'bg-green-500 text-white' : 
-                      'bg-orange-500 text-white'
-                    }`}>
-                      {currentPhase.toUpperCase()}
+                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-500 text-white">
+                      HOLDING POSE
                     </span>
                     <span className="text-[var(--ink-med)]">Total: {formatTime(totalTime)}</span>
                   </div>

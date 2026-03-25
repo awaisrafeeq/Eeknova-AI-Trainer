@@ -1,8 +1,8 @@
 // zumbaApi.ts - Zumba Dance Analysis API Client
 // Connects to the unified backend for real-time Zumba dance analysis
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8000';
-const WS_BASE_URL = process.env.NEXT_PUBLIC_YOGA_WS_URL || 'ws://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8002';
+const WS_BASE_URL = process.env.NEXT_PUBLIC_YOGA_WS_URL || 'ws://localhost:8002';
 
 export interface ZumbaSessionStartRequest {
   target_move: string;
