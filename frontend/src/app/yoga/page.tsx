@@ -919,15 +919,17 @@ export default function YogaPage() {
 
       style={{
 
-        background: 'var(--bg-gradient)',
+        background: isSessionStarted && flowStage === 'pose' ? 'transparent' : 'var(--bg-gradient)',
 
         fontFamily: 'var(--font-ui)',
+
+        transition: 'background 0.5s ease',
 
       }}
 
     >
 
-      <Particles />
+      {!(isSessionStarted && flowStage === 'pose') && <Particles />}
 
 
 
