@@ -270,6 +270,16 @@ export default function YogaPage() {
   const [playReleaseInstructions, setPlayReleaseInstructions] = useState(false);
 
   const transitionToRelease = useCallback(() => {
+    // Abort any ongoing TTS feedback before exit instructions start
+    try {
+      if (ttsRef.current) {
+        ttsRef.current.stop();
+        console.log('🛑 TTS feedback aborted - starting exit instructions');
+      }
+    } catch (error) {
+      console.log('TTS stop error:', error);
+    }
+    
     setIsStageTransitioning(true);
     setTimeout(() => {
       setIsSessionStarted(false);
@@ -1018,10 +1028,9 @@ export default function YogaPage() {
                   onSessionEnd={() => {
                     if (flowStage === 'pose') {
                       transitionToRelease();
-                    } else if (flowStage === 'release') {
-                      // OUT animation completed during release, finalize session
-                      finalizeSessionEnd();
                     }
+                    // Note: In release stage, we DON'T call finalizeSessionEnd here
+                    // We wait for onReleaseInstructionsEnd to finish TTS first
                   }}
                 />
               )}
