@@ -92,7 +92,7 @@ function CameraControls({ target, object }: { target?: [number, number, number],
         box.getCenter(center);
         // smoothly update orbit target's x to track horizontal movement
         controls.current.target.x = THREE.MathUtils.lerp(controls.current.target.x, center.x, 0.05);
-      } catch {}
+      } catch { }
     }
     controls.current?.update();
   });
@@ -120,10 +120,10 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
 
       const effectiveSize = referenceSize
         ? new THREE.Vector3(
-            Math.max(referenceSize.x, boxSize.x),
-            Math.max(referenceSize.y, boxSize.y),
-            Math.max(referenceSize.z, boxSize.z)
-          )
+          Math.max(referenceSize.x, boxSize.x),
+          Math.max(referenceSize.y, boxSize.y),
+          Math.max(referenceSize.z, boxSize.z)
+        )
         : boxSize;
 
       const aspect = size.width / Math.max(1, size.height);
@@ -381,14 +381,14 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
       if (ktx2LoaderRef.current) {
         try {
           ktx2LoaderRef.current.dispose();
-        } catch {}
+        } catch { }
       }
       ktx2LoaderRef.current = null;
 
       if (dracoLoaderRef.current) {
         try {
           dracoLoaderRef.current.dispose();
-        } catch {}
+        } catch { }
       }
       dracoLoaderRef.current = null;
     };
@@ -402,7 +402,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
         const lvl = typeof detail.level === 'number' ? detail.level : 0;
         assistantAudioLevelRef.current = Math.max(0, Math.min(1, lvl));
         assistantSpeakingRef.current = !!detail.isSpeaking;
-      } catch {}
+      } catch { }
     };
 
     window.addEventListener('eeknova-assistant-audio', onAssistantAudio as any);
@@ -456,7 +456,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
         originalBlendshapesRef.current = [...(mesh.morphTargetInfluences || [])];
         console.log('[Avatar3D] blendshape mesh selected:', mesh.name, 'count:', blendshapeNamesRef.current.length);
       }
-    } catch {}
+    } catch { }
   }, []);
 
   const findJawBone = useCallback((root: THREE.Object3D) => {
@@ -485,7 +485,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
       const loader = new GLTFLoader();
 
-      
+
 
       // Set up shared DRACO/KTX2 loaders (avoid repeated loader creation)
       if (dracoLoaderRef.current) loader.setDRACOLoader(dracoLoaderRef.current);
@@ -569,12 +569,12 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
       findJawBone(loadedModel);
 
       detectBlendshapeMesh(loadedModel);
- 
+
       detectBlendshapeMesh(loadedModel);
-      
+
       console.log('Static avatar loaded successfully');
 
-      
+
 
       // Create animation mixer and play animation if available
 
@@ -582,7 +582,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
       setMixer(animationMixer);
 
-      
+
 
       // Play animation if available AND not a chess avatar
 
@@ -600,7 +600,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
           console.log('🎭 Found animations:', gltf.animations.map((a: THREE.AnimationClip) => a.name));
 
-          
+
 
           gltf.animations.forEach((clip: THREE.AnimationClip) => {
 
@@ -681,7 +681,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
     console.log('Loading pose:', selectedPose);
 
-    
+
 
     // Always reload animation when pose changes (including restart)
 
@@ -751,13 +751,13 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
         console.log('Loading static avatar...');
 
-        
+
 
         // Set up loader with proper configuration
 
         const loader = new GLTFLoader();
 
-        
+
 
         // Set up shared DRACO/KTX2 loaders (avoid repeated loader creation)
         if (dracoLoaderRef.current) loader.setDRACOLoader(dracoLoaderRef.current);
@@ -765,104 +765,104 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
         console.log('Loading static avatar...');
 
-      
-
-      // Load yoga avatar as static model (use in animation)
-
-      const gltf = await loader.loadAsync('/Mountain Pose/in_compressed.glb');
-
-      const loadedModel = gltf.scene;
 
 
+        // Load yoga avatar as static model (use in animation)
 
-      // Set shadows and materials
+        const gltf = await loader.loadAsync('/Mountain Pose/in_compressed.glb');
 
-      loadedModel.traverse((child: THREE.Object3D) => {
+        const loadedModel = gltf.scene;
 
-        if (child instanceof THREE.Mesh) {
-          if (child.material) {
 
-            const material = Array.isArray(child.material) ? child.material[0] : child.material;
 
-            if (material && material.map) {
+        // Set shadows and materials
 
-              material.map.anisotropy = 4;
+        loadedModel.traverse((child: THREE.Object3D) => {
+
+          if (child instanceof THREE.Mesh) {
+            if (child.material) {
+
+              const material = Array.isArray(child.material) ? child.material[0] : child.material;
+
+              if (material && material.map) {
+
+                material.map.anisotropy = 4;
+
+              }
 
             }
 
           }
 
-        }
-
-      });
-
-
-
-      // Position and scale the model
-
-      loadedModel.position.set(0, -1, 0);
-
-      loadedModel.scale.setScalar(1.2);
-
-
-
-      // Add to scene
-
-      if (meshRef.current) {
-
-        scene.remove(meshRef.current);
-
-      }
-
-      scene.add(loadedModel);
-
-      meshRef.current = loadedModel;
-
-      setModel(loadedModel);
-
-
-
-      console.log('Static avatar loaded successfully');
-
-      
-
-      // Create animation mixer and play animation if available
-
-      const animationMixer = new THREE.AnimationMixer(loadedModel);
-
-      setMixer(animationMixer);
-
-      
-
-      // Play animation if available
-
-      if (gltf.animations && gltf.animations.length > 0) {
-
-        console.log(' Found animations:', gltf.animations.map(a => a.name));
-
-        
-
-        gltf.animations.forEach((clip: THREE.AnimationClip) => {
-
-          const action = animationMixer.clipAction(clip);
-
-          action.setLoop(THREE.LoopOnce, 1);
-
-          action.clampWhenFinished = true;
-
-          action.play();
-
-          console.log(` Static animation set to play once: ${clip.name}`);
-
         });
 
-      } else {
 
-        console.log('No animations found in static model');
 
-      }
+        // Position and scale the model
 
-        
+        loadedModel.position.set(0, -1, 0);
+
+        loadedModel.scale.setScalar(1.2);
+
+
+
+        // Add to scene
+
+        if (meshRef.current) {
+
+          scene.remove(meshRef.current);
+
+        }
+
+        scene.add(loadedModel);
+
+        meshRef.current = loadedModel;
+
+        setModel(loadedModel);
+
+
+
+        console.log('Static avatar loaded successfully');
+
+
+
+        // Create animation mixer and play animation if available
+
+        const animationMixer = new THREE.AnimationMixer(loadedModel);
+
+        setMixer(animationMixer);
+
+
+
+        // Play animation if available
+
+        if (gltf.animations && gltf.animations.length > 0) {
+
+          console.log(' Found animations:', gltf.animations.map(a => a.name));
+
+
+
+          gltf.animations.forEach((clip: THREE.AnimationClip) => {
+
+            const action = animationMixer.clipAction(clip);
+
+            action.setLoop(THREE.LoopOnce, 1);
+
+            action.clampWhenFinished = true;
+
+            action.play();
+
+            console.log(` Static animation set to play once: ${clip.name}`);
+
+          });
+
+        } else {
+
+          console.log('No animations found in static model');
+
+        }
+
+
 
       } catch (error) {
 
@@ -982,7 +982,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
           gltf.animations.forEach((clip: THREE.AnimationClip) => {
             const action = animationMixer.clipAction(clip);
-            
+
             // Set loop and clamp settings
             if (onlyInAnimation) {
               if (type === 'main') {
@@ -999,7 +999,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
               action.setLoop(THREE.LoopOnce, 1);
               action.clampWhenFinished = true;
             }
-            
+
             action.play();
             maxDuration = Math.max(maxDuration, clip.duration);
           });
@@ -1025,7 +1025,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
               }
             */
 
-            
+
 
             const spec = POSE_SPEC[selectedPose || 'Mountain Pose'];
 
@@ -1326,16 +1326,16 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
           if (child instanceof THREE.Mesh && child.morphTargetInfluences && child.morphTargetInfluences.length > 0) {
             // Prioritize meshes with jawOpen/mouthClose AND most blendshapes (main body mesh)
             const hasMainFaceBlendshapes = child.morphTargetDictionary && (
-              Object.keys(child.morphTargetDictionary).some(name => 
-                name.toLowerCase().includes('jawopen') || 
+              Object.keys(child.morphTargetDictionary).some(name =>
+                name.toLowerCase().includes('jawopen') ||
                 name.toLowerCase().includes('mouthopen') ||
                 name.toLowerCase().includes('mouthclose')
               )
             );
-            
+
             // Only set as main blendshape mesh if it has face blendshapes AND more blendshapes than current
-            if ((!blendshapeMeshRef.current && hasMainFaceBlendshapes) || 
-                (hasMainFaceBlendshapes && child.morphTargetInfluences && child.morphTargetInfluences.length > (blendshapeMeshRef.current?.morphTargetInfluences?.length || 0))) {
+            if ((!blendshapeMeshRef.current && hasMainFaceBlendshapes) ||
+              (hasMainFaceBlendshapes && child.morphTargetInfluences && child.morphTargetInfluences.length > (blendshapeMeshRef.current?.morphTargetInfluences?.length || 0))) {
               blendshapeMeshRef.current = child;
               blendshapeNamesRef.current = child.morphTargetDictionary ? Object.keys(child.morphTargetDictionary) : [];
               originalBlendshapesRef.current = [...(child.morphTargetInfluences || [])];
@@ -1456,17 +1456,17 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
       if (effectiveSpeaking && blendshapeMeshRef.current && blendshapeMeshRef.current.morphTargetInfluences) {
 
-        
+
 
         // Viseme-style gating: vary between wide / round / open shapes and add micro-pauses.
         const envLevel = Math.max(0, Math.min(1, speechEnvelopeRef.current));
         const syllable = 0.5 + 0.5 * Math.sin((time + speechSeedRef.current) * 7.2);
         const microPause = Math.pow(Math.max(0, Math.sin((time + speechSeedRef.current) * 3.1)), 12);
         const gate = THREE.MathUtils.clamp(0.25 + 0.75 * syllable - microPause * 0.55, 0, 1);
-        
+
         // Jaw movement - moderate, not too extreme
         const jawAmount = 0.25 + 0.45 * gate; // 0.25 to 0.70 - visible but not exaggerated
-        
+
         // Lip open - minimal, just subtle movement
         const openAmount = envLevel * (0.02 + 0.06 * gate); // Very minimal lip movement
         const wideAmount = envLevel * (0.02 + 0.06 * (0.5 + 0.5 * Math.sin((time + speechSeedRef.current) * 4.9)));
@@ -1568,7 +1568,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
             const teethVisible = jawAmount > 0.15 ? jawAmount * 0.6 : 0;
             influences[teethIdx] = THREE.MathUtils.lerp(influences[teethIdx] || 0, teethVisible, 0.2);
           }
-        } catch {}
+        } catch { }
 
         // Look for mouth-related blendshapes - expanded list with visemes
 
@@ -1581,7 +1581,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
           return n.includes('mouth') || n.includes('jaw') || n.includes('lip') || n.includes('tongue') || n.includes('viseme');
         });
 
-        
+
 
         if (!didDriveArkitMouth && mouthBlendshapes.length > 0) {
 
@@ -1604,13 +1604,13 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
               const variation = Math.sin(time * 6 + index * 0.2) * 0.06;
               const finalValue = Math.min(1.0, baseValue + variation + targetMouth);
 
-              
+
 
               // Special handling for key mouth blendshapes - more natural values
 
-              if (blendshapeName.toLowerCase().includes('jawopen') || 
+              if (blendshapeName.toLowerCase().includes('jawopen') ||
 
-                  blendshapeName.toLowerCase().includes('mouthopen')) {
+                blendshapeName.toLowerCase().includes('mouthopen')) {
 
                 blendshapeMeshRef.current!.morphTargetInfluences[morphIndex] = Math.min(1, finalValue * 0.95); // Stronger jaw opening
 
@@ -1640,7 +1640,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
             // console.log('Animating blendshapes:', mouthBlendshapes.slice(0, 5));
 
-            
+
 
             // Show actual morph target values for debugging
 
@@ -1680,7 +1680,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
           });
 
-          
+
 
           if (Math.floor(time * 2) % 4 === 0) {
 
@@ -1866,7 +1866,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
           Math.max(referenceSizeRef.current.z, size.z)
         );
       }
-    } catch {}
+    } catch { }
   }, [fitObject]);
 
 
