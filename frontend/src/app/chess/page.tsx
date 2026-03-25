@@ -733,13 +733,7 @@ export default function ChessPage() {
                 cameraZoom={3.15}
                 cameraTargetYOffset={1.85}
               />
-              <div
-                className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-[42px] h-[18px] w-[60%]"
-                style={{
-                  filter: 'blur(10px)',
-                  background: 'radial-gradient(closest-side, rgba(25,227,255,.35), transparent)',
-                }}
-              />
+              {/* Fake shadow removed to stop float illusion */}
             </div>
           </div>
 

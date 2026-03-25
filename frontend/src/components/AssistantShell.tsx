@@ -17,6 +17,7 @@ const LANGUAGE_OPTIONS: Array<{ value: AssistantLanguage; label: string }> = [
 
 export default function AssistantShell() {
   const USE_REALTIME = true;
+  const DEBUG_MODE = true;
 
   const [open, setOpen] = useState(false);
   const openRef = useRef(false);
@@ -1372,52 +1373,54 @@ export default function AssistantShell() {
 
   return (
     <>
-      <div
-        data-eeknova-assistant-ui="true"
-        className="fixed left-4 top-4 z-[80] rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-[rgba(0,0,0,.28)] px-3 py-2 text-[12px] text-[var(--ink-med)] backdrop-blur-md"
-      >
-        <div>Mic monitor: {micMonitorEnabled ? 'on' : 'off'}</div>
-        <div>Realtime: {realtimeStatus}</div>
-        <div>Mic level: {Math.round(micLevel * 100)}%</div>
-        <div>User: {isUserSpeaking ? 'speaking' : 'silent'}</div>
-        <div>Wake: {wakeWordEnabled ? wakeStatus : 'off'}</div>
-        {wakeWordEnabled ? <div>Heard: {wakeLastHeard || '-'}</div> : null}
-        {(realtimeStatus === 'connecting' || realtimeStatus === 'connected') ? (
-          <div>RT Heard: {realtimeLastHeard || '-'}</div>
-        ) : null}
-        {(realtimeStatus === 'connecting' || realtimeStatus === 'connected') ? (
-          <div>AI audio: {Math.round(assistantAudioLevel * 100)}% ({assistantIsSpeaking ? 'speaking' : 'silent'})</div>
-        ) : null}
-        {micMonitorPausedForWake ? <div>Mic: paused for wake</div> : null}
-        <label className="mt-2 flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={micMonitorEnabled}
-            onChange={(e) => setMicMonitorEnabled(e.target.checked)}
-          />
-          Mic monitor
-        </label>
-        <div className="mt-2">Mic devices: {micDevices.length || '0'}</div>
-        <select
-          value={selectedMicDeviceId}
-          onChange={(e) => setSelectedMicDeviceId(e.target.value)}
-          className="mt-1 w-[260px] max-w-[70vw] rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-[rgba(0,0,0,.35)] px-2 py-1 text-[12px] text-white/90 outline-none"
+      {DEBUG_MODE && (
+        <div
+          data-eeknova-assistant-ui="true"
+          className="fixed left-4 top-4 z-[80] rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-[rgba(0,0,0,.28)] px-3 py-2 text-[12px] text-[var(--ink-med)] backdrop-blur-md"
         >
-          {micDevices.length === 0 ? (
-            <option value="" className="bg-black">
-              Default
-            </option>
-          ) : (
-            micDevices.map((d) => (
-              <option key={d.deviceId} value={d.deviceId} className="bg-black">
-                {d.label}
+          <div>Mic monitor: {micMonitorEnabled ? 'on' : 'off'}</div>
+          <div>Realtime: {realtimeStatus}</div>
+          <div>Mic level: {Math.round(micLevel * 100)}%</div>
+          <div>User: {isUserSpeaking ? 'speaking' : 'silent'}</div>
+          <div>Wake: {wakeWordEnabled ? wakeStatus : 'off'}</div>
+          {wakeWordEnabled ? <div>Heard: {wakeLastHeard || '-'}</div> : null}
+          {(realtimeStatus === 'connecting' || realtimeStatus === 'connected') ? (
+            <div>RT Heard: {realtimeLastHeard || '-'}</div>
+          ) : null}
+          {(realtimeStatus === 'connecting' || realtimeStatus === 'connected') ? (
+            <div>AI audio: {Math.round(assistantAudioLevel * 100)}% ({assistantIsSpeaking ? 'speaking' : 'silent'})</div>
+          ) : null}
+          {micMonitorPausedForWake ? <div>Mic: paused for wake</div> : null}
+          <label className="mt-2 flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={micMonitorEnabled}
+              onChange={(e) => setMicMonitorEnabled(e.target.checked)}
+            />
+            Mic monitor
+          </label>
+          <div className="mt-2">Mic devices: {micDevices.length || '0'}</div>
+          <select
+            value={selectedMicDeviceId}
+            onChange={(e) => setSelectedMicDeviceId(e.target.value)}
+            className="mt-1 w-[260px] max-w-[70vw] rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-[rgba(0,0,0,.35)] px-2 py-1 text-[12px] text-white/90 outline-none"
+          >
+            {micDevices.length === 0 ? (
+              <option value="" className="bg-black">
+                Default
               </option>
-            ))
-          )}
-        </select>
-        {wakeLastError ? <div className="mt-1 text-red-200">Wake err: {wakeLastError}</div> : null}
-        {error ? <div className="mt-1 text-red-200">Err: {error}</div> : null}
-      </div>
+            ) : (
+              micDevices.map((d) => (
+                <option key={d.deviceId} value={d.deviceId} className="bg-black">
+                  {d.label}
+                </option>
+              ))
+            )}
+          </select>
+          {wakeLastError ? <div className="mt-1 text-red-200">Wake err: {wakeLastError}</div> : null}
+          {error ? <div className="mt-1 text-red-200">Err: {error}</div> : null}
+        </div>
+      )}
 
       <button
         type="button"

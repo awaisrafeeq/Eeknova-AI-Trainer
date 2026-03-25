@@ -47,7 +47,7 @@ function applySkinTone(root: THREE.Object3D, tone: THREE.Color, strength: number
   });
 }
 
-function CameraControls({ target }: { target?: [number, number, number] }) {
+function CameraControls({ target, object }: { target?: [number, number, number], object?: THREE.Object3D | null }) {
 
   const { camera, gl } = useThree();
 
@@ -84,7 +84,18 @@ function CameraControls({ target }: { target?: [number, number, number] }) {
 
 
 
-  useFrame(() => controls.current?.update());
+  useFrame(() => {
+    if (controls.current && object) {
+      try {
+        const box = new THREE.Box3().setFromObject(object);
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+        // smoothly update orbit target's x to track horizontal movement
+        controls.current.target.x = THREE.MathUtils.lerp(controls.current.target.x, center.x, 0.05);
+      } catch {}
+    }
+    controls.current?.update();
+  });
 
   return null;
 
@@ -152,9 +163,8 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
       const yOffset = Number.isFinite(cameraTargetYOffset) ? cameraTargetYOffset : 0;
       target.y += yOffset;
 
-      // Many GLB rigs have an off-center pivot/bounds; keep framing centered horizontally.
-      target.x = 0;
-
+      // For dynamic X tracking, we'll implement useFrame below instead of static target.x = 0
+      target.x = 0; // initial fallback
       perspective.position.set(0, target.y, target.z + distance);
       perspective.near = Math.max(0.01, distance / 100);
       perspective.far = Math.max(1000, distance * 100);
@@ -162,15 +172,16 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
       perspective.lookAt(target);
 
       onTargetChange([target.x, target.y, target.z]);
-
     } catch {
-
     }
-
   }, [object, referenceSize, cameraZoom, cameraTargetYOffset, camera, size.width, size.height, onTargetChange]);
 
-  return null;
+  useFrame(() => {
+    // Dynamic vertical/zoom follow features could be added here in the future
+    // Currently horizontal follow is handed off to CameraControls to avoid OrbitControls fighting
+  });
 
+  return null;
 }
 
 
@@ -509,11 +520,6 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
       loadedModel.traverse((child: THREE.Object3D) => {
 
         if (child instanceof THREE.Mesh) {
-
-          child.castShadow = true;
-
-          child.receiveShadow = true;
-
           if (child.material) {
 
             const material = Array.isArray(child.material) ? child.material[0] : child.material;
@@ -774,11 +780,6 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
       loadedModel.traverse((child: THREE.Object3D) => {
 
         if (child instanceof THREE.Mesh) {
-
-          child.castShadow = true;
-
-          child.receiveShadow = true;
-
           if (child.material) {
 
             const material = Array.isArray(child.material) ? child.material[0] : child.material;
@@ -1096,12 +1097,6 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
         loadedModel.traverse((child: THREE.Object3D) => {
 
           if (child instanceof THREE.Mesh) {
-
-            child.castShadow = true;
-
-            child.receiveShadow = true;
-
-
 
             // Ensure material is properly set
 
@@ -1737,7 +1732,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
       // Apply forward lean regardless of speaking state
       if (meshRef.current) {
-        const baseForwardLeanX = 0.22;
+        const baseForwardLeanX = 0;
         const bobX = effectiveSpeaking ? Math.sin(time * 2.2) * 0.02 : 0;
         const targetX = baseForwardLeanX + bobX;
         meshRef.current.rotation.x = THREE.MathUtils.lerp(meshRef.current.rotation.x, targetX, 0.08);
@@ -1762,63 +1757,20 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
         // Don't change angles during warmup/cooldown
         if (!isWarmUpOrCooldown) {
 
-          // Spec: 90=Front, 180=Right Profile, 270=Back, 360=Left Profile
+          // ALWAYS KEEP FACING FRONT (90 deg) as per user request to move horizontally only
+          const targetAngle = 90;
+          const targetRad = (targetAngle - 90) * (Math.PI / 180); // 0
 
-          let targetAngle = spec.angle;
-
-          if (currentAnimation === 'main') {
-            // Keep whatever angle was reached at the end of previous phase
-            // If coming from 'out', use opposite angle for anticlockwise movement
-            const currentAngleDeg = (meshRef.current.rotation.y * 180) / Math.PI + 90;
-            targetAngle = currentAngleDeg;
-          } else if (currentAnimation === 'out') {
-            // OUT should end on front (90deg). Rotate smoothly and clamp at target.
-            // For cases like 180 -> 90, force anticlockwise (decreasing degrees).
-            const currentAngleDegRaw = (meshRef.current.rotation.y * 180) / Math.PI + 90;
-            const currentAngleDeg = ((currentAngleDegRaw % 360) + 360) % 360;
-
-            const targetAngleOut = 90;
-            const targetRadOut = (targetAngleOut - 90) * (Math.PI / 180); // 0
-            const currentRadOut = meshRef.current.rotation.y;
-
-            let diffOut = targetRadOut - currentRadOut;
-            // If the model is on the right/back side (> 90deg), force anticlockwise by taking the long path.
-            if (currentAngleDeg > 90 && diffOut > 0) {
-              diffOut -= 2 * Math.PI;
-            }
-
-            const maxStepOut = (15 * Math.PI / 180) * delta;
-
-            // Clamp to avoid overshoot: if we're within one step, snap exactly to target.
-            if (Math.abs(diffOut) <= maxStepOut) {
-              meshRef.current.rotation.y = targetRadOut;
-            } else {
-              meshRef.current.rotation.y += Math.sign(diffOut) * maxStepOut;
-            }
-
-            return;
-          } else {
-            // 'in' (and any other state) uses pose's defined angle
-            targetAngle = spec.angle;
-          }
-
-          const targetRad = (targetAngle - 90) * (Math.PI / 180);
-
-          // Max rotation speed: 10-15 deg/s
+          // Smoothly rotate to front in case it was off
           const maxStep = (15 * Math.PI / 180) * delta;
-
-          // Smoothly rotate
-
           const diff = targetRad - meshRef.current.rotation.y;
 
           if (Math.abs(diff) > 0.001) {
-
             meshRef.current.rotation.y += Math.sign(diff) * Math.min(Math.abs(diff), maxStep);
-
+          } else {
+            meshRef.current.rotation.y = targetRad;
           }
-
         }
-
       } else {
 
         // Default subtle idle rotation if no spec
@@ -1951,15 +1903,12 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
             <directionalLight
               position={[5, 5, 5]}
               intensity={1}
-              castShadow
-              shadow-mapSize-width={1024}
-              shadow-mapSize-height={1024}
             />
             <directionalLight position={[-5, 5, 5]} intensity={0.8} />
             <pointLight position={[0, 2, 2]} intensity={0.6} />
             <hemisphereLight args={[0xffffff, 0x444444, 0.3]} />
             <AutoFitCamera object={fitObject} referenceSize={referenceSizeRef.current} cameraZoom={cameraZoom} cameraTargetYOffset={cameraTargetYOffset} onTargetChange={setCameraTarget} />
-            <CameraControls target={cameraTarget} />
+            <CameraControls target={cameraTarget} object={fitObject} />
             <Suspense fallback={null}>
               <YogaModel
                 selectedPose={selectedPose}
