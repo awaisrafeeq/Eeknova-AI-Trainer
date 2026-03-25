@@ -71,6 +71,10 @@ function CameraControls({ target, object }: { target?: [number, number, number],
 
     controls.current.maxPolarAngle = Math.PI / 2;
 
+    controls.current.autoRotate = true;
+
+    controls.current.autoRotateSpeed = 2.0;
+
     if (target) {
       controls.current.target.set(target[0], target[1], target[2]);
       controls.current.update();
@@ -1740,44 +1744,8 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
 
 
-      // Smooth rotation to target angle
-
-      const spec = POSE_SPEC[selectedPose || 'Mountain Pose'];
-
-      if (spec) {
-        // TODO: Re-enable warm-up/cooldown logic later
-        /*
-          const isWarmUpOrCooldown = playAnimationPath && (
-            playAnimationPath.includes('/warm-up/') ||
-            playAnimationPath.includes('/cool-down/')
-          );
-        */
-        const isWarmUpOrCooldown = false; // Temporarily disabled
-
-        // Don't change angles during warmup/cooldown
-        if (!isWarmUpOrCooldown) {
-
-          // ALWAYS KEEP FACING FRONT (90 deg) as per user request to move horizontally only
-          const targetAngle = 90;
-          const targetRad = (targetAngle - 90) * (Math.PI / 180); // 0
-
-          // Smoothly rotate to front in case it was off
-          const maxStep = (15 * Math.PI / 180) * delta;
-          const diff = targetRad - meshRef.current.rotation.y;
-
-          if (Math.abs(diff) > 0.001) {
-            meshRef.current.rotation.y += Math.sign(diff) * Math.min(Math.abs(diff), maxStep);
-          } else {
-            meshRef.current.rotation.y = targetRad;
-          }
-        }
-      } else {
-
-        // Default subtle idle rotation if no spec
-
-        meshRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.2) * 0.05;
-
-      }
+      // Subtle idle rotation for a more alive feel
+      meshRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.2) * 0.05;
 
     }
 
