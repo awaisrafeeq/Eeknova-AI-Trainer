@@ -335,7 +335,7 @@ interface Avatar3DProps {
   onModelLoaded?: (model: THREE.Object3D | null) => void;
 }
 
-function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onError, onTTSSpeaking, onSessionEnd, onPhaseChange, onModelLoaded }: Avatar3DProps) {
+function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onError, onTTSSpeaking, onSessionEnd, onPhaseChange, onModelLoaded, onLoadingChange }: Avatar3DProps & { onLoadingChange?: (loading: boolean) => void }) {
 
   const [model, setModel] = useState<THREE.Group | null>(null);
 
@@ -472,6 +472,8 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
     try {
 
+      onLoadingChange?.(true);
+
       const loader = new GLTFLoader();
 
 
@@ -558,6 +560,8 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
       onModelLoaded?.(loadedModel);
 
+      onLoadingChange?.(false);
+
       applySkinTone(loadedModel, new THREE.Color(skinToneColor), skinToneStrength);
 
       findJawBone(loadedModel);
@@ -624,6 +628,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
     } catch (error) {
 
+      onLoadingChange?.(false);
       console.error('Error loading static avatar:', error);
 
       onError?.('Failed to load static avatar');
@@ -743,6 +748,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
       try {
 
+        onLoadingChange?.(true);
         console.log('Loading static avatar...');
 
 
@@ -819,7 +825,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
         setModel(loadedModel);
 
-
+        onLoadingChange?.(false);
 
         console.log('Static avatar loaded successfully');
 
@@ -865,6 +871,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
       } catch (error) {
 
+        onLoadingChange?.(false);
         console.error('Error loading static avatar:', error);
 
       }
@@ -880,7 +887,10 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
         // Preserve current rotation across in/main/out model swaps
         const previousRotationY = meshRef.current?.rotation.y ?? 0;
 
-
+        // Signal loading when no model is loaded yet (initial load for any phase)
+        if (!model) {
+          onLoadingChange?.(true);
+        }
 
         const gltf = await new Promise<any>((resolve, reject) => {
 
@@ -1135,6 +1145,12 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
         findJawBone(loadedModel);
 
+        // Notify parent of the loaded model for camera fitting
+        onModelLoaded?.(loadedModel);
+
+        // Clear loading state after model is set
+        onLoadingChange?.(false);
+
         setCurrentAnimation(type);
 
         // Notify parent of phase change
@@ -1144,6 +1160,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
       } catch (error) {
 
+        onLoadingChange?.(false);
         console.error(`Error loading ${type} animation:`, error);
 
       }
@@ -1835,17 +1852,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
   if (!model) {
 
-    return (
-
-      <mesh>
-
-        <boxGeometry args={[1, 2, 0.5]} />
-
-        <meshStandardMaterial color="#00ffff" wireframe />
-
-      </mesh>
-
-    );
+    return null;
 
   }
 
@@ -1895,6 +1902,8 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
 
   const [error, setError] = useState<string | null>(null);
 
+  const [modelLoading, setModelLoading] = useState(true);
+
   const [fitObject, setFitObject] = useState<THREE.Object3D | null>(null);
   const [cameraTarget, setCameraTarget] = useState<[number, number, number]>([0, 0, 0]);
   const referenceSizeRef = useRef<THREE.Vector3 | null>(null);
@@ -1937,6 +1946,27 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
     <div className="w-full h-full flex items-center justify-center" style={{ position: "relative" }} data-walktour="avatar">
       {webglSupported && !error ? (
         <div className="w-full h-full" style={{ position: "relative" }}>
+          {modelLoading && (
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 10,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+            }}>
+              <div style={{
+                width: 40,
+                height: 40,
+                border: '3px solid rgba(255,255,255,0.15)',
+                borderTopColor: 'rgba(255,255,255,0.7)',
+                borderRadius: '50%',
+                animation: 'avatar-spin 0.8s linear infinite',
+              }} />
+              <style>{`@keyframes avatar-spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+          )}
           <Canvas
             camera={{ position: [0, 0, 3], fov: 50 }}
             gl={{
@@ -1945,7 +1975,13 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
               powerPreference: "high-performance",
               failIfMajorPerformanceCaveat: false
             }}
-            style={{ background: "transparent", width: "100%", height: "100%" }}
+            style={{
+              background: "transparent",
+              width: "100%",
+              height: "100%",
+              opacity: modelLoading ? 0 : 1,
+              transition: "opacity 0.3s ease-in",
+            }}
           >
             <ambientLight intensity={0.6} />
             <directionalLight
@@ -1978,6 +2014,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
                 onModelLoaded={setFitObject}
                 onSessionEnd={onSessionEnd}
                 onPhaseChange={onPhaseChange}
+                onLoadingChange={setModelLoading}
               />
             </Suspense>
           </Canvas>
