@@ -123,13 +123,13 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
       const isHighZoom = zoom >= 1.25;
 
       // Add a bit of headroom so the avatar's head doesn't get cropped on small/portrait canvases.
-      const verticalFitFactor = aspect < 0.8 ? 0.62 : (isHighZoom ? 0.68 : 0.64);
+      const verticalFitFactor = aspect < 0.8 ? 0.72 : (isHighZoom ? 0.78 : 0.74);
       const fitHeightDistance = (effectiveSize.y * verticalFitFactor) / Math.tan(vFov * 0.5);
       const hFov = 2 * Math.atan(Math.tan(vFov * 0.5) * aspect);
       const fitWidthDistance = (effectiveSize.x * 0.5) / Math.tan(hFov * 0.5);
 
       let distance = Math.max(fitHeightDistance, fitWidthDistance);
-      const margin = aspect < 0.8 ? 1.85 : 1.45;
+      const margin = aspect < 0.8 ? 1.55 : 1.2;
       distance *= margin;
 
       // Zoom the fitted framing without changing the container size.

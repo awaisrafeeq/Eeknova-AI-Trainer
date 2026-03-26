@@ -136,9 +136,9 @@ export default function Page() {
 
                 <div className="mx-auto max-w-[1080px] px-6 md:px-8 py-6 md:py-8">
                     <section className="relative grid grid-cols-12 gap-4 md:gap-6">
-                        <div className="col-span-12 lg:col-span-5 xl:col-span-5 relative">
-                            <div className="avatar-wrap relative h-[72vh] rounded-[var(--radius-lg)] border border-[var(--glass-stroke)]" data-walktour="avatar" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02))', backdropFilter: 'blur(12px)' }}>
-                                <Avatar3D selectedPose="" onlyInAnimation={false} staticModelPath="/smile_greet_compressed.glb" />
+                        <div className="col-span-12 lg:col-span-5 xl:col-span-5 relative flex items-center justify-center">
+                            <div className="avatar-wrap relative h-[78vh] w-full" data-walktour="avatar" style={{ background: 'transparent' }}>
+                                <Avatar3D selectedPose="" onlyInAnimation={false} staticModelPath="/smile_greet_compressed.glb" cameraZoom={1.1} />
                                 {/* Fake shadow removed to stop float illusion */}
                             </div>
                         </div>
