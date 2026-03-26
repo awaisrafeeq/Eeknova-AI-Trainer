@@ -224,10 +224,10 @@ const POSE_ANIMATIONS: Record<string, PoseAnimation> = {
     outPath: "/Downward Dog Pose/out_compressed.glb",
 
   },
-  "Triangle": {
-    inPath: "/Triangle/in_compressed.glb",
-    mainPath: "/Triangle/main_compressed.glb",
-    outPath: "/Triangle/out_compressed.glb",
+  "Triangle Pose": {
+    inPath: "/Triangle Pose/in_compressed.glb",
+    mainPath: "/Triangle Pose/main_compressed.glb",
+    outPath: "/Triangle Pose/out_compressed.glb",
   },
   "Warrior Pose": {
 
