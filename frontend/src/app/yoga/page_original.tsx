@@ -919,7 +919,7 @@ export default function YogaPage() {
 
       style={{
 
-        background: flowStage !== 'setup' ? 'transparent' : 'var(--bg-gradient)',
+        background: isSessionStarted && flowStage === 'pose' ? 'transparent' : 'var(--bg-gradient)',
 
         fontFamily: 'var(--font-ui)',
 
@@ -929,21 +929,18 @@ export default function YogaPage() {
 
     >
 
-      {flowStage === 'setup' && <Particles />}
+      {!(isSessionStarted && flowStage === 'pose') && <Particles />}
 
 
 
-      <div className={`mx-auto relative ${
-        flowStage !== 'setup'
-          ? 'w-full max-w-none p-0'
-          : isPortraitDisplay
-            ? 'w-full max-w-none px-3 md:px-4 py-6 md:py-8'
-            : 'max-w-[1400px] px-6 md:px-8 py-6 md:py-8'
+      <div className={`mx-auto py-6 md:py-8 relative ${
+        isPortraitDisplay
+          ? 'w-full max-w-none px-3 md:px-4'
+          : 'max-w-[1400px] px-6 md:px-8'
       }`}>
 
-        {/* Back Button - Hidden during session for clean transparent view */}
+        {/* Back Button */}
 
-        {flowStage === 'setup' && (
         <button
 
           onClick={() => router.push('/dashboard')}
@@ -955,34 +952,30 @@ export default function YogaPage() {
           ← Back
 
         </button>
-        )}
 
 
 
-        <section className={`relative grid grid-cols-12 ${
-          flowStage !== 'setup'
-            ? 'mt-0'
-            : 'mt-20 md:mt-24'
-        } ${
-          flowStage !== 'setup'
+        <section className={`relative grid grid-cols-12 mt-20 md:mt-24 ${
+          isSessionStarted && flowStage === 'pose'
             ? 'gap-2 md:gap-3'
             : 'gap-4 md:gap-6'
         }`}>
 
           {/* Avatar Section - Dynamic Positioning */}
 
-          <div className={`relative transition-all duration-700 ease-in-out col-span-12`}>
+          <div className={`relative transition-all duration-700 ease-in-out ${
+            flowStage === 'instructions' || flowStage === 'pose' || flowStage === 'release' || flowStage === 'warmup' || flowStage === 'cooldown'
+              ? 'col-span-12 flex justify-center'
+              : 'col-span-12 lg:col-span-5'
+          }`}>
 
             <div
-              className={`avatar-wrap relative flex justify-center flex-shrink-0 mx-auto ${
-                flowStage !== 'setup'
-                  ? 'fixed inset-0 w-full h-full z-10'
-                  : 'w-full h-screen'
-              } ${isStageTransitioning ? 'opacity-0' : 'opacity-100'}`}
-              style={{
-                background: 'transparent',
-                transition: 'opacity 0.7s ease-in-out',
-              }}
+              className={`avatar-wrap relative flex items-end justify-center transition-all duration-700 ease-in-out flex-shrink-0 mx-auto ${
+                isPortraitDisplay
+                  ? 'h-[95vh] w-[450px] lg:w-[500px] scale-110'
+                  : 'h-[85vh] w-[450px] lg:w-[500px] scale-105'
+              } ${isStageTransitioning ? 'opacity-0 scale-[0.99]' : 'opacity-100'}`}
+              style={{ background: 'transparent' }}
             >
 
               {flowStage === 'warmup' || flowStage === 'cooldown' ? (
@@ -1003,21 +996,19 @@ export default function YogaPage() {
                   playAnimationKey={previewAnimKey}
                   isPaused={false}
                   cameraTargetYOffset={0}
-                  cameraZoom={1}
+                  cameraZoom={getPoseZoom(selectedPose, isPortraitDisplay)}
                 />
               ) : (
-                <Avatar3D
-                  selectedPose={selectedPose}
-                  onlyInAnimation={flowStage === 'pose' && shouldPlayAnimation}
+                <Avatar3D 
+                  selectedPose={selectedPose} 
+                  onlyInAnimation={flowStage === 'pose' && shouldPlayAnimation} 
                   onlyOutAnimation={flowStage === 'release' && playReleaseInstructions}
                   staticMode={flowStage !== 'pose' && flowStage !== 'release'}
-                  isTTSSpeaking={isTTSSpeaking}
-                  isPaused={isPaused}
+                  isTTSSpeaking={isTTSSpeaking} 
+                  isPaused={isPaused} 
                   playAnimationKey={poseRestartKey}
                   cameraTargetYOffset={0}
-                  cameraZoom={1}
-                  cameraPositionYRaise={0.55}
-                  lockCamera={true}
+                  cameraZoom={getPoseZoom(selectedPose, isPortraitDisplay)}
                   onPhaseChange={(phase) => {
                     // Map 'main' to 'hold' for timer activation
                     setCurrentPhase(phase === 'main' ? 'hold' : phase);
@@ -1050,10 +1041,10 @@ export default function YogaPage() {
 
           {/* Main Content Section - Dynamic Positioning */}
 
-          <div className={`transition-all duration-700 ease-in-out col-span-12 ${
-            !isSessionStarted && flowStage === 'setup'
-              ? 'relative z-20 -mt-[50vh]'
-              : 'relative'
+          <div className={`relative transition-all duration-700 ease-in-out ${
+            isSessionStarted && flowStage === 'pose'
+              ? 'col-span-12'
+              : 'col-span-12 lg:col-span-7'
           }`}>
 
             {flowStage === 'warmup' && (
@@ -1118,11 +1109,11 @@ export default function YogaPage() {
               </div>
             )}
 
-            {/* Session Timer - Fixed above buttons during MAIN (hold) phase */}
+            {/* Session Timer - Show ONLY during MAIN (hold) phase */}
             {isSessionStarted && flowStage === 'pose' && currentPhase === 'hold' && (
-              <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-30 mb-2">
-                <div className="flex flex-col items-center space-y-2">
-                  <div className="text-3xl font-bold text-red-500" style={{ fontFamily: 'var(--font-future)' }}>
+              <div className="mb-4 mt-2">
+                <div className="flex flex-col items-center space-y-3">
+                  <div className="text-3xl font-bold text-[var(--brand-neo)]" style={{ fontFamily: 'var(--font-future)' }}>
                     {formatTime(timeLeft)}
                   </div>
                   <div className="flex items-center space-x-4 text-xs">
@@ -1173,7 +1164,7 @@ export default function YogaPage() {
 
             {/* Pose Selector - Hide During Session */}
             {!isSessionStarted && flowStage === 'setup' && (
-              <div className="mt-7">
+              <div className="mt-4">
                 <GlassCard title="Pose Selector">
                   <div className="space-y-3">
                     <select
@@ -1209,7 +1200,7 @@ export default function YogaPage() {
 
                 ? 'fixed bottom-8 left-1/2 -translate-x-1/2 z-20' 
 
-                : 'mt-7'
+                : 'mt-4'
 
             }`}>
               {!isSessionStarted && flowStage === 'setup' ? (
@@ -1284,7 +1275,7 @@ export default function YogaPage() {
             {/* Session Stats - Hide During Session */}
             {!isSessionStarted && flowStage === 'setup' && (
               <>
-                <GlassCard title="Session Stats" className="mt-7">
+                <GlassCard title="Session Stats" className="mt-4">
                   <ul className="space-y-1 text-[16px] text-[var(--ink-med)]">
                     <li>Duration <span className="float-right font-semibold">{sessionStats.duration} min</span></li>
                     <li>Calories burned <span className="float-right font-semibold">{sessionStats.calories} cl</span></li>
@@ -1297,7 +1288,7 @@ export default function YogaPage() {
                 </GlassCard>
 
                 {/* Streak Status Indicator */}
-                <GlassCard title="Streak Status" className="mt-7">
+                <GlassCard title="Streak Status" className="mt-4">
                   <div className="text-center">
                     <div className="text-[48px] font-black text-[var(--brand-neo)] mb-2">
                       🔥 {sessionStats.streak}
@@ -1333,7 +1324,7 @@ export default function YogaPage() {
             {/* Session Summary (when ended) */}
             {sessionSummary && !isSessionStarted && flowStage === 'setup' && (
               <div id="session-summary">
-                <GlassCard title="Session Summary" className="mt-7">
+                <GlassCard title="Session Summary" className="mt-4">
                 <ul className="space-y-1 text-[14px] text-[var(--ink-med)]">
                   <li>Total Duration <span className="float-right font-semibold">{Math.round(sessionSummary.duration_seconds)}s</span></li>
 
