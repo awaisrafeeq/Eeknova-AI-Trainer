@@ -134,7 +134,9 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
       const isHighZoom = zoom >= 1.25;
 
       // Add a bit of headroom so the avatar's head doesn't get cropped on small/portrait canvases.
-      const verticalFitFactor = aspect < 0.8 ? 0.72 : (isHighZoom ? 0.78 : 0.74);
+      // When lockCamera is true (session), use adjusted factor to frame avatar lower without lean
+      const baseVerticalFit = aspect < 0.8 ? 0.72 : (isHighZoom ? 0.78 : 0.74);
+      const verticalFitFactor = lockCamera ? 0.72 : baseVerticalFit; // 0.72 = even less lean
       const fitHeightDistance = (effectiveSize.y * verticalFitFactor) / Math.tan(vFov * 0.5);
       const hFov = 2 * Math.atan(Math.tan(vFov * 0.5) * aspect);
       const fitWidthDistance = (effectiveSize.x * 0.5) / Math.tan(hFov * 0.5);
@@ -153,12 +155,17 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
         distance *= Math.max(1, zoomSafety);
       }
 
-      // Bias the target slightly downward so raised arms/hands stay in frame on portrait displays.
-      // Keep it subtle (and even less when zoomed) to avoid cropping the head.
+      // Bias the target so avatar appears at bottom of viewport during session
       const target = center.clone();
-      const biasBase = aspect < 0.8 ? 0.08 : 0.075;
-      const biasZoomFactor = zoom >= 1.25 ? 0.05 : (zoom > 1.15 ? 0.2 : 1);
-      target.y -= effectiveSize.y * biasBase * biasZoomFactor;
+      if (lockCamera) {
+        // During session: bias target UP to frame avatar at bottom (0.20 = balance of position and lean)
+        target.y += effectiveSize.y * 0.20;
+      } else {
+        // Normal: slight downward bias for hands
+        const biasBase = aspect < 0.8 ? 0.08 : 0.075;
+        const biasZoomFactor = zoom >= 1.25 ? 0.05 : (zoom > 1.15 ? 0.2 : 1);
+        target.y -= effectiveSize.y * biasBase * biasZoomFactor;
+      }
 
       const yOffset = Number.isFinite(cameraTargetYOffset) ? cameraTargetYOffset : 0;
       target.y += yOffset;
@@ -168,11 +175,19 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
 
       // cameraPositionYRaise: raise camera above target so model appears in lower part of viewport
       const yRaise = Number.isFinite(cameraPositionYRaise) && cameraPositionYRaise ? cameraPositionYRaise * effectiveSize.y : 0;
+      
+      // To push model to bottom: look at a point ABOVE model's center
+      // This makes model appear lower in viewport without changing camera position or model size
+      const lookAtTarget = target.clone();
+      if (lockCamera) {
+        lookAtTarget.y += effectiveSize.y * 0.4; // Look 40% above center = model appears at bottom
+      }
+      
       perspective.position.set(0, target.y + yRaise, target.z + distance);
+      perspective.lookAt(lookAtTarget);
       perspective.near = Math.max(0.01, distance / 100);
       perspective.far = Math.max(1000, distance * 100);
       perspective.updateProjectionMatrix();
-      perspective.lookAt(target);
 
       onTargetChange([target.x, target.y, target.z]);
 
@@ -1967,9 +1982,9 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
 
   // Always show a fallback for walktour purposes
   return (
-    <div className="w-full h-full flex items-center justify-center" style={{ position: "relative" }} data-walktour="avatar">
+    <div className="w-full h-full flex items-end justify-center" style={{ position: "relative" }} data-walktour="avatar">
       {webglSupported && !error ? (
-        <div className="w-full h-full" style={{ position: "relative" }}>
+        <div className="w-full h-full flex items-end justify-center" style={{ position: "relative" }}>
           {modelLoading && (
             <div style={{
               position: 'absolute',

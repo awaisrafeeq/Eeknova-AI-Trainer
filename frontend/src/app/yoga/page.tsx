@@ -959,90 +959,70 @@ export default function YogaPage() {
 
 
 
-        <section className={`relative grid grid-cols-12 ${
+        <section className={`${
           flowStage !== 'setup'
-            ? 'mt-0'
-            : 'mt-20 md:mt-24'
-        } ${
-          flowStage !== 'setup'
-            ? 'gap-2 md:gap-3'
-            : 'gap-4 md:gap-6'
+            ? 'fixed inset-0 flex flex-col z-10'
+            : 'relative grid grid-cols-12 mt-20 md:mt-24 gap-4 md:gap-6'
         }`}>
 
-          {/* Avatar Section - Dynamic Positioning */}
+          {/* Avatar Section */}
+          <div className={`${
+            flowStage !== 'setup' ? 'absolute inset-x-0 bottom-0 h-screen' : 'col-span-12 h-[50vh]'
+          } transition-all duration-700 ease-in-out`}>
 
-          <div className={`relative transition-all duration-700 ease-in-out col-span-12`}>
+            <div className={`flex ${
+              flowStage !== 'setup' ? 'h-full items-end' : 'h-full pt-[10vh] items-start'
+            } justify-center w-full ${isStageTransitioning ? 'opacity-0' : 'opacity-100'}`}
+              style={{ background: 'transparent' }}>
 
-            <div
-              className={`avatar-wrap relative flex justify-center flex-shrink-0 mx-auto ${
-                flowStage !== 'setup'
-                  ? 'fixed inset-0 w-full h-full z-10'
-                  : 'w-full h-screen'
-              } ${isStageTransitioning ? 'opacity-0' : 'opacity-100'}`}
-              style={{
-                background: 'transparent',
-                transition: 'opacity 0.7s ease-in-out',
-              }}
-            >
-
-              {flowStage === 'warmup' || flowStage === 'cooldown' ? (
-                <Avatar3D
-                  selectedPose={selectedPose}
-                  staticMode={true}
-                  playAnimationPath={currentAuxStep.path}
-                  playAnimationKey={auxAnimKey}
-                  isPaused={isPaused}
-                  cameraZoom={1}
-                />
-              ) : flowStage === 'setup' && !isSessionStarted ? (
-                // Pose Preview: Show MAIN pose animation when selecting from dropdown
-                <Avatar3D
-                  selectedPose={selectedPose}
-                  staticMode={false}
-                  playAnimationPath={getMainPosePath(selectedPose)}
-                  playAnimationKey={previewAnimKey}
-                  isPaused={false}
-                  cameraTargetYOffset={0}
-                  cameraZoom={1}
-                />
-              ) : (
-                <Avatar3D
-                  selectedPose={selectedPose}
-                  onlyInAnimation={flowStage === 'pose' && shouldPlayAnimation}
-                  onlyOutAnimation={flowStage === 'release' && playReleaseInstructions}
-                  staticMode={flowStage !== 'pose' && flowStage !== 'release'}
-                  isTTSSpeaking={isTTSSpeaking}
-                  isPaused={isPaused}
-                  playAnimationKey={poseRestartKey}
-                  cameraTargetYOffset={0}
-                  cameraZoom={1}
-                  cameraPositionYRaise={0.55}
-                  lockCamera={true}
-                  onPhaseChange={(phase) => {
-                    // Map 'main' to 'hold' for timer activation
-                    setCurrentPhase(phase === 'main' ? 'hold' : phase);
-                  }}
-                  onSessionEnd={() => {
-                    if (flowStage === 'pose') {
-                      transitionToRelease();
-                    }
-                    // Note: In release stage, we DON'T call finalizeSessionEnd here
-                    // We wait for onReleaseInstructionsEnd to finish TTS first
-                  }}
-                />
-              )}
-
-            </div>
-
-            {/* {!isSessionStarted && flowStage === 'setup' && (
-
-              <div className="text-center mt-2 text-[var(--ink-med)] text-sm">
-
-                Reference: {selectedPose}
-
+              <div className={`${
+                flowStage !== 'setup' ? 'h-[80vh] w-full' : 'h-[40vh] w-full mt-[5vh]'
+              } flex items-end justify-center`}>
+                {flowStage === 'warmup' || flowStage === 'cooldown' ? (
+                  <Avatar3D
+                    selectedPose={selectedPose}
+                    staticMode={true}
+                    playAnimationPath={currentAuxStep.path}
+                    playAnimationKey={auxAnimKey}
+                    isPaused={isPaused}
+                    cameraZoom={1}
+                  />
+                ) : flowStage === 'setup' && !isSessionStarted ? (
+                  <Avatar3D
+                    selectedPose={selectedPose}
+                    staticMode={false}
+                    playAnimationPath={getMainPosePath(selectedPose)}
+                    playAnimationKey={previewAnimKey}
+                    isPaused={false}
+                    cameraTargetYOffset={0}
+                    cameraZoom={1}
+                  />
+                ) : (
+                  <Avatar3D
+                    selectedPose={selectedPose}
+                    onlyInAnimation={flowStage === 'pose' && shouldPlayAnimation}
+                    onlyOutAnimation={flowStage === 'release' && playReleaseInstructions}
+                    staticMode={flowStage !== 'pose' && flowStage !== 'release'}
+                    isTTSSpeaking={isTTSSpeaking}
+                    isPaused={isPaused}
+                    playAnimationKey={poseRestartKey}
+                    cameraTargetYOffset={0}
+                    cameraZoom={1}
+                    cameraPositionYRaise={0.55}
+                    lockCamera={true}
+                    onPhaseChange={(phase) => {
+                      setCurrentPhase(phase === 'main' ? 'hold' : phase);
+                    }}
+                    onSessionEnd={() => {
+                      if (flowStage === 'pose') {
+                        transitionToRelease();
+                      }
+                    }}
+                  />
+                )}
               </div>
 
-            )} */}
+            </div>
 
           </div>
 
@@ -1050,11 +1030,7 @@ export default function YogaPage() {
 
           {/* Main Content Section - Dynamic Positioning */}
 
-          <div className={`transition-all duration-700 ease-in-out col-span-12 ${
-            !isSessionStarted && flowStage === 'setup'
-              ? 'relative z-20 -mt-[50vh]'
-              : 'relative'
-          }`}>
+          <div className={`transition-all duration-700 ease-in-out col-span-12 relative h-[50vh]`}>
 
             {flowStage === 'warmup' && (
               <div className="mb-4 mt-2">
