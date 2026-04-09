@@ -2,7 +2,7 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
-INSTRUCTION_PATH = Path(__file__).resolve().parents[1] / "BEGINNER_Yoga_Static_Messages.docx.md"
+INSTRUCTION_PATH = Path(__file__).resolve().parent / "BEGINNER_Yoga_Static_Messages.docx.md"
 
 _instructions_cache: Optional[Dict[str, Dict[str, List[str]]]] = None
 _pose_name_cache: Optional[Dict[str, str]] = None
