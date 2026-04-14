@@ -134,11 +134,17 @@ export default function Page() {
             >
                 <Particles />
 
-                <div className="mx-auto max-w-[1080px] px-6 md:px-8 py-6 md:py-8">
-                    <section className="relative grid grid-cols-12 gap-4 md:gap-6">
-                        <div className="col-span-12 lg:col-span-5 xl:col-span-5 relative flex items-center justify-center">
-                            <div className="avatar-wrap relative h-[78vh] w-full" data-walktour="avatar" style={{ background: 'transparent' }}>
-                                <Avatar3D selectedPose="" onlyInAnimation={false} staticModelPath="/smile_greet_compressed.glb" cameraZoom={1.1} />
+                <div className="mx-auto max-w-[1280px] ">
+                    <section className="relative grid grid-cols-12">
+                        <div className="col-span-12 lg:col-span-7 xl:col-span-7 relative flex items-center justify-start">
+                            <div className="avatar-wrap relative h-[78vh] w-full overflow-visible" data-walktour="avatar" style={{ background: 'transparent' }}>
+                                <Avatar3D
+                                    selectedPose=""
+                                    onlyInAnimation={false}
+                                    staticModelPath="/smile_greet_compressed.glb"
+                                    cameraManualDistanceFactor={2.12}
+                                    cameraManualTargetYOffsetFactor={0.08}
+                                />
                                 {/* Fake shadow removed to stop float illusion */}
                             </div>
                         </div>
@@ -147,7 +153,7 @@ export default function Page() {
                             <div className="absolute inset-y-6 left-1/2 w-px -translate-x-1/2 bg-gradient-to-b from-[rgba(25,227,255,.0)] via-[rgba(25,227,255,.75)] to-[rgba(25,227,255,.0)] shadow-[0_0_16px_rgba(25,227,255,.65),0_0_48px_rgba(25,227,255,.28)]" />
                         </div>
 
-                        <aside className="col-span-12 lg:col-span-6 xl:col-span-6 content-center">
+                        <aside className="col-span-12 lg:col-span-4 xl:col-span-4 content-center">
                             <div className="flex items-center gap-4 mb-6">
                                 <div className="h-39 w-39 rounded-full border border-[var(--glass-stroke)] bg-[var(--glass)] grid place-items-center shadow-[var(--glow-neo)]">
                                     <RunnerBadge />

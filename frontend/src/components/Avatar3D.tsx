@@ -90,7 +90,7 @@ function CameraControls({ target }: { target?: [number, number, number] }) {
 
 }
 
-function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset, cameraPositionYRaise, lockCamera, onTargetChange }: { object: THREE.Object3D | null; referenceSize: THREE.Vector3 | null; cameraZoom: number; cameraTargetYOffset: number; cameraPositionYRaise?: number; lockCamera?: boolean; onTargetChange: (t: [number, number, number]) => void }) {
+function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset, cameraPositionYRaise, cameraDistanceScale, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera, onTargetChange }: { object: THREE.Object3D | null; referenceSize: THREE.Vector3 | null; cameraZoom: number; cameraTargetYOffset: number; cameraPositionYRaise?: number; cameraDistanceScale?: number; cameraManualDistanceFactor?: number; cameraManualTargetYOffsetFactor?: number; cameraManualTargetXOffsetFactor?: number; lockCamera?: boolean; onTargetChange: (t: [number, number, number]) => void }) {
 
   const { camera, size } = useThree();
   const cameraSetRef = React.useRef(false);
@@ -126,8 +126,34 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
         )
         : boxSize;
 
-      const aspect = size.width / Math.max(1, size.height);
       const perspective = camera as THREE.PerspectiveCamera;
+
+      const manualDistanceFactor = Number.isFinite(cameraManualDistanceFactor) && cameraManualDistanceFactor && cameraManualDistanceFactor > 0
+        ? cameraManualDistanceFactor
+        : null;
+
+      if (manualDistanceFactor) {
+        const target = center.clone();
+        const manualTargetYOffset = Number.isFinite(cameraManualTargetYOffsetFactor)
+          ? cameraManualTargetYOffsetFactor!
+          : 0;
+        const manualTargetXOffset = Number.isFinite(cameraManualTargetXOffsetFactor)
+          ? cameraManualTargetXOffsetFactor!
+          : 0;
+        target.y += effectiveSize.y * manualTargetYOffset;
+        target.x += effectiveSize.x * manualTargetXOffset;
+
+        const distance = effectiveSize.y * manualDistanceFactor;
+        perspective.position.set(0, target.y, target.z + distance);
+        perspective.lookAt(target);
+        perspective.near = Math.max(0.01, distance / 100);
+        perspective.far = Math.max(1000, distance * 100);
+        perspective.updateProjectionMatrix();
+        onTargetChange([target.x, target.y, target.z]);
+        return;
+      }
+
+      const aspect = size.width / Math.max(1, size.height);
       const vFov = (perspective.fov * Math.PI) / 180;
 
       const zoom = Number.isFinite(cameraZoom) && cameraZoom > 0 ? cameraZoom : 1;
@@ -154,6 +180,11 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
         const zoomSafety = 1 + (zoom - 1.25) * 1.35;
         distance *= Math.max(1, zoomSafety);
       }
+
+      const distanceScale = Number.isFinite(cameraDistanceScale) && cameraDistanceScale && cameraDistanceScale > 0
+        ? cameraDistanceScale
+        : 1;
+      distance *= distanceScale;
 
       // Bias the target so avatar appears at bottom of viewport during session
       const target = center.clone();
@@ -200,7 +231,7 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
 
     }
 
-  }, [object, referenceSize, cameraZoom, cameraTargetYOffset, cameraPositionYRaise, lockCamera, camera, size.width, size.height, onTargetChange]);
+  }, [object, referenceSize, cameraZoom, cameraTargetYOffset, cameraPositionYRaise, cameraDistanceScale, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera, camera, size.width, size.height, onTargetChange]);
 
   return null;
 
@@ -359,6 +390,10 @@ interface Avatar3DProps {
   cameraZoom?: number;
   cameraTargetYOffset?: number;
   cameraPositionYRaise?: number;
+  cameraDistanceScale?: number;
+  cameraManualDistanceFactor?: number;
+  cameraManualTargetYOffsetFactor?: number;
+  cameraManualTargetXOffsetFactor?: number;
   lockCamera?: boolean;
   skinToneColor?: string;
   skinToneStrength?: number;
@@ -1921,6 +1956,14 @@ interface Avatar3DProps {
 
   cameraPositionYRaise?: number;
 
+  cameraDistanceScale?: number;
+
+  cameraManualDistanceFactor?: number;
+
+  cameraManualTargetYOffsetFactor?: number;
+
+  cameraManualTargetXOffsetFactor?: number;
+
   lockCamera?: boolean;
 
   skinToneColor?: string;
@@ -1935,7 +1978,7 @@ interface Avatar3DProps {
 
 
 
-export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, lockCamera = false, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onTTSSpeaking, onError, onSessionEnd, onPhaseChange }: Avatar3DProps) {
+export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, cameraDistanceScale = 1, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera = false, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onTTSSpeaking, onError, onSessionEnd, onPhaseChange }: Avatar3DProps) {
 
   const [webglSupported, setWebglSupported] = useState(true);
 
@@ -2033,7 +2076,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
             <directionalLight position={[-5, 5, 5]} intensity={0.8} />
             <pointLight position={[0, 2, 2]} intensity={0.6} />
             <hemisphereLight args={[0xffffff, 0x444444, 0.3]} />
-            <AutoFitCamera object={fitObject} referenceSize={referenceSizeRef.current} cameraZoom={cameraZoom} cameraTargetYOffset={cameraTargetYOffset} cameraPositionYRaise={cameraPositionYRaise} lockCamera={lockCamera} onTargetChange={setCameraTarget} />
+            <AutoFitCamera object={fitObject} referenceSize={referenceSizeRef.current} cameraZoom={cameraZoom} cameraTargetYOffset={cameraTargetYOffset} cameraPositionYRaise={cameraPositionYRaise} cameraDistanceScale={cameraDistanceScale} cameraManualDistanceFactor={cameraManualDistanceFactor} cameraManualTargetYOffsetFactor={cameraManualTargetYOffsetFactor} cameraManualTargetXOffsetFactor={cameraManualTargetXOffsetFactor} lockCamera={lockCamera} onTargetChange={setCameraTarget} />
             <CameraControls target={cameraTarget} />
             <Suspense fallback={null}>
               <YogaModel
