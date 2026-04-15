@@ -150,6 +150,9 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
         perspective.far = Math.max(1000, distance * 100);
         perspective.updateProjectionMatrix();
         onTargetChange([target.x, target.y, target.z]);
+        if (lockCamera) {
+          cameraSetRef.current = true;
+        }
         return;
       }
 

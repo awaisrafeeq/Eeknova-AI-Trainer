@@ -937,8 +937,8 @@ export default function YogaPage() {
         flowStage !== 'setup'
           ? 'w-full max-w-none p-0'
           : isPortraitDisplay
-            ? 'w-full max-w-none px-3 md:px-4 py-6 md:py-8'
-            : 'max-w-[1400px] px-6 md:px-8 py-6 md:py-8'
+            ? 'w-full max-w-none px-3 md:px-4 pb-6 md:pb-8'
+            : 'max-w-[1400px] px-6 md:px-8 pb-6 md:pb-8'
       }`}>
 
         {/* Back Button - Hidden during session for clean transparent view */}
@@ -962,7 +962,7 @@ export default function YogaPage() {
         <section className={`${
           flowStage !== 'setup'
             ? 'fixed inset-0 flex flex-col z-10'
-            : 'relative grid grid-cols-12 mt-20 md:mt-24 gap-4 md:gap-6'
+            : 'relative grid grid-cols-12 gap-4 md:gap-6'
         }`}>
 
           {/* Avatar Section */}
@@ -971,12 +971,12 @@ export default function YogaPage() {
           } transition-all duration-700 ease-in-out`}>
 
             <div className={`flex ${
-              flowStage !== 'setup' ? 'h-full items-end' : 'h-full pt-[10vh] items-start'
+              flowStage !== 'setup' ? 'h-full items-end' : 'h-full items-end'
             } justify-center w-full ${isStageTransitioning ? 'opacity-0' : 'opacity-100'}`}
               style={{ background: 'transparent' }}>
 
               <div className={`${
-                flowStage !== 'setup' ? 'h-[80vh] w-full' : 'h-[40vh] w-full mt-[5vh]'
+                flowStage !== 'setup' ? 'h-[80vh] w-full' : 'h-[50vh] w-full'
               } flex items-end justify-center`}>
                 {flowStage === 'warmup' || flowStage === 'cooldown' ? (
                   <Avatar3D
@@ -994,11 +994,12 @@ export default function YogaPage() {
                     playAnimationPath={getMainPosePath(selectedPose)}
                     playAnimationKey={previewAnimKey}
                     isPaused={false}
-                    cameraTargetYOffset={0}
-                    cameraZoom={1}
+                    cameraManualDistanceFactor={1.75}
+                    cameraManualTargetYOffsetFactor={0.36}
                   />
                 ) : (
                   <Avatar3D
+                    key={`session-avatar-${flowStage}-${poseRestartKey}`}
                     selectedPose={selectedPose}
                     onlyInAnimation={flowStage === 'pose' && shouldPlayAnimation}
                     onlyOutAnimation={flowStage === 'release' && playReleaseInstructions}
@@ -1006,9 +1007,8 @@ export default function YogaPage() {
                     isTTSSpeaking={isTTSSpeaking}
                     isPaused={isPaused}
                     playAnimationKey={poseRestartKey}
-                    cameraTargetYOffset={0}
-                    cameraZoom={1}
-                    cameraPositionYRaise={0.55}
+                    cameraManualDistanceFactor={1.6}
+                    cameraManualTargetYOffsetFactor={0.20}
                     lockCamera={true}
                     onPhaseChange={(phase) => {
                       setCurrentPhase(phase === 'main' ? 'hold' : phase);
@@ -1519,4 +1519,3 @@ function Particles() {
   );
 
 }
-
