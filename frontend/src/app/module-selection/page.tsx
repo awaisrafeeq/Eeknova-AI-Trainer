@@ -142,8 +142,9 @@ export default function Page() {
                                     selectedPose=""
                                     onlyInAnimation={false}
                                     staticModelPath="/smile_greet_compressed.glb"
-                                    cameraManualDistanceFactor={2.12}
+                                    cameraManualDistanceFactor={1.50}
                                     cameraManualTargetYOffsetFactor={0.08}
+                                    cameraManualTargetXOffsetFactor={-0.08}
                                 />
                                 {/* Fake shadow removed to stop float illusion */}
                             </div>
