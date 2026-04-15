@@ -153,7 +153,7 @@ export default function Page() {
                             <div className="absolute inset-y-6 left-1/2 w-px -translate-x-1/2 bg-gradient-to-b from-[rgba(25,227,255,.0)] via-[rgba(25,227,255,.75)] to-[rgba(25,227,255,.0)] shadow-[0_0_16px_rgba(25,227,255,.65),0_0_48px_rgba(25,227,255,.28)]" />
                         </div>
 
-                        <aside className="col-span-12 lg:col-span-4 xl:col-span-4 content-center">
+                        <aside className="col-span-12 lg:col-span-4 xl:col-span-4 content-center lg:-ml-8 xl:-ml-10 lg:max-w-[390px]">
                             <div className="flex items-center gap-4 mb-6">
                                 <div className="h-39 w-39 rounded-full border border-[var(--glass-stroke)] bg-[var(--glass)] grid place-items-center shadow-[var(--glow-neo)]">
                                     <RunnerBadge />
