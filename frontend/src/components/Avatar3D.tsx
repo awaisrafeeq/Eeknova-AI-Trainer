@@ -229,11 +229,15 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
         const manualTargetXOffset = Number.isFinite(cameraManualTargetXOffsetFactor)
           ? cameraManualTargetXOffsetFactor!
           : 0;
-        target.y += effectiveSize.y * manualTargetYOffset;
-        target.x += effectiveSize.x * manualTargetXOffset;
+        // Use the model floor as the primary vertical anchor so framing stays stable
+        // across instruction/static and animated in/main/out models whose bbox centers
+        // can shift significantly on tall holobox displays.
+        const floorAnchoredY = box.min.y + effectiveSize.y * (0.5 + manualTargetYOffset);
+        target.y = floorAnchoredY;
+        target.x = center.x + effectiveSize.x * manualTargetXOffset;
 
         const distance = effectiveSize.y * manualDistanceFactor;
-        perspective.position.set(0, target.y, target.z + distance);
+        perspective.position.set(target.x, target.y, target.z + distance);
         perspective.lookAt(target);
         perspective.near = Math.max(0.01, distance / 100);
         perspective.far = Math.max(1000, distance * 100);
