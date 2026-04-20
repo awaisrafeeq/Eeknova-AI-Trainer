@@ -71,7 +71,7 @@ const MET_VALUES: Record<string, number> = {
 
   "Warrior Pose": 3.2,
 
-  "Triangle": 3.0,
+  "Triangle Pose": 3.0,
 
   "Child Pose": 1.8,
 
@@ -268,6 +268,10 @@ export default function YogaPage() {
   const [playGuidedInstructions, setPlayGuidedInstructions] = useState(false); // Control guided instructions
 
   const [playReleaseInstructions, setPlayReleaseInstructions] = useState(false);
+  const [useStaticSetupPreview, setUseStaticSetupPreview] = useState(false);
+  const releaseFinalizedRef = useRef(false);
+  const [releaseInstructionsDone, setReleaseInstructionsDone] = useState(false);
+  const [releaseAnimationDone, setReleaseAnimationDone] = useState(false);
 
   const transitionToRelease = useCallback(() => {
     // Abort any ongoing TTS feedback before exit instructions start
@@ -279,6 +283,10 @@ export default function YogaPage() {
     } catch (error) {
       console.log('TTS stop error:', error);
     }
+
+    setReleaseInstructionsDone(false);
+    setReleaseAnimationDone(false);
+    releaseFinalizedRef.current = false;
     
     setIsStageTransitioning(true);
     setTimeout(() => {
@@ -290,7 +298,7 @@ export default function YogaPage() {
       setFlowStage('release');
       setTimeout(() => setIsStageTransitioning(false), 350);
     }, 220);
-  }, []);
+  }, [selectedPose]);
 
   // Timer state for pose duration
   const [totalTime, setTotalTime] = useState(0);
@@ -308,10 +316,11 @@ export default function YogaPage() {
     "Downward Dog": { in: 9, hold: 30, out: 8, total: 47 },
     "Warrior 1": { in: 8, hold: 30, out: 6, total: 44 },
     "Warrior Pose": { in: 8, hold: 30, out: 6, total: 44 },
-    "Triangle": { in: 4, hold: 25, out: 4, total: 33 },
+    "Triangle Pose": { in: 4, hold: 25, out: 4, total: 33 },
     "Child Pose": { in: 10, hold: 33, out: 9, total: 52 },
     "Cobra Pose": { in: 9, hold: 21, out: 9, total: 39 },
     "Cat And Camel Pose": { in: 8, hold: 42, out: 10, total: 60 },
+    "Seated Forward": { in: 5, hold: 35, out: 5, total: 45 },
   };
 
 
@@ -517,6 +526,7 @@ export default function YogaPage() {
     setCurrentAccuracy(0);
     setIsPaused(false);
     setShowWarmupSkipWarning(false);
+    setUseStaticSetupPreview(false);
 
     setFlowStage('instructions');
     setIsSessionStarted(false);
@@ -576,6 +586,10 @@ export default function YogaPage() {
   };
 
   const finalizeSessionEnd = () => {
+    if (releaseFinalizedRef.current) {
+      return;
+    }
+    releaseFinalizedRef.current = true;
     console.log('🔄 Finalizing session end - resetting all states');
     setFlowStage('setup');
     setIsSessionStarted(false);
@@ -589,8 +603,19 @@ export default function YogaPage() {
     setTimerActive(false); // Reset timer active state
     setPhaseTimeLeft(0);
     setSessionPhase('idle');
+    setUseStaticSetupPreview(true);
     // Don't reset sessionSummary here - let it show
   };
+
+  useEffect(() => {
+    if (flowStage === 'release' && releaseInstructionsDone && releaseAnimationDone) {
+      if (!sessionSummary && pendingSessionSummaryRef.current) {
+        applySessionSummary(pendingSessionSummaryRef.current);
+        pendingSessionSummaryRef.current = null;
+      }
+      finalizeSessionEnd();
+    }
+  }, [flowStage, releaseInstructionsDone, releaseAnimationDone, sessionSummary]);
 
   // Effect to handle session end and ensure proper UI state
   useEffect(() => {
@@ -990,25 +1015,36 @@ export default function YogaPage() {
                 ) : flowStage === 'setup' && !isSessionStarted ? (
                   <Avatar3D
                     selectedPose={selectedPose}
-                    staticMode={false}
-                    playAnimationPath={getMainPosePath(selectedPose)}
-                    playAnimationKey={previewAnimKey}
+                    staticMode={useStaticSetupPreview || !!sessionSummary}
+                    playAnimationPath={useStaticSetupPreview || sessionSummary ? undefined : getMainPosePath(selectedPose)}
+                    playAnimationKey={useStaticSetupPreview || sessionSummary ? undefined : previewAnimKey}
                     isPaused={false}
                     cameraManualDistanceFactor={1.75}
-                    cameraManualTargetYOffsetFactor={0.36}
+                    cameraManualTargetYOffsetFactor={0.28}
+                  />
+                ) : flowStage === 'instructions' ? (
+                  <Avatar3D
+                    selectedPose={selectedPose}
+                    staticMode={true}
+                    disablePoseMotion={true}
+                    isTTSSpeaking={isTTSSpeaking}
+                    isPaused={false}
+                    cameraManualDistanceFactor={1.6}
+                    cameraManualTargetYOffsetFactor={0.16}
+                    lockCamera={true}
                   />
                 ) : (
                   <Avatar3D
-                    key={`session-avatar-${flowStage}-${poseRestartKey}`}
+                    key={`session-avatar-${selectedPose}-${poseRestartKey}`}
                     selectedPose={selectedPose}
                     onlyInAnimation={flowStage === 'pose' && shouldPlayAnimation}
-                    onlyOutAnimation={flowStage === 'release' && playReleaseInstructions}
+                    onlyOutAnimation={flowStage === 'release'}
                     staticMode={flowStage !== 'pose' && flowStage !== 'release'}
                     isTTSSpeaking={isTTSSpeaking}
                     isPaused={isPaused}
                     playAnimationKey={poseRestartKey}
                     cameraManualDistanceFactor={1.6}
-                    cameraManualTargetYOffsetFactor={0.20}
+                    cameraManualTargetYOffsetFactor={0.16}
                     lockCamera={true}
                     onPhaseChange={(phase) => {
                       setCurrentPhase(phase === 'main' ? 'hold' : phase);
@@ -1016,6 +1052,11 @@ export default function YogaPage() {
                     onSessionEnd={() => {
                       if (flowStage === 'pose') {
                         transitionToRelease();
+                        return;
+                      }
+
+                      if (flowStage === 'release') {
+                        setReleaseAnimationDone(true);
                       }
                     }}
                   />
@@ -1154,7 +1195,10 @@ export default function YogaPage() {
                   <div className="space-y-3">
                     <select
                       value={selectedPose}
-                      onChange={handlePoseChange}
+                      onChange={(e) => {
+                        setUseStaticSetupPreview(false);
+                        handlePoseChange(e);
+                      }}
                       disabled={isSessionStarted}
                       className="w-full px-4 py-3 rounded-lg border border-[var(--glass-stroke)] bg-[var(--glass)] text-[var(--ink-hi)] text-[16px] focus:outline-none focus:ring-2 focus:ring-[var(--brand-neo)] focus:border-transparent transition-all disabled:opacity-50"
                       style={{
@@ -1235,13 +1279,7 @@ export default function YogaPage() {
                   setIsStageTransitioning(true);
                   setTimeout(() => {
                     setPlayReleaseInstructions(false);
-
-                    if (!sessionSummary && pendingSessionSummaryRef.current) {
-                      applySessionSummary(pendingSessionSummaryRef.current);
-                      pendingSessionSummaryRef.current = null;
-                    }
-
-                    finalizeSessionEnd();
+                    setReleaseInstructionsDone(true);
                     setTimeout(() => setIsStageTransitioning(false), 350);
                   }, 220);
                 }}
@@ -1254,6 +1292,12 @@ export default function YogaPage() {
                 onPhaseChange={handlePhaseChange}
                 tolerance={10.0}
                 mirrorMode={true}
+                suppressFeedback={
+                  flowStage === 'pose' &&
+                  timerActive &&
+                  timeLeft > 0 &&
+                  timeLeft <= 5
+                }
               />
             </div>
 

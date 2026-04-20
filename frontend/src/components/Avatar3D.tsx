@@ -14,9 +14,66 @@ import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
 
+// Disable THREE's global loader cache so GLB ArrayBuffers don't pile up in JS heap
+// across yoga pose swaps. Browser HTTP cache still handles re-fetches.
+THREE.Cache.enabled = false;
+
+// Universal bounding-box floor for yoga sessions. Ensures camera distance stays
+// consistent even when a pose's IN-animation first frame has a tight bounding box.
+const YOGA_REFERENCE_SIZE = new THREE.Vector3(2.0, 2.2, 1.5);
+
 // Module-level cache for static avatar to avoid reload pauses after session ends
 let cachedStaticGltf: any = null;
 let cachedStaticModelPath: string | null = null;
+
+// Release an HTMLImageElement / ImageBitmap / ImageData held by a texture.
+// `texture.dispose()` only frees the GPU upload; the decoded image pixels in JS
+// heap are retained via `texture.image` / `texture.source` until those are cleared.
+function releaseTextureImage(tex: any) {
+  if (!tex) return;
+  try {
+    const img = tex.image;
+    if (img && typeof img.close === 'function') {
+      try { img.close(); } catch { } // ImageBitmap
+    }
+    if (img && 'src' in img) {
+      try { img.src = ''; } catch { }
+    }
+  } catch { }
+  try { tex.image = null; } catch { }
+  try {
+    if (tex.source) {
+      tex.source.data = null;
+      tex.source = null;
+    }
+  } catch { }
+  try { tex.mipmaps = []; } catch { }
+}
+
+// Dispose geometries, materials, and textures of a model to free GPU AND JS-heap memory.
+// Models flagged with __isSharedClone share resources with a cached GLTF and are skipped.
+function disposeObject3D(obj: any) {
+  if (!obj || obj.__isSharedClone) return;
+  obj.traverse((child: any) => {
+    if (!child.isMesh) return;
+    try { child.geometry?.dispose?.(); } catch { }
+    const materials = Array.isArray(child.material)
+      ? child.material
+      : child.material ? [child.material] : [];
+    for (const mat of materials) {
+      if (!mat) continue;
+      // Scan every property for textures — catches custom/plugin maps we'd miss with a fixed list.
+      for (const key of Object.keys(mat)) {
+        const val = (mat as any)[key];
+        if (val && val.isTexture) {
+          try { val.dispose(); } catch { }
+          releaseTextureImage(val);
+        }
+      }
+      try { mat.dispose?.(); } catch { }
+    }
+  });
+}
 
 function applySkinTone(root: THREE.Object3D, tone: THREE.Color, strength: number) {
   if (!root) return;
@@ -41,7 +98,16 @@ function applySkinTone(root: THREE.Object3D, tone: THREE.Color, strength: number
         matName.includes('skin');
       if (!looksLikeSkin) continue;
       if (!mat.color || !(mat.color instanceof THREE.Color)) continue;
-      mat.color.lerp(tone, s);
+      const toneMat = mat as THREE.Material & {
+        color: THREE.Color;
+        userData?: Record<string, unknown>;
+      };
+      toneMat.userData = toneMat.userData || {};
+      if (!toneMat.userData.__baseSkinColor) {
+        toneMat.userData.__baseSkinColor = toneMat.color.clone();
+      }
+      const baseColor = toneMat.userData.__baseSkinColor as THREE.Color;
+      toneMat.color.copy(baseColor).lerp(tone, s);
       mat.needsUpdate = true;
     }
   });
@@ -94,11 +160,13 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
 
   const { camera, size } = useThree();
   const cameraSetRef = React.useRef(false);
+  const appliedFitSignatureRef = React.useRef<string | null>(null);
 
   // Reset lock when lockCamera prop changes to false
   useEffect(() => {
     if (!lockCamera) {
       cameraSetRef.current = false;
+      appliedFitSignatureRef.current = null;
     }
   }, [lockCamera]);
 
@@ -127,6 +195,27 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
         : boxSize;
 
       const perspective = camera as THREE.PerspectiveCamera;
+      const fitSignature = [
+        object.uuid,
+        effectiveSize.x.toFixed(3),
+        effectiveSize.y.toFixed(3),
+        effectiveSize.z.toFixed(3),
+        size.width,
+        size.height,
+        cameraZoom,
+        cameraTargetYOffset,
+        cameraPositionYRaise ?? 0,
+        cameraDistanceScale ?? 1,
+        cameraManualDistanceFactor ?? 'auto',
+        cameraManualTargetYOffsetFactor ?? 0,
+        cameraManualTargetXOffsetFactor ?? 0,
+      ].join('|');
+
+      // Keep the session camera stable for the same fitted model/state, but allow
+      // a single refit when animation/model bounds actually change.
+      if (lockCamera && cameraSetRef.current && appliedFitSignatureRef.current === fitSignature) {
+        return;
+      }
 
       const manualDistanceFactor = Number.isFinite(cameraManualDistanceFactor) && cameraManualDistanceFactor && cameraManualDistanceFactor > 0
         ? cameraManualDistanceFactor
@@ -152,6 +241,7 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
         onTargetChange([target.x, target.y, target.z]);
         if (lockCamera) {
           cameraSetRef.current = true;
+          appliedFitSignatureRef.current = fitSignature;
         }
         return;
       }
@@ -228,6 +318,7 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
       // Mark camera as set for lock feature
       if (lockCamera) {
         cameraSetRef.current = true;
+        appliedFitSignatureRef.current = fitSignature;
       }
 
     } catch {
@@ -384,6 +475,7 @@ interface Avatar3DProps {
   selectedPose?: string;
   onlyInAnimation?: boolean;
   onlyOutAnimation?: boolean;
+  disablePoseMotion?: boolean;
   isTTSSpeaking?: boolean;
   isPaused?: boolean;
   staticMode?: boolean;
@@ -408,7 +500,7 @@ interface Avatar3DProps {
   onModelLoaded?: (model: THREE.Object3D | null) => void;
 }
 
-function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onError, onTTSSpeaking, onSessionEnd, onPhaseChange, onModelLoaded, onLoadingChange }: Avatar3DProps & { onLoadingChange?: (loading: boolean) => void }) {
+function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onError, onTTSSpeaking, onSessionEnd, onPhaseChange, onModelLoaded, onLoadingChange }: Avatar3DProps & { onLoadingChange?: (loading: boolean) => void }) {
 
   const [model, setModel] = useState<THREE.Group | null>(null);
 
@@ -419,6 +511,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
   const meshRef = useRef<THREE.Group>(null);
 
   const animationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const animationFinishedCleanupRef = useRef<(() => void) | null>(null);
 
   const currentPoseRef = useRef<string>('');
 
@@ -455,6 +548,28 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
       dracoLoaderRef.current = null;
     };
   }, [gl]);
+
+  // Dispose previous model's GPU resources when a new one replaces it.
+  // This prevents textures/geometries/materials from accumulating across
+  // pose phase swaps (in → main → out) which would otherwise hit 1GB+ in a session.
+  useEffect(() => {
+    const captured = model;
+    return () => {
+      if (captured && !(captured as any).__isSharedClone) {
+        disposeObject3D(captured);
+      }
+    };
+  }, [model]);
+
+  // Stop the previous AnimationMixer when replaced so its actions/listeners don't leak.
+  useEffect(() => {
+    const captured = mixer;
+    return () => {
+      if (captured) {
+        try { captured.stopAllAction(); } catch { }
+      }
+    };
+  }, [mixer]);
 
   useEffect(() => {
     const onAssistantAudio = (ev: Event) => {
@@ -576,6 +691,9 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
       // Clone the scene with deep clone for SkinnedMesh support
       const loadedModel = SkeletonUtils.clone(gltf.scene) as THREE.Group;
+      // Mark as shared: its geometries/materials/textures come from cachedStaticGltf
+      // and must not be disposed when this clone is removed from the scene.
+      (loadedModel as any).__isSharedClone = true;
 
 
 
@@ -725,6 +843,10 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
         clearTimeout(animationTimeoutRef.current);
         animationTimeoutRef.current = null;
       }
+      if (animationFinishedCleanupRef.current) {
+        animationFinishedCleanupRef.current();
+        animationFinishedCleanupRef.current = null;
+      }
       loadChessAvatar(staticModelPath);
       return;
     }
@@ -737,6 +859,10 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
       clearTimeout(animationTimeoutRef.current);
 
+    }
+    if (animationFinishedCleanupRef.current) {
+      animationFinishedCleanupRef.current();
+      animationFinishedCleanupRef.current = null;
     }
 
 
@@ -965,15 +1091,15 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
           onLoadingChange?.(true);
         }
 
+        const loadPath = type === 'in' ? pose.inPath : type === 'main' ? pose.mainPath : pose.outPath;
         const gltf = await new Promise<any>((resolve, reject) => {
-
-          const path = type === 'in' ? pose.inPath : type === 'main' ? pose.mainPath : pose.outPath;
-
-          loader.load(path, resolve, undefined, reject);
-
+          loader.load(loadPath, resolve, undefined, reject);
         });
 
-
+        // Capture the previous phase's model so we can dispose it AFTER the new one
+        // has been committed to the scene. Disposing before the swap would leave the
+        // renderer briefly drawing with freed textures.
+        const previousModel = meshRef.current;
 
         const loadedModel = gltf.scene;
 
@@ -982,7 +1108,14 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
         applySkinTone(loadedModel, new THREE.Color(skinToneColor), skinToneStrength);
 
-        if (!cachedChessClipsRef.current && gltf.animations && gltf.animations.length > 0) {
+        // Only cache clips for the chess static-model replay path. Caching yoga pose
+        // clips here would pin ~15-25 MB of keyframe data per session permanently.
+        if (
+          staticModelPath &&
+          !cachedChessClipsRef.current &&
+          gltf.animations &&
+          gltf.animations.length > 0
+        ) {
           cachedChessClipsRef.current = gltf.animations;
         }
 
@@ -1062,6 +1195,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
           let maxDuration = 0;
 
+          const playedActions: THREE.AnimationAction[] = [];
           gltf.animations.forEach((clip: THREE.AnimationClip) => {
             const action = animationMixer.clipAction(clip);
 
@@ -1084,7 +1218,56 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
             action.play();
             maxDuration = Math.max(maxDuration, clip.duration);
+            playedActions.push(action);
           });
+
+          if (type === 'out' && playedActions.length > 0) {
+            let remainingActions = playedActions.length;
+            const playedActionSet = new Set(playedActions);
+            const handleFinished = (event: { action?: THREE.AnimationAction }) => {
+              if (!event.action || !playedActionSet.has(event.action)) {
+                return;
+              }
+              remainingActions -= 1;
+              if (remainingActions <= 0) {
+                animationMixer.removeEventListener('finished', handleFinished as never);
+                animationFinishedCleanupRef.current = null;
+                if (animationMixer) {
+                  animationMixer.stopAllAction();
+                }
+                onSessionEnd?.();
+              }
+            };
+
+            animationMixer.addEventListener('finished', handleFinished as never);
+            animationFinishedCleanupRef.current = () => {
+              animationMixer.removeEventListener('finished', handleFinished as never);
+            };
+          }
+
+          // IN animation plays once at its natural duration; when all clips finish,
+          // transition to MAIN. No fixed-time setTimeout is used so the handoff is tight
+          // regardless of the clip's actual length.
+          if (type === 'in' && onlyInAnimation && playedActions.length > 0) {
+            let remainingIn = playedActions.length;
+            const inActionSet = new Set(playedActions);
+            const handleInFinished = (event: { action?: THREE.AnimationAction }) => {
+              if (!event.action || !inActionSet.has(event.action)) {
+                return;
+              }
+              remainingIn -= 1;
+              if (remainingIn <= 0) {
+                animationMixer.removeEventListener('finished', handleInFinished as never);
+                animationFinishedCleanupRef.current = null;
+                onPhaseChange?.('main');
+                playAnimationSequence(pose, 'main');
+              }
+            };
+            animationMixer.addEventListener('finished', handleInFinished as never);
+            animationFinishedCleanupRef.current = () => {
+              animationMixer.removeEventListener('finished', handleInFinished as never);
+            };
+          }
 
 
 
@@ -1113,52 +1296,24 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
             if (spec) {
 
-              if (type === 'in') {
+              if (type === 'main') {
+                // During guided yoga sessions, the page-level hold timer controls when we
+                // leave MAIN and enter the release phase. Do not auto-transition to OUT
+                // here, otherwise release/out can run twice.
+                if (!(onlyInAnimation && !onlyOutAnimation)) {
+                  // Use spec duration for 'Hold'
+                  animationTimeoutRef.current = setTimeout(() => {
+                    // Notify parent that we're transitioning to OUT phase
+                    onPhaseChange?.('out');
 
-                // Use spec duration for 'In' 
+                    playAnimationSequence(pose, 'out');
 
-                animationTimeoutRef.current = setTimeout(() => {
-                  // Notify parent that we're transitioning to MAIN phase
-                  onPhaseChange?.('main');
-
-                  playAnimationSequence(pose, 'main');
-
-                }, spec.in * 1000);
-
-              } else if (type === 'main') {
-
-                // Use spec duration for 'Hold'
-
-                animationTimeoutRef.current = setTimeout(() => {
-                  // Notify parent that we're transitioning to OUT phase
-                  onPhaseChange?.('out');
-
-                  playAnimationSequence(pose, 'out');
-
-                }, spec.hold * 1000);
-
-              } else if (type === 'out') {
-
-                // Stay on 'Out' for its duration
-
-                animationTimeoutRef.current = setTimeout(() => {
-
-                  // Stop the looping animation
-
-                  if (animationMixer) {
-
-                    animationMixer.stopAllAction();
-
-                  }
-
-                  // Notify parent that session ended
-                  if (onSessionEnd) {
-                    onSessionEnd();
-                  }
-
-                }, spec.out * 1000);
+                  }, spec.hold * 1000);
+                }
 
               }
+              // 'in' completion is driven by mixer 'finished' event above.
+              // 'out' completion is driven by mixer 'finished' event above.
 
             }
 
@@ -1221,6 +1376,15 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
         // Notify parent of the loaded model for camera fitting
         onModelLoaded?.(loadedModel);
 
+        // Dispose the previous phase's GPU + image-pixel memory now that React has
+        // a new model to swap in. Deferred one macrotask so the scene-graph swap
+        // commits before we free the old resources.
+        if (previousModel && previousModel !== loadedModel && !(previousModel as any).__isSharedClone) {
+          setTimeout(() => {
+            try { disposeObject3D(previousModel); } catch { }
+          }, 0);
+        }
+
         // Clear loading state after model is set
         onLoadingChange?.(false);
 
@@ -1252,7 +1416,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
     };
 
-  }, [selectedPose, staticMode, staticModelPath, playAnimationKey]);
+  }, [selectedPose, staticMode, staticModelPath, playAnimationKey, onlyInAnimation, onlyOutAnimation]);
 
 
 
@@ -1490,6 +1654,10 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
         animationTimeoutRef.current = null;
 
+      }
+      if (animationFinishedCleanupRef.current) {
+        animationFinishedCleanupRef.current();
+        animationFinishedCleanupRef.current = null;
       }
 
     };
@@ -1825,7 +1993,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
       }
 
-      // Apply forward lean regardless of speaking state
+      // Keep subtle forward lean so the avatar still feels alive while speaking.
       if (meshRef.current) {
         const baseForwardLeanX = 0.22;
         const bobX = effectiveSpeaking ? Math.sin(time * 2.2) * 0.02 : 0;
@@ -1839,7 +2007,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
       const spec = POSE_SPEC[selectedPose || 'Mountain Pose'];
 
-      if (spec) {
+      if (spec && !disablePoseMotion) {
         // TODO: Re-enable warm-up/cooldown logic later
         /*
           const isWarmUpOrCooldown = playAnimationPath && (
@@ -1943,6 +2111,8 @@ interface Avatar3DProps {
 
   onlyInAnimation?: boolean; // New prop for onboarding page
 
+  disablePoseMotion?: boolean;
+
   isTTSSpeaking?: boolean; // New prop for TTS sync
 
   isPaused?: boolean; // New prop for pause/resume
@@ -1981,7 +2151,7 @@ interface Avatar3DProps {
 
 
 
-export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, cameraDistanceScale = 1, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera = false, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onTTSSpeaking, onError, onSessionEnd, onPhaseChange }: Avatar3DProps) {
+export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, cameraDistanceScale = 1, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera = false, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onTTSSpeaking, onError, onSessionEnd, onPhaseChange }: Avatar3DProps) {
 
   const [webglSupported, setWebglSupported] = useState(true);
 
@@ -1991,7 +2161,13 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
 
   const [fitObject, setFitObject] = useState<THREE.Object3D | null>(null);
   const [cameraTarget, setCameraTarget] = useState<[number, number, number]>([0, 0, 0]);
-  const referenceSizeRef = useRef<THREE.Vector3 | null>(null);
+  // When lockCamera is true (yoga session/instructions), seed with the universal yoga
+  // bounding box so the camera distance is consistent regardless of each pose's
+  // IN-animation first-frame size.
+  const referenceSizeRef = useRef<THREE.Vector3 | null>(
+    lockCamera ? YOGA_REFERENCE_SIZE.clone() : null
+  );
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
 
   useEffect(() => {
     if (!fitObject) return;
@@ -2010,6 +2186,21 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
       }
     } catch { }
   }, [fitObject]);
+
+  // Free the WebGL context on unmount. Without this, each Avatar3D remount
+  // (flowStage change, pose restart) leaves a live GL context holding GPU memory
+  // until the browser eventually recycles it.
+  useEffect(() => {
+    return () => {
+      const gl = rendererRef.current;
+      if (gl) {
+        try { gl.renderLists?.dispose?.(); } catch { }
+        try { gl.dispose?.(); } catch { }
+        try { gl.forceContextLoss?.(); } catch { }
+      }
+      rendererRef.current = null;
+    };
+  }, []);
 
 
 
@@ -2054,11 +2245,15 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
           )}
           <Canvas
             camera={{ position: [0, 0, 3], fov: 50 }}
+            dpr={[1, 1.5]}
             gl={{
               antialias: true,
               alpha: true,
               powerPreference: "high-performance",
               failIfMajorPerformanceCaveat: false
+            }}
+            onCreated={({ gl }) => {
+              rendererRef.current = gl;
             }}
             style={{
               background: "transparent",
@@ -2073,8 +2268,8 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
               position={[5, 5, 5]}
               intensity={1}
               castShadow
-              shadow-mapSize-width={1024}
-              shadow-mapSize-height={1024}
+              shadow-mapSize-width={512}
+              shadow-mapSize-height={512}
             />
             <directionalLight position={[-5, 5, 5]} intensity={0.8} />
             <pointLight position={[0, 2, 2]} intensity={0.6} />
@@ -2086,6 +2281,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
                 selectedPose={selectedPose}
                 onlyInAnimation={onlyInAnimation}
                 onlyOutAnimation={onlyOutAnimation}
+                disablePoseMotion={disablePoseMotion}
                 isTTSSpeaking={isTTSSpeaking}
                 isPaused={isPaused}
                 staticMode={staticMode}

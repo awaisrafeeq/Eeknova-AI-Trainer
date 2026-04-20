@@ -41,6 +41,9 @@ interface YogaCameraProps {
   onReleaseInstructionsEnd?: () => void;
   tolerance?: number;
   mirrorMode?: boolean;
+  // When true, suppress correction feedback (UI + TTS). Used for the last few
+  // seconds of the hold phase so the pose ends quietly.
+  suppressFeedback?: boolean;
 }
 
 export default function YogaCamera({
@@ -59,6 +62,7 @@ export default function YogaCamera({
   onReleaseInstructionsEnd,
   tolerance = 10.0,
   mirrorMode = true,
+  suppressFeedback = false,
 }: YogaCameraProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -90,6 +94,8 @@ export default function YogaCamera({
   const isGuidedPhaseRef = useRef(false);
   const pendingGuidedEndRef = useRef(false);
   const pendingReleaseEndRef = useRef(false);
+  const releaseEarliestEndAtRef = useRef(0);
+  const releaseEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const guidedTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const prevPhaseRef = useRef<'in' | 'hold' | 'out' | 'idle' | null>(null);
   const correctionsGivenRef = useRef(0);
@@ -105,6 +111,7 @@ export default function YogaCamera({
 
   const playGuidedInstructionsRef = useRef(playGuidedInstructions);
   const playReleaseInstructionsRef = useRef(playReleaseInstructions);
+  const suppressFeedbackRef = useRef(suppressFeedback);
 
   useEffect(() => {
     playGuidedInstructionsRef.current = playGuidedInstructions;
@@ -113,6 +120,26 @@ export default function YogaCamera({
   useEffect(() => {
     playReleaseInstructionsRef.current = playReleaseInstructions;
   }, [playReleaseInstructions]);
+
+  useEffect(() => {
+    suppressFeedbackRef.current = suppressFeedback;
+  }, [suppressFeedback]);
+
+  // When the suppression window opens (final seconds of hold), stop any correction
+  // TTS that is already speaking. Guided/release instruction TTS is only active in
+  // their own phases, so this is safe to call here.
+  useEffect(() => {
+    if (!suppressFeedback) return;
+    if (playGuidedInstructionsRef.current || playReleaseInstructionsRef.current) return;
+    try {
+      if (ttsRef.current) {
+        ignoreSpeakingFalseRef.current = true;
+        ttsRef.current.stop();
+      }
+    } catch { }
+    // Also clear any previously shown corrections in the parent UI.
+    onCorrectionsUpdate([]);
+  }, [suppressFeedback, onCorrectionsUpdate]);
 
   useEffect(() => {
     onTTSSpeakingChangeRef.current = onTTSSpeakingChange;
@@ -154,6 +181,11 @@ export default function YogaCamera({
     globalCallbacks.isReleasePending = () => pendingReleaseEndRef.current;
     globalCallbacks.clearReleasePending = () => {
       pendingReleaseEndRef.current = false;
+      releaseEarliestEndAtRef.current = 0;
+      if (releaseEndTimerRef.current) {
+        clearTimeout(releaseEndTimerRef.current);
+        releaseEndTimerRef.current = null;
+      }
     };
   });
 
@@ -195,6 +227,22 @@ export default function YogaCamera({
         }
 
         if (globalCallbacks.isReleasePending?.()) {
+          const now = Date.now();
+          const earliestEndAt = releaseEarliestEndAtRef.current;
+          const remainingMs = Math.max(0, earliestEndAt - now);
+          if (remainingMs > 0) {
+            if (releaseEndTimerRef.current) {
+              clearTimeout(releaseEndTimerRef.current);
+            }
+            releaseEndTimerRef.current = setTimeout(() => {
+              if (!globalCallbacks.isReleasePending?.()) {
+                return;
+              }
+              globalCallbacks.clearReleasePending?.();
+              globalCallbacks.onReleaseEnd?.();
+            }, remainingMs);
+            return;
+          }
           globalCallbacks.clearReleasePending?.();
           globalCallbacks.onReleaseEnd?.();
         }
@@ -254,6 +302,10 @@ export default function YogaCamera({
   const queueReleaseLines = (lines: string[]) => {
     if (!ttsRef.current) return;
     clearGuidedTimeouts();
+    if (releaseEndTimerRef.current) {
+      clearTimeout(releaseEndTimerRef.current);
+      releaseEndTimerRef.current = null;
+    }
     const combined = lines.map((l) => l.trim()).filter(Boolean).join(' ');
     if (!combined) {
       onReleaseInstructionsEndRef.current?.();
@@ -267,6 +319,9 @@ export default function YogaCamera({
     }
     globalLastSpoken = { text: combined, atMs: now };
 
+    const wordCount = combined.split(/\s+/).filter(Boolean).length;
+    const estimatedSpeechMs = Math.max(3500, wordCount * 420);
+    releaseEarliestEndAtRef.current = now + estimatedSpeechMs;
     pendingReleaseEndRef.current = true;
     ttsRef.current.speak(combined, true);
   };
@@ -403,7 +458,7 @@ export default function YogaCamera({
           onAccuracyUpdate(result.accuracy);
         }
 
-        if (result.corrections && result.corrections.length > 0) {
+        if (result.corrections && result.corrections.length > 0 && !suppressFeedbackRef.current) {
           onCorrectionsUpdate(result.corrections);
 
           // Speak correction feedback (if enabled)
