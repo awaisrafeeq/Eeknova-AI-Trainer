@@ -131,9 +131,9 @@ const POSE_ANIMATIONS: Record<string, { inPath: string; mainPath: string; outPat
     outPath: "/Seated Forward Pose/out_compressed.glb",
   },
   "Warrior 1": {
-    inPath: "/Warrior 1 Pose/in_compressed.glb",
-    mainPath: "/Warrior 1 Pose/main_compressed.glb",
-    outPath: "/Warrior 1 Pose/out_compressed.glb",
+    inPath: "/Warrior 1 Pose/warrior_1_in_compressed.glb",
+    mainPath: "/Warrior 1 Pose/warrior_1_main_compressed.glb",
+    outPath: "/Warrior 1 Pose/warrior_1_out_compressed.glb",
   },
 };
 
