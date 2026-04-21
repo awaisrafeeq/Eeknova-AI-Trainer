@@ -161,6 +161,7 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
   const { camera, size } = useThree();
   const cameraSetRef = React.useRef(false);
   const appliedFitSignatureRef = React.useRef<string | null>(null);
+
   // Reset lock when lockCamera prop changes to false
   useEffect(() => {
     if (!lockCamera) {
@@ -225,16 +226,14 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
         const manualTargetXOffset = Number.isFinite(cameraManualTargetXOffsetFactor)
           ? cameraManualTargetXOffsetFactor!
           : 0;
-        const distance = effectiveSize.y * manualDistanceFactor;
-
         // Use the model floor as the primary vertical anchor so framing stays stable
         // across instruction/static and animated in/main/out models whose bbox centers
         // can shift significantly on tall holobox displays.
         const floorAnchoredY = box.min.y + effectiveSize.y * (0.5 + manualTargetYOffset);
         target.y = floorAnchoredY;
-        // Preserve the model's real center and only apply a relative manual nudge.
         target.x = center.x + effectiveSize.x * manualTargetXOffset;
 
+        const distance = effectiveSize.y * manualDistanceFactor;
         perspective.position.set(target.x, target.y, target.z + distance);
         perspective.lookAt(target);
         perspective.near = Math.max(0.01, distance / 100);
