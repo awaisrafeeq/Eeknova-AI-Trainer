@@ -174,9 +174,6 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
 
     if (!object) return;
 
-    // If camera is locked and already set, skip recalculation
-    if (lockCamera && cameraSetRef.current) return;
-
     try {
 
       const box = new THREE.Box3().setFromObject(object);
@@ -2200,7 +2197,6 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
       if (gl) {
         try { gl.renderLists?.dispose?.(); } catch { }
         try { gl.dispose?.(); } catch { }
-        try { gl.forceContextLoss?.(); } catch { }
       }
       rendererRef.current = null;
     };
