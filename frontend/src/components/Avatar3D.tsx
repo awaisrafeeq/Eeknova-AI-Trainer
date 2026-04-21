@@ -161,12 +161,16 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
   const { camera, size } = useThree();
   const cameraSetRef = React.useRef(false);
   const appliedFitSignatureRef = React.useRef<string | null>(null);
+  const lockedManualTargetRef = React.useRef<THREE.Vector3 | null>(null);
+  const lockedManualDistanceRef = React.useRef<number | null>(null);
 
   // Reset lock when lockCamera prop changes to false
   useEffect(() => {
     if (!lockCamera) {
       cameraSetRef.current = false;
       appliedFitSignatureRef.current = null;
+      lockedManualTargetRef.current = null;
+      lockedManualDistanceRef.current = null;
     }
   }, [lockCamera]);
 
@@ -226,14 +230,25 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
         const manualTargetXOffset = Number.isFinite(cameraManualTargetXOffsetFactor)
           ? cameraManualTargetXOffsetFactor!
           : 0;
-        // Use the model floor as the primary vertical anchor so framing stays stable
-        // across instruction/static and animated in/main/out models whose bbox centers
-        // can shift significantly on tall holobox displays.
-        const floorAnchoredY = box.min.y + effectiveSize.y * (0.5 + manualTargetYOffset);
-        target.y = floorAnchoredY;
-        target.x = center.x + effectiveSize.x * manualTargetXOffset;
+        let distance = effectiveSize.y * manualDistanceFactor;
 
-        const distance = effectiveSize.y * manualDistanceFactor;
+        if (lockCamera && cameraSetRef.current && lockedManualTargetRef.current && lockedManualDistanceRef.current !== null) {
+          target.copy(lockedManualTargetRef.current);
+          distance = lockedManualDistanceRef.current;
+        } else {
+          // Use the model floor as the primary vertical anchor so framing stays stable
+          // across instruction/static and animated in/main/out models whose bbox centers
+          // can shift significantly on tall holobox displays.
+          const floorAnchoredY = box.min.y + effectiveSize.y * (0.5 + manualTargetYOffset);
+          target.y = floorAnchoredY;
+          // Keep horizontal framing centered unless an explicit manual offset is requested.
+          target.x = effectiveSize.x * manualTargetXOffset;
+          if (lockCamera) {
+            lockedManualTargetRef.current = target.clone();
+            lockedManualDistanceRef.current = distance;
+          }
+        }
+
         perspective.position.set(target.x, target.y, target.z + distance);
         perspective.lookAt(target);
         perspective.near = Math.max(0.01, distance / 100);
