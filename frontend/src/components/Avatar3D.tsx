@@ -156,7 +156,7 @@ function CameraControls({ target }: { target?: [number, number, number] }) {
 
 }
 
-function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset, cameraPositionYRaise, cameraDistanceScale, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera, onTargetChange }: { object: THREE.Object3D | null; referenceSize: THREE.Vector3 | null; cameraZoom: number; cameraTargetYOffset: number; cameraPositionYRaise?: number; cameraDistanceScale?: number; cameraManualDistanceFactor?: number; cameraManualTargetYOffsetFactor?: number; cameraManualTargetXOffsetFactor?: number; lockCamera?: boolean; onTargetChange: (t: [number, number, number]) => void }) {
+function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset, cameraPositionYRaise, cameraDistanceScale, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera, freezeCameraFit, onTargetChange }: { object: THREE.Object3D | null; referenceSize: THREE.Vector3 | null; cameraZoom: number; cameraTargetYOffset: number; cameraPositionYRaise?: number; cameraDistanceScale?: number; cameraManualDistanceFactor?: number; cameraManualTargetYOffsetFactor?: number; cameraManualTargetXOffsetFactor?: number; lockCamera?: boolean; freezeCameraFit?: boolean; onTargetChange: (t: [number, number, number]) => void }) {
 
   const { camera, size } = useThree();
   const cameraSetRef = React.useRef(false);
@@ -173,6 +173,7 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
   useEffect(() => {
 
     if (!object) return;
+    if (freezeCameraFit && cameraSetRef.current) return;
 
     try {
 
@@ -326,7 +327,7 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
 
     }
 
-  }, [object, referenceSize, cameraZoom, cameraTargetYOffset, cameraPositionYRaise, cameraDistanceScale, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera, camera, size.width, size.height, onTargetChange]);
+  }, [object, referenceSize, cameraZoom, cameraTargetYOffset, cameraPositionYRaise, cameraDistanceScale, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera, freezeCameraFit, camera, size.width, size.height, onTargetChange]);
 
   return null;
 
@@ -491,6 +492,7 @@ interface Avatar3DProps {
   cameraManualTargetYOffsetFactor?: number;
   cameraManualTargetXOffsetFactor?: number;
   lockCamera?: boolean;
+  freezeCameraFit?: boolean;
   skinToneColor?: string;
   skinToneStrength?: number;
   onTTSSpeaking?: (speaking: boolean) => void;
@@ -2140,6 +2142,8 @@ interface Avatar3DProps {
 
   lockCamera?: boolean;
 
+  freezeCameraFit?: boolean;
+
   skinToneColor?: string;
 
   skinToneStrength?: number;
@@ -2152,7 +2156,7 @@ interface Avatar3DProps {
 
 
 
-export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, cameraDistanceScale = 1, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera = false, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onTTSSpeaking, onError, onSessionEnd, onPhaseChange }: Avatar3DProps) {
+export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, cameraDistanceScale = 1, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera = false, freezeCameraFit = false, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onTTSSpeaking, onError, onSessionEnd, onPhaseChange }: Avatar3DProps) {
 
   const [webglSupported, setWebglSupported] = useState(true);
 
@@ -2274,7 +2278,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
             <directionalLight position={[-5, 5, 5]} intensity={0.8} />
             <pointLight position={[0, 2, 2]} intensity={0.6} />
             <hemisphereLight args={[0xffffff, 0x444444, 0.3]} />
-            <AutoFitCamera object={fitObject} referenceSize={referenceSizeRef.current} cameraZoom={cameraZoom} cameraTargetYOffset={cameraTargetYOffset} cameraPositionYRaise={cameraPositionYRaise} cameraDistanceScale={cameraDistanceScale} cameraManualDistanceFactor={cameraManualDistanceFactor} cameraManualTargetYOffsetFactor={cameraManualTargetYOffsetFactor} cameraManualTargetXOffsetFactor={cameraManualTargetXOffsetFactor} lockCamera={lockCamera} onTargetChange={setCameraTarget} />
+            <AutoFitCamera object={fitObject} referenceSize={referenceSizeRef.current} cameraZoom={cameraZoom} cameraTargetYOffset={cameraTargetYOffset} cameraPositionYRaise={cameraPositionYRaise} cameraDistanceScale={cameraDistanceScale} cameraManualDistanceFactor={cameraManualDistanceFactor} cameraManualTargetYOffsetFactor={cameraManualTargetYOffsetFactor} cameraManualTargetXOffsetFactor={cameraManualTargetXOffsetFactor} lockCamera={lockCamera} freezeCameraFit={freezeCameraFit} onTargetChange={setCameraTarget} />
             <CameraControls target={cameraTarget} />
             <Suspense fallback={null}>
               <YogaModel

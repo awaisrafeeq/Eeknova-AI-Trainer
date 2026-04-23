@@ -152,19 +152,55 @@ export default function YogaPage() {
   const [poseRestartKey, setPoseRestartKey] = useState(0);
 
   const [isPortraitDisplay, setIsPortraitDisplay] = useState(false);
+  const [setupViewportReady, setSetupViewportReady] = useState(false);
 
   useEffect(() => {
+    let frame1: number | null = null;
+    let frame2: number | null = null;
+
     const compute = () => {
       if (typeof window === 'undefined') return;
-      const w = window.innerWidth || 1;
-      const h = window.innerHeight || 1;
+      const viewport = window.visualViewport;
+      const w = viewport?.width || window.innerWidth || 1;
+      const h = viewport?.height || window.innerHeight || 1;
       // Holobox/portrait displays are typically very tall (e.g. 2160x3840)
       setIsPortraitDisplay(h / w >= 1.6);
     };
 
-    compute();
-    window.addEventListener('resize', compute);
-    return () => window.removeEventListener('resize', compute);
+    const settleViewport = () => {
+      setSetupViewportReady(false);
+
+      if (frame1 !== null) {
+        window.cancelAnimationFrame(frame1);
+      }
+      if (frame2 !== null) {
+        window.cancelAnimationFrame(frame2);
+      }
+
+      frame1 = window.requestAnimationFrame(() => {
+        compute();
+        frame2 = window.requestAnimationFrame(() => {
+          compute();
+          setSetupViewportReady(true);
+          frame2 = null;
+        });
+        frame1 = null;
+      });
+    };
+
+    settleViewport();
+    window.addEventListener('resize', settleViewport);
+    window.visualViewport?.addEventListener('resize', settleViewport);
+    return () => {
+      if (frame1 !== null) {
+        window.cancelAnimationFrame(frame1);
+      }
+      if (frame2 !== null) {
+        window.cancelAnimationFrame(frame2);
+      }
+      window.removeEventListener('resize', settleViewport);
+      window.visualViewport?.removeEventListener('resize', settleViewport);
+    };
   }, []);
 
   const [isSessionStarted, setIsSessionStarted] = useState(false);
@@ -1010,15 +1046,20 @@ export default function YogaPage() {
                     cameraZoom={1}
                   />
                 ) : flowStage === 'setup' && !isSessionStarted ? (
-                  <Avatar3D
-                    selectedPose={selectedPose}
-                    staticMode={useStaticSetupPreview || !!sessionSummary}
-                    playAnimationPath={useStaticSetupPreview || sessionSummary ? undefined : getMainPosePath(selectedPose)}
-                    playAnimationKey={useStaticSetupPreview || sessionSummary ? undefined : previewAnimKey}
-                    isPaused={false}
-                    cameraManualDistanceFactor={1.75}
-                    cameraManualTargetYOffsetFactor={0.28}
-                  />
+                  setupViewportReady ? (
+                    <Avatar3D
+                      key={`setup-avatar-${selectedPose}-${useStaticSetupPreview || !!sessionSummary ? 'static' : 'preview'}-${isPortraitDisplay ? 'portrait' : 'desktop'}`}
+                      selectedPose={selectedPose}
+                      staticMode={useStaticSetupPreview || !!sessionSummary}
+                      playAnimationPath={useStaticSetupPreview || sessionSummary ? undefined : getMainPosePath(selectedPose)}
+                      playAnimationKey={useStaticSetupPreview || sessionSummary ? undefined : previewAnimKey}
+                      isPaused={false}
+                      cameraManualDistanceFactor={1.75}
+                      cameraManualTargetYOffsetFactor={0.28}
+                    />
+                  ) : (
+                    <div className="h-full w-full" />
+                  )
                 ) : flowStage === 'instructions' ? (
                   <Avatar3D
                     selectedPose={selectedPose}
@@ -1043,6 +1084,7 @@ export default function YogaPage() {
                     cameraManualDistanceFactor={1.6}
                     cameraManualTargetYOffsetFactor={0.16}
                     lockCamera={true}
+                    freezeCameraFit={flowStage === 'release'}
                     onPhaseChange={(phase) => {
                       setCurrentPhase(phase === 'main' ? 'hold' : phase);
                     }}
