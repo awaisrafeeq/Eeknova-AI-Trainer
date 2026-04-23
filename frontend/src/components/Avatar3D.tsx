@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef, Suspense, useCallback, useLayoutEffect } from "react";
+import React, { useEffect, useState, useRef, Suspense, useCallback } from "react";
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 
@@ -21,7 +21,6 @@ THREE.Cache.enabled = false;
 // Universal bounding-box floor for yoga sessions. Ensures camera distance stays
 // consistent even when a pose's IN-animation first frame has a tight bounding box.
 const YOGA_REFERENCE_SIZE = new THREE.Vector3(2.0, 2.2, 1.5);
-const useClientLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 // Module-level cache for static avatar to avoid reload pauses after session ends
 let cachedStaticGltf: any = null;
@@ -157,9 +156,9 @@ function CameraControls({ target }: { target?: [number, number, number] }) {
 
 }
 
-function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset, cameraPositionYRaise, cameraDistanceScale, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera, fitTick = 0, onTargetChange }: { object: THREE.Object3D | null; referenceSize: THREE.Vector3 | null; cameraZoom: number; cameraTargetYOffset: number; cameraPositionYRaise?: number; cameraDistanceScale?: number; cameraManualDistanceFactor?: number; cameraManualTargetYOffsetFactor?: number; cameraManualTargetXOffsetFactor?: number; lockCamera?: boolean; fitTick?: number; onTargetChange: (t: [number, number, number]) => void }) {
+function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset, cameraPositionYRaise, cameraDistanceScale, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera, onTargetChange }: { object: THREE.Object3D | null; referenceSize: THREE.Vector3 | null; cameraZoom: number; cameraTargetYOffset: number; cameraPositionYRaise?: number; cameraDistanceScale?: number; cameraManualDistanceFactor?: number; cameraManualTargetYOffsetFactor?: number; cameraManualTargetXOffsetFactor?: number; lockCamera?: boolean; onTargetChange: (t: [number, number, number]) => void }) {
 
-  const { camera, size, invalidate } = useThree();
+  const { camera, size } = useThree();
   const cameraSetRef = React.useRef(false);
   const appliedFitSignatureRef = React.useRef<string | null>(null);
 
@@ -171,12 +170,9 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
     }
   }, [lockCamera]);
 
-  useClientLayoutEffect(() => {
+  useEffect(() => {
 
     if (!object) return;
-    if (!Number.isFinite(size.width) || !Number.isFinite(size.height) || size.width < 64 || size.height < 64) {
-      return;
-    }
 
     try {
 
@@ -210,7 +206,6 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
         cameraManualDistanceFactor ?? 'auto',
         cameraManualTargetYOffsetFactor ?? 0,
         cameraManualTargetXOffsetFactor ?? 0,
-        fitTick,
       ].join('|');
 
       // Keep the session camera stable for the same fitted model/state, but allow
@@ -245,7 +240,6 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
         perspective.far = Math.max(1000, distance * 100);
         perspective.updateProjectionMatrix();
         onTargetChange([target.x, target.y, target.z]);
-        invalidate();
         if (lockCamera) {
           cameraSetRef.current = true;
           appliedFitSignatureRef.current = fitSignature;
@@ -321,7 +315,6 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
       perspective.updateProjectionMatrix();
 
       onTargetChange([target.x, target.y, target.z]);
-      invalidate();
 
       // Mark camera as set for lock feature
       if (lockCamera) {
@@ -333,7 +326,7 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
 
     }
 
-  }, [object, referenceSize, cameraZoom, cameraTargetYOffset, cameraPositionYRaise, cameraDistanceScale, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera, camera, size.width, size.height, fitTick, invalidate, onTargetChange]);
+  }, [object, referenceSize, cameraZoom, cameraTargetYOffset, cameraPositionYRaise, cameraDistanceScale, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera, camera, size.width, size.height, onTargetChange]);
 
   return null;
 
@@ -1031,7 +1024,6 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
         meshRef.current = loadedModel;
 
         setModel(loadedModel);
-        onModelLoaded?.(loadedModel);
 
         onLoadingChange?.(false);
 
@@ -1587,7 +1579,6 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
           meshRef.current = loadedModel;
           setModel(loadedModel);
         }
-        onModelLoaded?.(animationRoot);
 
         // Detect blendshapes for TTS animation (for chess models) - PRIORITIZE main body mesh
         let mainBodyMeshFound = false;
@@ -2171,77 +2162,37 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
 
   const [fitObject, setFitObject] = useState<THREE.Object3D | null>(null);
   const [cameraTarget, setCameraTarget] = useState<[number, number, number]>([0, 0, 0]);
-  const [fitTick, setFitTick] = useState(0);
-  const [referenceSize, setReferenceSize] = useState<THREE.Vector3 | null>(
-    lockCamera ? YOGA_REFERENCE_SIZE.clone() : null
-  );
   // When lockCamera is true (yoga session/instructions), seed with the universal yoga
   // bounding box so the camera distance is consistent regardless of each pose's
   // IN-animation first-frame size.
+  const referenceSizeRef = useRef<THREE.Vector3 | null>(
+    lockCamera ? YOGA_REFERENCE_SIZE.clone() : null
+  );
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const fitRefreshRafRef = useRef<number | null>(null);
-
-  const scheduleFitRefresh = useCallback(() => {
-    if (typeof window === 'undefined') return;
-
-    if (fitRefreshRafRef.current !== null) {
-      window.cancelAnimationFrame(fitRefreshRafRef.current);
-      fitRefreshRafRef.current = null;
-    }
-
-    fitRefreshRafRef.current = window.requestAnimationFrame(() => {
-      fitRefreshRafRef.current = window.requestAnimationFrame(() => {
-        setFitTick((prev) => prev + 1);
-        fitRefreshRafRef.current = null;
-      });
-    });
-  }, []);
-
-  const handleModelLoaded = useCallback((model: THREE.Object3D | null) => {
-    setFitObject(model);
-    if (model) {
-      try {
-        const box = new THREE.Box3().setFromObject(model);
-        const nextSize = new THREE.Vector3();
-        box.getSize(nextSize);
-        setReferenceSize((prev) => {
-          if (!prev) {
-            return nextSize.clone();
-          }
-
-          const merged = new THREE.Vector3(
-            Math.max(prev.x, nextSize.x),
-            Math.max(prev.y, nextSize.y),
-            Math.max(prev.z, nextSize.z)
-          );
-
-          const changed =
-            Math.abs(merged.x - prev.x) > 0.001 ||
-            Math.abs(merged.y - prev.y) > 0.001 ||
-            Math.abs(merged.z - prev.z) > 0.001;
-
-          return changed ? merged : prev;
-        });
-      } catch { }
-    }
-    scheduleFitRefresh();
-  }, [scheduleFitRefresh]);
 
   useEffect(() => {
-    if (!modelLoading && fitObject) {
-      scheduleFitRefresh();
-    }
-  }, [modelLoading, fitObject, scheduleFitRefresh]);
+    if (!fitObject) return;
+    try {
+      const box = new THREE.Box3().setFromObject(fitObject);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      if (!referenceSizeRef.current) {
+        referenceSizeRef.current = size;
+      } else {
+        referenceSizeRef.current = new THREE.Vector3(
+          Math.max(referenceSizeRef.current.x, size.x),
+          Math.max(referenceSizeRef.current.y, size.y),
+          Math.max(referenceSizeRef.current.z, size.z)
+        );
+      }
+    } catch { }
+  }, [fitObject]);
 
   // Free the WebGL context on unmount. Without this, each Avatar3D remount
   // (flowStage change, pose restart) leaves a live GL context holding GPU memory
   // until the browser eventually recycles it.
   useEffect(() => {
     return () => {
-      if (fitRefreshRafRef.current !== null) {
-        try { window.cancelAnimationFrame(fitRefreshRafRef.current); } catch { }
-        fitRefreshRafRef.current = null;
-      }
       const gl = rendererRef.current;
       if (gl) {
         try { gl.renderLists?.dispose?.(); } catch { }
@@ -2323,7 +2274,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
             <directionalLight position={[-5, 5, 5]} intensity={0.8} />
             <pointLight position={[0, 2, 2]} intensity={0.6} />
             <hemisphereLight args={[0xffffff, 0x444444, 0.3]} />
-            <AutoFitCamera object={fitObject} referenceSize={referenceSize} cameraZoom={cameraZoom} cameraTargetYOffset={cameraTargetYOffset} cameraPositionYRaise={cameraPositionYRaise} cameraDistanceScale={cameraDistanceScale} cameraManualDistanceFactor={cameraManualDistanceFactor} cameraManualTargetYOffsetFactor={cameraManualTargetYOffsetFactor} cameraManualTargetXOffsetFactor={cameraManualTargetXOffsetFactor} lockCamera={lockCamera} fitTick={fitTick} onTargetChange={setCameraTarget} />
+            <AutoFitCamera object={fitObject} referenceSize={referenceSizeRef.current} cameraZoom={cameraZoom} cameraTargetYOffset={cameraTargetYOffset} cameraPositionYRaise={cameraPositionYRaise} cameraDistanceScale={cameraDistanceScale} cameraManualDistanceFactor={cameraManualDistanceFactor} cameraManualTargetYOffsetFactor={cameraManualTargetYOffsetFactor} cameraManualTargetXOffsetFactor={cameraManualTargetXOffsetFactor} lockCamera={lockCamera} onTargetChange={setCameraTarget} />
             <CameraControls target={cameraTarget} />
             <Suspense fallback={null}>
               <YogaModel
@@ -2341,7 +2292,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
                 skinToneStrength={skinToneStrength}
                 onError={setError}
                 onTTSSpeaking={onTTSSpeaking}
-                onModelLoaded={handleModelLoaded}
+                onModelLoaded={setFitObject}
                 onSessionEnd={onSessionEnd}
                 onPhaseChange={onPhaseChange}
                 onLoadingChange={setModelLoading}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth, useAuthenticatedFetch } from '@/hooks/useAuth';
 import { authRedirect } from '@/lib/auth';
 
@@ -9,8 +9,6 @@ import { useRouter } from 'next/navigation';
 import Avatar3D from '@/components/Avatar3D';
 import YogaCamera from '@/components/YogaCamera';
 import { SessionSummary, TTSFeedback } from '@/lib/yogaApi';
-
-const useClientLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 
 
@@ -153,52 +151,20 @@ export default function YogaPage() {
   const [selectedPose, setSelectedPose] = useState<string>("Mountain Pose");
   const [poseRestartKey, setPoseRestartKey] = useState(0);
 
-  const [isPortraitDisplay, setIsPortraitDisplay] = useState(true);
-  const [layoutReady, setLayoutReady] = useState(false);
+  const [isPortraitDisplay, setIsPortraitDisplay] = useState(false);
 
-  useClientLayoutEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    let rafId: number | null = null;
-    let settleRafId: number | null = null;
-
+  useEffect(() => {
     const compute = () => {
-      const viewport = window.visualViewport;
-      const w = viewport?.width || window.innerWidth || document.documentElement.clientWidth || 1;
-      const h = viewport?.height || window.innerHeight || document.documentElement.clientHeight || 1;
-
+      if (typeof window === 'undefined') return;
+      const w = window.innerWidth || 1;
+      const h = window.innerHeight || 1;
       // Holobox/portrait displays are typically very tall (e.g. 2160x3840)
       setIsPortraitDisplay(h / w >= 1.6);
-      setLayoutReady(true);
     };
 
-    const scheduleCompute = () => {
-      setLayoutReady(false);
-
-      if (rafId !== null) window.cancelAnimationFrame(rafId);
-      if (settleRafId !== null) window.cancelAnimationFrame(settleRafId);
-
-      rafId = window.requestAnimationFrame(() => {
-        compute();
-        settleRafId = window.requestAnimationFrame(() => {
-          compute();
-          settleRafId = null;
-        });
-        rafId = null;
-      });
-    };
-
-    scheduleCompute();
-
-    window.addEventListener('resize', scheduleCompute);
-    window.visualViewport?.addEventListener('resize', scheduleCompute);
-
-    return () => {
-      if (rafId !== null) window.cancelAnimationFrame(rafId);
-      if (settleRafId !== null) window.cancelAnimationFrame(settleRafId);
-      window.removeEventListener('resize', scheduleCompute);
-      window.visualViewport?.removeEventListener('resize', scheduleCompute);
-    };
+    compute();
+    window.addEventListener('resize', compute);
+    return () => window.removeEventListener('resize', compute);
   }, []);
 
   const [isSessionStarted, setIsSessionStarted] = useState(false);
@@ -967,12 +933,6 @@ export default function YogaPage() {
 
   }, []);
 
-  const avatarLayoutMode = flowStage !== 'setup'
-    ? 'full'
-    : isPortraitDisplay ? 'portrait' : 'desktop';
-
-
-
   return (
 
     <main
@@ -1040,9 +1000,8 @@ export default function YogaPage() {
               <div className={`${
                 flowStage !== 'setup' ? 'h-[80vh] w-full' : 'h-[50vh] w-full'
               } flex items-end justify-center`}>
-                {!layoutReady ? null : flowStage === 'warmup' || flowStage === 'cooldown' ? (
+                {flowStage === 'warmup' || flowStage === 'cooldown' ? (
                   <Avatar3D
-                    key={`aux-avatar-${currentAuxStep.path}-${auxAnimKey}-${avatarLayoutMode}`}
                     selectedPose={selectedPose}
                     staticMode={true}
                     playAnimationPath={currentAuxStep.path}
@@ -1052,7 +1011,6 @@ export default function YogaPage() {
                   />
                 ) : flowStage === 'setup' && !isSessionStarted ? (
                   <Avatar3D
-                    key={`setup-avatar-${selectedPose}-${useStaticSetupPreview || !!sessionSummary ? 'static' : 'preview'}-${avatarLayoutMode}`}
                     selectedPose={selectedPose}
                     staticMode={useStaticSetupPreview || !!sessionSummary}
                     playAnimationPath={useStaticSetupPreview || sessionSummary ? undefined : getMainPosePath(selectedPose)}
@@ -1063,7 +1021,6 @@ export default function YogaPage() {
                   />
                 ) : flowStage === 'instructions' ? (
                   <Avatar3D
-                    key={`instructions-avatar-${selectedPose}-${avatarLayoutMode}`}
                     selectedPose={selectedPose}
                     staticMode={true}
                     disablePoseMotion={true}
@@ -1075,7 +1032,7 @@ export default function YogaPage() {
                   />
                 ) : (
                   <Avatar3D
-                    key={`session-avatar-${selectedPose}-${poseRestartKey}-${avatarLayoutMode}`}
+                    key={`session-avatar-${selectedPose}-${poseRestartKey}`}
                     selectedPose={selectedPose}
                     onlyInAnimation={flowStage === 'pose' && shouldPlayAnimation}
                     onlyOutAnimation={flowStage === 'release'}
