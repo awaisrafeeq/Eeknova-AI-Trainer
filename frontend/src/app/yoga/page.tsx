@@ -1084,7 +1084,7 @@ export default function YogaPage() {
                     cameraManualDistanceFactor={1.6}
                     cameraManualTargetYOffsetFactor={0.16}
                     lockCamera={true}
-                    freezeCameraFit={flowStage === 'release'}
+                    freezeCameraFit={flowStage === 'pose' || flowStage === 'release'}
                     onPhaseChange={(phase) => {
                       setCurrentPhase(phase === 'main' ? 'hold' : phase);
                     }}
