@@ -157,6 +157,7 @@ export default function YogaPage() {
   useEffect(() => {
     let frame1: number | null = null;
     let frame2: number | null = null;
+    let readyTimeout: number | null = null;
 
     const compute = () => {
       if (typeof window === 'undefined') return;
@@ -176,12 +177,20 @@ export default function YogaPage() {
       if (frame2 !== null) {
         window.cancelAnimationFrame(frame2);
       }
+      if (readyTimeout !== null) {
+        window.clearTimeout(readyTimeout);
+        readyTimeout = null;
+      }
 
       frame1 = window.requestAnimationFrame(() => {
         compute();
         frame2 = window.requestAnimationFrame(() => {
           compute();
-          setSetupViewportReady(true);
+          readyTimeout = window.setTimeout(() => {
+            compute();
+            setSetupViewportReady(true);
+            readyTimeout = null;
+          }, 120);
           frame2 = null;
         });
         frame1 = null;
@@ -197,6 +206,9 @@ export default function YogaPage() {
       }
       if (frame2 !== null) {
         window.cancelAnimationFrame(frame2);
+      }
+      if (readyTimeout !== null) {
+        window.clearTimeout(readyTimeout);
       }
       window.removeEventListener('resize', settleViewport);
       window.visualViewport?.removeEventListener('resize', settleViewport);
@@ -1073,7 +1085,6 @@ export default function YogaPage() {
                   />
                 ) : (
                   <Avatar3D
-                    key={`session-avatar-${selectedPose}-${poseRestartKey}`}
                     selectedPose={selectedPose}
                     onlyInAnimation={flowStage === 'pose' && shouldPlayAnimation}
                     onlyOutAnimation={flowStage === 'release'}
