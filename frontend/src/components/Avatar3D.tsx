@@ -1370,7 +1370,20 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
         loadedModel.position.set(0, -1, 0);
 
+        // Normalize model position to ensure consistent viewport appearance across poses
+        const box = new THREE.Box3().setFromObject(loadedModel);
+        const bboxSize = new THREE.Vector3();
+        const bboxCenter = new THREE.Vector3();
+        box.getSize(bboxSize);
+        box.getCenter(bboxCenter);
 
+        // Offset to center horizontally and anchor vertically at "feet"
+        const normalizedPosition = new THREE.Vector3(
+          -bboxCenter.x,  // Center X globally
+          -(bboxCenter.y + bboxSize.y * 0.5) + 0.5,  // Anchor Y to feet
+          0
+        );
+        loadedModel.position.copy(normalizedPosition);
 
         setModel(loadedModel);
 

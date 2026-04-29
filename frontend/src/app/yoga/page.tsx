@@ -1068,6 +1068,7 @@ export default function YogaPage() {
                       isPaused={false}
                       cameraManualDistanceFactor={1.75}
                       cameraManualTargetYOffsetFactor={0.28}
+                      lockCamera={true} // LOCKUP-SETUP: Camera lock for setup stage
                     />
                   ) : (
                     <div className="h-full w-full" />
