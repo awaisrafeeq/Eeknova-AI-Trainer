@@ -8,6 +8,7 @@ import {
   PoseAnalysisResult,
   SessionSummary,
 } from '@/lib/yogaApi';
+import { getYogaPhaseInstruction } from '@/lib/yogaPhaseInstructions';
 
 let globalTTS: TTSFeedback | null = null;
 let globalLastSpoken: { text: string; atMs: number } | null = null;
@@ -30,6 +31,7 @@ interface YogaCameraProps {
   shouldAnalyze: boolean;
   playGuidedInstructions: boolean;
   playReleaseInstructions: boolean;
+  speechReady?: boolean;
   onSessionEnd: (summary: SessionSummary | null) => void;
   onAccuracyUpdate: (accuracy: number) => void;
   onCorrectionsUpdate: (corrections: string[]) => void;
@@ -51,6 +53,7 @@ export default function YogaCamera({
   shouldAnalyze,
   playGuidedInstructions,
   playReleaseInstructions,
+  speechReady = true,
   onSessionEnd,
   onAccuracyUpdate,
   onCorrectionsUpdate,
@@ -102,6 +105,9 @@ export default function YogaCamera({
   const lastCorrectionSpokenRef = useRef<{ text: string; atMs: number } | null>(null);
   const prevPlayGuidedRef = useRef(false);
   const prevPlayReleaseRef = useRef(false);
+  const mainInstructionPlayedRef = useRef<string | null>(null);
+  const inInstructionPlayedRef = useRef(false);
+  const phaseInstructionSuppressUntilRef = useRef(0);
 
   const onTTSSpeakingChangeRef = useRef<YogaCameraProps['onTTSSpeakingChange']>(onTTSSpeakingChange);
   const onTTSTextChangeRef = useRef<YogaCameraProps['onTTSTextChange']>(onTTSTextChange);
@@ -326,6 +332,31 @@ export default function YogaCamera({
     ttsRef.current.speak(combined, true);
   };
 
+  useEffect(() => {
+    if (!ttsRef.current || !ttsEnabled || !selectedPose) return;
+
+    const entryInstruction = instructionSet?.entry
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join(' ');
+    const inInstruction =
+      getYogaPhaseInstruction(selectedPose, 'in') ||
+      `Starting ${selectedPose} detection. Get into position.`;
+    const mainInstruction = getYogaPhaseInstruction(selectedPose, 'mainIntro');
+    const videoReleaseInstruction = getYogaPhaseInstruction(selectedPose, 'out');
+    const backendReleaseInstruction = instructionSet?.release
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join(' ');
+
+    ttsRef.current.prefetchMany([
+      entryInstruction,
+      inInstruction,
+      mainInstruction,
+      videoReleaseInstruction || backendReleaseInstruction,
+    ]);
+  }, [instructionSet, selectedPose, ttsEnabled]);
+
   // Load guided instructions for the selected pose
   useEffect(() => {
     if (!selectedPose) {
@@ -337,6 +368,7 @@ export default function YogaCamera({
     if (poseChanged) {
       entryPlayedRef.current = false;
       releasePlayedRef.current = false;
+      mainInstructionPlayedRef.current = null;
       instructionPoseRef.current = selectedPose;
     }
 
@@ -458,7 +490,9 @@ export default function YogaCamera({
           onAccuracyUpdate(result.accuracy);
         }
 
-        if (result.corrections && result.corrections.length > 0 && !suppressFeedbackRef.current) {
+        const phaseInstructionActive = Date.now() < phaseInstructionSuppressUntilRef.current;
+
+        if (result.corrections && result.corrections.length > 0 && !suppressFeedbackRef.current && !phaseInstructionActive) {
           onCorrectionsUpdate(result.corrections);
 
           // Speak correction feedback (if enabled)
@@ -518,7 +552,7 @@ export default function YogaCamera({
 
   // Speak entry instructions once when guided instructions phase starts
   useEffect(() => {
-    const shouldPlay = playGuidedInstructions && !!instructionSet && !!ttsRef.current;
+    const shouldPlay = playGuidedInstructions && speechReady && !!instructionSet && !!ttsRef.current;
 
     if (shouldPlay && !prevPlayGuidedRef.current) {
       entryPlayedRef.current = false;
@@ -536,14 +570,18 @@ export default function YogaCamera({
 
     if (!entryPlayedRef.current && instructionSet!.entry.length > 0) {
       entryPlayedRef.current = true;
+      ttsRef.current?.prefetch(
+        getYogaPhaseInstruction(selectedPose, 'in') ||
+          `Starting ${selectedPose} detection. Get into position.`
+      );
       safeStopTTS();
       queueGuidedLines(instructionSet!.entry);
     }
-  }, [instructionSet, playGuidedInstructions]);
+  }, [instructionSet, playGuidedInstructions, selectedPose, speechReady]);
 
   // Speak release instructions once when release phase starts
   useEffect(() => {
-    const shouldPlay = playReleaseInstructions && !!instructionSet && !!ttsRef.current;
+    const shouldPlay = playReleaseInstructions && speechReady && !!instructionSet && !!ttsRef.current;
 
     if (shouldPlay && !prevPlayReleaseRef.current) {
       releasePlayedRef.current = false;
@@ -556,12 +594,47 @@ export default function YogaCamera({
       return;
     }
 
-    if (!releasePlayedRef.current && instructionSet!.release.length > 0) {
+    const videoReleaseInstruction = getYogaPhaseInstruction(selectedPose, 'out');
+    const releaseLines = videoReleaseInstruction ? [videoReleaseInstruction] : instructionSet!.release;
+
+    if (!releasePlayedRef.current && releaseLines.length > 0) {
       releasePlayedRef.current = true;
       safeStopTTS();
-      queueReleaseLines(instructionSet!.release);
+      queueReleaseLines(releaseLines);
     }
-  }, [instructionSet, playReleaseInstructions]);
+  }, [instructionSet, playReleaseInstructions, selectedPose, speechReady]);
+
+  useEffect(() => {
+    if (!shouldAnalyze || currentPhase !== 'hold' || !speechReady || !ttsRef.current) return;
+    const mainInstruction = getYogaPhaseInstruction(selectedPose, 'mainIntro');
+    if (!mainInstruction || mainInstructionPlayedRef.current === selectedPose) return;
+
+    mainInstructionPlayedRef.current = selectedPose;
+    const wordCount = mainInstruction.split(/\s+/).filter(Boolean).length;
+    phaseInstructionSuppressUntilRef.current = Date.now() + Math.max(3500, wordCount * 420);
+    const videoReleaseInstruction = getYogaPhaseInstruction(selectedPose, 'out');
+    if (videoReleaseInstruction) {
+      ttsRef.current.prefetch(videoReleaseInstruction);
+    }
+    ttsRef.current.speak(mainInstruction, true);
+  }, [currentPhase, selectedPose, shouldAnalyze, speechReady]);
+
+  useEffect(() => {
+    if (!shouldAnalyze) {
+      inInstructionPlayedRef.current = false;
+      return;
+    }
+
+    if (currentPhase !== 'in' || !speechReady || !ttsRef.current) return;
+    if (inInstructionPlayedRef.current) return;
+
+    inInstructionPlayedRef.current = true;
+    ttsRef.current.speak(
+      getYogaPhaseInstruction(selectedPose, 'in') || `Starting ${selectedPose} detection. Get into position.`,
+      true
+    );
+  }, [currentPhase, selectedPose, shouldAnalyze, speechReady]);
+
   // Start/Stop analysis based on shouldAnalyze prop
   useEffect(() => {
     if (shouldAnalyze && isCameraReady) {
@@ -603,14 +676,6 @@ export default function YogaCamera({
   const convertPoseNameToApi = (poseName: string): string => {
     // Convert "Mountain Pose" to "mountain_pose" format
     return poseName.toLowerCase().replace(/\s+/g, '_');
-  };
-
-  const getInAnimationInstruction = (poseName: string): string | null => {
-    if (poseName === 'Warrior 1') {
-      return 'Clasp your hands and rotate outward. Step one leg far back onto the toes, bend your front knee, and raise your arms overhead.';
-    }
-
-    return null;
   };
 
   // Start analysis
@@ -660,12 +725,6 @@ export default function YogaCamera({
       // Start analysis via WebSocket
       const apiPoseName = convertPoseNameToApi(selectedPose);
       wsRef.current.startAnalysis(apiPoseName, tolerance);
-
-      // Announce the IN animation cue. Pose-specific text is timed to the entry animation.
-      ttsRef.current?.speak(
-        getInAnimationInstruction(selectedPose) || `Starting ${selectedPose} detection. Get into position.`,
-        true
-      );
 
       // Start sending frames via WebSocket
       startFrameCapture();

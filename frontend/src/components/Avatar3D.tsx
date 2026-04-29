@@ -407,6 +407,7 @@ interface Avatar3DProps {
   staticModelPath?: string;
   playAnimationPath?: string;
   playAnimationKey?: number;
+  inAnimationTargetDurationSec?: number;
   cameraZoom?: number;
   cameraTargetYOffset?: number;
   cameraPositionYRaise?: number;
@@ -424,9 +425,10 @@ interface Avatar3DProps {
   onPhaseChange?: (phase: 'in' | 'main' | 'out') => void; // New prop to notify parent of phase changes
   assistantModeActive?: boolean;
   onModelLoaded?: (model: THREE.Object3D | null) => void;
+  onReadyChange?: (ready: boolean) => void;
 }
 
-function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onError, onTTSSpeaking, onSessionEnd, onPhaseChange, onModelLoaded, onLoadingChange }: Avatar3DProps & { onLoadingChange?: (loading: boolean) => void }) {
+function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, inAnimationTargetDurationSec, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onError, onTTSSpeaking, onSessionEnd, onPhaseChange, onModelLoaded, onLoadingChange }: Avatar3DProps & { onLoadingChange?: (loading: boolean) => void }) {
 
   const [model, setModel] = useState<THREE.Group | null>(null);
 
@@ -1157,6 +1159,9 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
                 // Yoga in/out: play once
                 action.setLoop(THREE.LoopOnce, 1);
                 action.clampWhenFinished = true;
+                if (type === 'in' && inAnimationTargetDurationSec && inAnimationTargetDurationSec > 0) {
+                  action.timeScale = THREE.MathUtils.clamp(clip.duration / inAnimationTargetDurationSec, 0.15, 1.5);
+                }
               }
             } else {
               // Normal page load: play once
@@ -1209,7 +1214,6 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
               if (remainingIn <= 0) {
                 animationMixer.removeEventListener('finished', handleInFinished as never);
                 animationFinishedCleanupRef.current = null;
-                onPhaseChange?.('main');
                 playAnimationSequence(pose, 'main');
               }
             };
@@ -1371,7 +1375,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
     };
 
-  }, [selectedPose, staticMode, staticModelPath, playAnimationPath, playAnimationKey, onlyInAnimation, onlyOutAnimation]);
+  }, [selectedPose, staticMode, staticModelPath, playAnimationPath, playAnimationKey, inAnimationTargetDurationSec, onlyInAnimation, onlyOutAnimation]);
 
 
 
@@ -2096,6 +2100,8 @@ interface Avatar3DProps {
 
   playAnimationKey?: number; // Increment to trigger one-shot animation
 
+  inAnimationTargetDurationSec?: number;
+
   cameraZoom?: number;
 
   cameraPositionYRaise?: number;
@@ -2120,11 +2126,13 @@ interface Avatar3DProps {
 
   onModelLoaded?: (model: THREE.Object3D | null) => void;
 
+  onReadyChange?: (ready: boolean) => void;
+
 }
 
 
 
-export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, cameraDistanceScale = 1, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera = false, freezeCameraFit = false, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onTTSSpeaking, onError, onSessionEnd, onPhaseChange }: Avatar3DProps) {
+export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, inAnimationTargetDurationSec, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, cameraDistanceScale = 1, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera = false, freezeCameraFit = false, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onTTSSpeaking, onError, onSessionEnd, onPhaseChange, onReadyChange }: Avatar3DProps) {
 
   const [webglSupported, setWebglSupported] = useState(true);
 
@@ -2166,6 +2174,11 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
   ]);
 
   const avatarReady = !modelLoading && !!fitObject && cameraFitted;
+
+  useEffect(() => {
+    onReadyChange?.(avatarReady);
+  }, [avatarReady, onReadyChange]);
+
   const handleCameraFitted = useCallback(() => {
     if (revealFrameRef.current !== null) {
       cancelAnimationFrame(revealFrameRef.current);
@@ -2305,6 +2318,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
                 staticModelPath={staticModelPath}
                 playAnimationPath={playAnimationPath}
                 playAnimationKey={playAnimationKey}
+                inAnimationTargetDurationSec={inAnimationTargetDurationSec}
                 skinToneColor={skinToneColor}
                 skinToneStrength={skinToneStrength}
                 onError={setError}

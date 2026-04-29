@@ -10,6 +10,7 @@ import Avatar3D from '@/components/Avatar3D';
 import YogaCamera from '@/components/YogaCamera';
 import { SessionSummary, TTSFeedback } from '@/lib/yogaApi';
 import { YOGA_POSE_ANIMATIONS } from '@/lib/yogaPoseAnimations';
+import { estimateInstructionDurationSeconds, getYogaPhaseInstruction } from '@/lib/yogaPhaseInstructions';
 
 
 
@@ -98,6 +99,11 @@ export default function YogaPage() {
 
   const [isPortraitDisplay, setIsPortraitDisplay] = useState(false);
   const [setupViewportReady, setSetupViewportReady] = useState(false);
+  const [avatarSpeechReady, setAvatarSpeechReady] = useState(false);
+
+  const handleAvatarReadyChange = useCallback((ready: boolean) => {
+    setAvatarSpeechReady(ready);
+  }, []);
 
   useEffect(() => {
     let frame1: number | null = null;
@@ -266,7 +272,12 @@ export default function YogaPage() {
   const [releaseAnimationDone, setReleaseAnimationDone] = useState(false);
   const [releasePlaybackReady, setReleasePlaybackReady] = useState(false);
 
+  useEffect(() => {
+    setAvatarSpeechReady(false);
+  }, [flowStage, selectedPose, poseRestartKey, releasePlaybackReady]);
+
   const transitionToRelease = useCallback(() => {
+    setAvatarSpeechReady(false);
     // Abort any ongoing TTS feedback before exit instructions start
     try {
       if (ttsRef.current) {
@@ -513,6 +524,7 @@ export default function YogaPage() {
   // Handle Start button
 
   const handleStart = () => {
+    setAvatarSpeechReady(false);
     setSessionSummary(null);
     setCorrections([]);
     setCurrentAccuracy(0);
@@ -529,6 +541,7 @@ export default function YogaPage() {
   };
 
   const startWarmup = () => {
+    setAvatarSpeechReady(false);
     setSessionSummary(null);
     setCorrections([]);
     setCurrentAccuracy(0);
@@ -545,6 +558,7 @@ export default function YogaPage() {
   };
 
   const startPoseSession = () => {
+    setAvatarSpeechReady(false);
     setShowWarmupSkipWarning(false);
     setFlowStage('pose');
     setIsSessionStarted(true);
@@ -567,6 +581,7 @@ export default function YogaPage() {
   };
 
   const startCooldown = () => {
+    setAvatarSpeechReady(false);
     setIsSessionStarted(false);
     setShouldPlayAnimation(false);
     setIsPaused(false);
@@ -582,6 +597,7 @@ export default function YogaPage() {
       return;
     }
     releaseFinalizedRef.current = true;
+    setAvatarSpeechReady(false);
     console.log('🔄 Finalizing session end - resetting all states');
     setFlowStage('setup');
     setIsSessionStarted(false);
@@ -718,6 +734,10 @@ export default function YogaPage() {
   const getMainPosePath = (poseName: string): string | undefined => {
     const poseAnim = YOGA_POSE_ANIMATIONS[poseName];
     return poseAnim?.mainPath;
+  };
+
+  const getInInstructionDuration = (poseName: string): number | undefined => {
+    return estimateInstructionDurationSeconds(getYogaPhaseInstruction(poseName, 'in'));
   };
 
   // Track pose changes for preview animation
@@ -1002,6 +1022,7 @@ export default function YogaPage() {
                     playAnimationKey={auxAnimKey}
                     isPaused={isPaused}
                     cameraZoom={1}
+                    onReadyChange={handleAvatarReadyChange}
                   />
                 ) : flowStage === 'setup' && !isSessionStarted ? (
                   setupViewportReady ? (
@@ -1015,6 +1036,7 @@ export default function YogaPage() {
                       cameraManualDistanceFactor={1.75}
                       cameraManualTargetYOffsetFactor={0.28}
                       lockCamera={true} // LOCKUP-SETUP: Camera lock for setup stage
+                      onReadyChange={handleAvatarReadyChange}
                     />
                   ) : (
                     <div className="h-full w-full" />
@@ -1029,6 +1051,7 @@ export default function YogaPage() {
                     cameraManualDistanceFactor={1.6}
                     cameraManualTargetYOffsetFactor={0.16}
                     lockCamera={true}
+                    onReadyChange={handleAvatarReadyChange}
                   />
                 ) : flowStage === 'release' && !releasePlaybackReady ? (
                   <div className="h-full w-full" />
@@ -1041,10 +1064,12 @@ export default function YogaPage() {
                     isTTSSpeaking={isTTSSpeaking}
                     isPaused={isPaused}
                     playAnimationKey={poseRestartKey}
+                    inAnimationTargetDurationSec={flowStage === 'pose' ? getInInstructionDuration(selectedPose) : undefined}
                     cameraManualDistanceFactor={1.6}
                     cameraManualTargetYOffsetFactor={0.16}
                     lockCamera={true}
                     freezeCameraFit={flowStage === 'pose' || flowStage === 'release'}
+                    onReadyChange={handleAvatarReadyChange}
                     onPhaseChange={(phase) => {
                       setCurrentPhase(phase === 'main' ? 'hold' : phase);
                     }}
@@ -1265,6 +1290,7 @@ export default function YogaPage() {
                 shouldAnalyze={flowStage === 'pose' && isSessionStarted && !isPaused && shouldAnalyze}
                 playGuidedInstructions={flowStage === 'instructions' && playGuidedInstructions && !isPaused}
                 playReleaseInstructions={flowStage === 'release' && playReleaseInstructions && !isPaused}
+                speechReady={avatarSpeechReady}
                 onGuidedInstructionsEnd={() => {
                   // Smooth transition into detection/animation
                   setIsStageTransitioning(true);

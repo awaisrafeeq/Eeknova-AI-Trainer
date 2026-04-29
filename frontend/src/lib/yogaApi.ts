@@ -358,6 +358,7 @@ export class YogaPoseWebSocket {
 
 // Text-to-Speech utility for feedback
 export class TTSFeedback {
+  private static readonly MAX_CACHE_ITEMS = 24;
   private lastSpokenTime: number = 0;
   private queue: string[] = [];
   private speaking: boolean = false;
@@ -368,6 +369,9 @@ export class TTSFeedback {
   private currentText: string = '';
   private currentAudio: HTMLAudioElement | null = null;
   private abortController: AbortController | null = null;
+  private playbackToken: number = 0;
+  private audioCache: Map<string, Blob> = new Map();
+  private prefetchRequests: Map<string, Promise<Blob>> = new Map();
 
   constructor(onSpeakingChange?: (isSpeaking: boolean) => void, onTextChange?: (text: string) => void) {
     this.onSpeakingChange = onSpeakingChange || null;
@@ -407,6 +411,33 @@ export class TTSFeedback {
     }
   }
 
+  prefetch(text: string | null | undefined): void {
+    if (!this.enabled || !text) return;
+
+    const key = this.getCacheKey(text);
+    if (!key || this.audioCache.has(key) || this.prefetchRequests.has(key)) return;
+
+    const request = this.requestSpeechBlob(text)
+      .then((blob) => {
+        this.cacheAudioBlob(key, blob);
+        return blob;
+      })
+      .catch((error) => {
+        console.warn('TTS prefetch failed:', error);
+        throw error;
+      })
+      .finally(() => {
+        this.prefetchRequests.delete(key);
+      });
+
+    this.prefetchRequests.set(key, request);
+    void request.catch(() => undefined);
+  }
+
+  prefetchMany(texts: Array<string | null | undefined>): void {
+    texts.forEach((text) => this.prefetch(text));
+  }
+
   private clearQueueTimer(): void {
     if (this.queueTimer) {
       clearTimeout(this.queueTimer);
@@ -424,13 +455,69 @@ export class TTSFeedback {
   }
 
   private async prefetchNext(): Promise<void> {
-    // REMOVED: No prefetch to eliminate all delay
+    const next = this.queue[0];
+    if (next) {
+      this.prefetch(next);
+    }
     return Promise.resolve();
+  }
+
+  private getCacheKey(text: string): string {
+    return text.replace(/\s+/g, ' ').trim();
+  }
+
+  private cacheAudioBlob(key: string, blob: Blob): void {
+    if (!key) return;
+    if (this.audioCache.has(key)) {
+      this.audioCache.delete(key);
+    }
+    this.audioCache.set(key, blob);
+    while (this.audioCache.size > TTSFeedback.MAX_CACHE_ITEMS) {
+      const oldestKey = this.audioCache.keys().next().value;
+      if (!oldestKey) break;
+      this.audioCache.delete(oldestKey);
+    }
+  }
+
+  private async requestSpeechBlob(text: string, signal?: AbortSignal): Promise<Blob> {
+    const res = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, voice: 'nova' }),
+      signal,
+    });
+
+    if (!res.ok) {
+      const details = await res.text().catch(() => '');
+      throw new Error(`TTS request failed: ${res.status} ${details ? `- ${details}` : ''}`);
+    }
+
+    return res.blob();
+  }
+
+  private async getSpeechBlob(text: string, signal?: AbortSignal): Promise<Blob> {
+    const key = this.getCacheKey(text);
+    const cached = this.audioCache.get(key);
+    if (cached) {
+      return cached;
+    }
+
+    const pending = this.prefetchRequests.get(key);
+    if (pending) {
+      const blob = await pending;
+      this.cacheAudioBlob(key, blob);
+      return blob;
+    }
+
+    const blob = await this.requestSpeechBlob(text, signal);
+    this.cacheAudioBlob(key, blob);
+    return blob;
   }
 
   private async speakNow(text: string): Promise<void> {
     this.stopCurrentPlayback();
 
+    const token = ++this.playbackToken;
     this.speaking = true;
     this.currentText = text;
     this.onTextChange?.(text);
@@ -438,28 +525,50 @@ export class TTSFeedback {
 
     try {
       this.abortController = new AbortController();
-      console.log('⏳ Fetching TTS for:', text);
-      const res = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voice: 'nova' }),
-        signal: this.abortController.signal,
-      });
-      
-      if (!res.ok) {
-        const details = await res.text().catch(() => '');
-        throw new Error(`TTS request failed: ${res.status} ${details ? `- ${details}` : ''}`);
+      const cacheKey = this.getCacheKey(text);
+      if (!this.audioCache.has(cacheKey)) {
+        console.log('⏳ Fetching TTS for:', text);
       }
-      
-      const blob: Blob = await res.blob();
+      const blob = await this.getSpeechBlob(text, this.abortController.signal);
+      if (token !== this.playbackToken || !this.speaking || this.currentText !== text) {
+        return;
+      }
+
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
+      audio.preload = 'auto';
       this.currentAudio = audio;
 
-      // Start lip-sync only when audio actually starts playing (not during fetch)
-      audio.onplay = () => {
-        this.onSpeakingChange?.(true);
-      };
+      await new Promise<void>((resolve, reject) => {
+        if (audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          resolve();
+          return;
+        }
+        const timer = setTimeout(() => resolve(), 400);
+        audio.oncanplay = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        audio.onerror = () => {
+          clearTimeout(timer);
+          reject(new Error('Audio preload error'));
+        };
+        audio.load();
+      });
+
+      if (token !== this.playbackToken || !this.speaking || this.currentText !== text) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      // Give React/Avatar3D one tiny frame to open lip-sync before the first syllable.
+      this.onSpeakingChange?.(true);
+      await new Promise((resolve) => setTimeout(resolve, 120));
+
+      if (token !== this.playbackToken || !this.speaking || this.currentText !== text) {
+        URL.revokeObjectURL(url);
+        return;
+      }
 
       await new Promise<void>((resolve, reject) => {
         audio.onended = () => resolve();
@@ -470,14 +579,16 @@ export class TTSFeedback {
     } catch (e) {
       console.error('TTS playback error:', e);
     } finally {
-      this.speaking = false;
-      this.currentText = '';
-      this.onSpeakingChange?.(false);
-      this.onTextChange?.('');
-      this.abortController = null;
-      
-      // Process next message immediately for priority speech
-      this.processQueue();
+      if (token === this.playbackToken) {
+        this.speaking = false;
+        this.currentText = '';
+        this.onSpeakingChange?.(false);
+        this.onTextChange?.('');
+        this.abortController = null;
+
+        void this.prefetchNext();
+        this.processQueue();
+      }
     }
   }
 
@@ -500,6 +611,7 @@ export class TTSFeedback {
   }
 
   stop(): void {
+    this.playbackToken += 1;
     this.clearQueueTimer();
     this.queue = [];
     this.stopCurrentPlayback();
