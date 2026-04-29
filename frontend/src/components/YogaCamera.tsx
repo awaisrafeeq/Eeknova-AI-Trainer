@@ -605,6 +605,14 @@ export default function YogaCamera({
     return poseName.toLowerCase().replace(/\s+/g, '_');
   };
 
+  const getInAnimationInstruction = (poseName: string): string | null => {
+    if (poseName === 'Warrior 1') {
+      return 'Clasp your hands and rotate outward. Step one leg far back onto the toes, bend your front knee, and raise your arms overhead.';
+    }
+
+    return null;
+  };
+
   // Start analysis
   const startAnalysis = async () => {
     if (!isCameraReady) {
@@ -653,8 +661,11 @@ export default function YogaCamera({
       const apiPoseName = convertPoseNameToApi(selectedPose);
       wsRef.current.startAnalysis(apiPoseName, tolerance);
 
-      // Announce the start
-      ttsRef.current?.speak(`Starting ${selectedPose} detection. Get into position.`, true);
+      // Announce the IN animation cue. Pose-specific text is timed to the entry animation.
+      ttsRef.current?.speak(
+        getInAnimationInstruction(selectedPose) || `Starting ${selectedPose} detection. Get into position.`,
+        true
+      );
 
       // Start sending frames via WebSocket
       startFrameCapture();

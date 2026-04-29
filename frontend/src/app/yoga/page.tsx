@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import Avatar3D from '@/components/Avatar3D';
 import YogaCamera from '@/components/YogaCamera';
 import { SessionSummary, TTSFeedback } from '@/lib/yogaApi';
+import { YOGA_POSE_ANIMATIONS } from '@/lib/yogaPoseAnimations';
 
 
 
@@ -82,62 +83,6 @@ const MET_VALUES: Record<string, number> = {
   "Seated Forward": 2.4,
 
 };
-
-// POSE_ANIMATIONS mapping for pose preview
-const POSE_ANIMATIONS: Record<string, { inPath: string; mainPath: string; outPath: string }> = {
-  "Downward Dog": {
-    inPath: "/Downward Dog Pose/in_compressed.glb",
-    mainPath: "/Downward Dog Pose/main_compressed.glb",
-    outPath: "/Downward Dog Pose/out_compressed.glb",
-  },
-  "Triangle Pose": {
-    inPath: "/Triangle/in_compressed.glb",
-    mainPath: "/Triangle/main_compressed.glb",
-    outPath: "/Triangle/out_compressed.glb",
-  },
-  "Warrior Pose": {
-    inPath: "/Warrior Pose/in_compressed.glb",
-    mainPath: "/Warrior Pose/main_compressed.glb",
-    outPath: "/Warrior Pose/out_compressed.glb",
-  },
-  "Mountain Pose": {
-    inPath: "/Mountain Pose/in_compressed.glb",
-    mainPath: "/Mountain Pose/main_compressed.glb",
-    outPath: "/Mountain Pose/out_compressed.glb",
-  },
-  "Tree Pose": {
-    inPath: "/Tree Pose/in_compressed.glb",
-    mainPath: "/Tree Pose/main_compressed.glb",
-    outPath: "/Tree Pose/out_compressed.glb",
-  },
-  "Cat And Camel Pose": {
-    inPath: "/Cat And Camel Pose/in_compressed.glb",
-    mainPath: "/Cat And Camel Pose/main_compressed.glb",
-    outPath: "/Cat And Camel Pose/out_compressed.glb",
-  },
-  "Child Pose": {
-    inPath: "/Child Pose/in_compressed.glb",
-    mainPath: "/Child Pose/main_compressed.glb",
-    outPath: "/Child Pose/out_compressed.glb",
-  },
-  "Cobra Pose": {
-    inPath: "/Cobra Pose/in_compressed.glb",
-    mainPath: "/Cobra Pose/main_compressed.glb",
-    outPath: "/Cobra Pose/out_compressed.glb",
-  },
-  "Seated Forward": {
-    inPath: "/Seated Forward Pose/in_compressed.glb",
-    mainPath: "/Seated Forward Pose/main_compressed.glb",
-    outPath: "/Seated Forward Pose/out_compressed.glb",
-  },
-  "Warrior 1": {
-    inPath: "/Warrior 1 Pose/warrior_1_in_compressed.glb",
-    mainPath: "/Warrior 1 Pose/warrior_1_main_compressed.glb",
-    outPath: "/Warrior 1 Pose/warrior_1_out_compressed.glb",
-  },
-};
-
-
 
 export default function YogaPage() {
   const { user, isLoading: authLoading, isAuthenticated } = useAuth();
@@ -650,7 +595,8 @@ export default function YogaPage() {
     setTimerActive(false); // Reset timer active state
     setPhaseTimeLeft(0);
     setSessionPhase('idle');
-    setUseStaticSetupPreview(true);
+    setUseStaticSetupPreview(false);
+    setPreviewAnimKey((k) => k + 1);
     // Don't reset sessionSummary here - let it show
   };
 
@@ -769,8 +715,7 @@ export default function YogaPage() {
 
   // Generate MAIN animation path for pose preview in setup stage
   const getMainPosePath = (poseName: string): string | undefined => {
-    const poseKey = poseName as keyof typeof POSE_ANIMATIONS;
-    const poseAnim = POSE_ANIMATIONS[poseKey];
+    const poseAnim = YOGA_POSE_ANIMATIONS[poseName];
     return poseAnim?.mainPath;
   };
 
@@ -1060,11 +1005,11 @@ export default function YogaPage() {
                 ) : flowStage === 'setup' && !isSessionStarted ? (
                   setupViewportReady ? (
                     <Avatar3D
-                      key={`setup-avatar-${selectedPose}-${useStaticSetupPreview || !!sessionSummary ? 'static' : 'preview'}-${isPortraitDisplay ? 'portrait' : 'desktop'}`}
+                      key={`setup-avatar-${selectedPose}-${useStaticSetupPreview ? 'static' : 'preview'}-${isPortraitDisplay ? 'portrait' : 'desktop'}`}
                       selectedPose={selectedPose}
-                      staticMode={useStaticSetupPreview || !!sessionSummary}
-                      playAnimationPath={useStaticSetupPreview || sessionSummary ? undefined : getMainPosePath(selectedPose)}
-                      playAnimationKey={useStaticSetupPreview || sessionSummary ? undefined : previewAnimKey}
+                      staticMode={useStaticSetupPreview}
+                      playAnimationPath={useStaticSetupPreview ? undefined : getMainPosePath(selectedPose)}
+                      playAnimationKey={useStaticSetupPreview ? undefined : previewAnimKey}
                       isPaused={false}
                       cameraManualDistanceFactor={1.75}
                       cameraManualTargetYOffsetFactor={0.28}

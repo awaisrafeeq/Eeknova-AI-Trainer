@@ -13,6 +13,7 @@ import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
+import { YOGA_POSE_ANIMATIONS, type YogaPoseAnimation } from "@/lib/yogaPoseAnimations";
 
 // Disable THREE's global loader cache so GLB ArrayBuffers don't pile up in JS heap
 // across yoga pose swaps. Browser HTTP cache still handles re-fetches.
@@ -25,6 +26,29 @@ const YOGA_REFERENCE_SIZE = new THREE.Vector3(2.0, 2.2, 1.5);
 // Module-level cache for static avatar to avoid reload pauses after session ends
 let cachedStaticGltf: any = null;
 let cachedStaticModelPath: string | null = null;
+
+function normalizeYogaModelRoot(root: THREE.Object3D): THREE.Group {
+  root.scale.setScalar(1.2);
+  root.position.set(0, -1, 0);
+  root.updateMatrixWorld(true);
+
+  const box = new THREE.Box3().setFromObject(root);
+  const container = new THREE.Group();
+  container.name = 'NormalizedYogaModelContainer';
+  if ((root as any).__isSharedClone) {
+    (container as any).__isSharedClone = true;
+  }
+  container.add(root);
+  if (box.isEmpty()) return container;
+
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  box.getSize(size);
+  box.getCenter(center);
+
+  container.position.set(-center.x, -box.min.y + 0.5, 0);
+  return container;
+}
 
 // Release an HTMLImageElement / ImageBitmap / ImageData held by a texture.
 // `texture.dispose()` only frees the GPU upload; the decoded image pixels in JS
@@ -121,7 +145,7 @@ function CameraControls({ target }: { target?: [number, number, number] }) {
 
 
 
-  useEffect(() => {
+  React.useLayoutEffect(() => {
 
     const { OrbitControls } = require("three/examples/jsm/controls/OrbitControls");
 
@@ -156,7 +180,7 @@ function CameraControls({ target }: { target?: [number, number, number] }) {
 
 }
 
-function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset, cameraPositionYRaise, cameraDistanceScale, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera, freezeCameraFit, onTargetChange }: { object: THREE.Object3D | null; referenceSize: THREE.Vector3 | null; cameraZoom: number; cameraTargetYOffset: number; cameraPositionYRaise?: number; cameraDistanceScale?: number; cameraManualDistanceFactor?: number; cameraManualTargetYOffsetFactor?: number; cameraManualTargetXOffsetFactor?: number; lockCamera?: boolean; freezeCameraFit?: boolean; onTargetChange: (t: [number, number, number]) => void }) {
+function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset, cameraPositionYRaise, cameraDistanceScale, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera, freezeCameraFit, onTargetChange, onCameraFitted }: { object: THREE.Object3D | null; referenceSize: THREE.Vector3 | null; cameraZoom: number; cameraTargetYOffset: number; cameraPositionYRaise?: number; cameraDistanceScale?: number; cameraManualDistanceFactor?: number; cameraManualTargetYOffsetFactor?: number; cameraManualTargetXOffsetFactor?: number; lockCamera?: boolean; freezeCameraFit?: boolean; onTargetChange: (t: [number, number, number]) => void; onCameraFitted: () => void }) {
 
   const { camera, size } = useThree();
   const cameraSetRef = React.useRef(false);
@@ -170,10 +194,13 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
     }
   }, [lockCamera]);
 
-  useEffect(() => {
+  React.useLayoutEffect(() => {
 
     if (!object) return;
-    if (freezeCameraFit && cameraSetRef.current) return;
+    if (freezeCameraFit && cameraSetRef.current) {
+      onCameraFitted();
+      return;
+    }
 
     try {
 
@@ -184,7 +211,9 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
       box.getCenter(center);
       box.getSize(boxSize);
 
-      const effectiveSize = referenceSize
+      const effectiveSize = referenceSize && lockCamera
+        ? referenceSize.clone()
+        : referenceSize
         ? new THREE.Vector3(
           Math.max(referenceSize.x, boxSize.x),
           Math.max(referenceSize.y, boxSize.y),
@@ -194,7 +223,7 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
 
       const perspective = camera as THREE.PerspectiveCamera;
       const fitSignature = [
-        object.uuid,
+        lockCamera ? 'locked-yoga-camera' : object.uuid,
         effectiveSize.x.toFixed(3),
         effectiveSize.y.toFixed(3),
         effectiveSize.z.toFixed(3),
@@ -245,6 +274,7 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
           cameraSetRef.current = true;
           appliedFitSignatureRef.current = fitSignature;
         }
+        onCameraFitted();
         return;
       }
 
@@ -322,12 +352,13 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
         cameraSetRef.current = true;
         appliedFitSignatureRef.current = fitSignature;
       }
+      onCameraFitted();
 
     } catch {
 
     }
 
-  }, [object, referenceSize, cameraZoom, cameraTargetYOffset, cameraPositionYRaise, cameraDistanceScale, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera, freezeCameraFit, camera, size.width, size.height, onTargetChange]);
+  }, [object, referenceSize, cameraZoom, cameraTargetYOffset, cameraPositionYRaise, cameraDistanceScale, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera, freezeCameraFit, camera, size.width, size.height, onTargetChange, onCameraFitted]);
 
   return null;
 
@@ -335,15 +366,7 @@ function AutoFitCamera({ object, referenceSize, cameraZoom, cameraTargetYOffset,
 
 
 
-interface PoseAnimation {
-
-  inPath: string;
-
-  mainPath: string;
-
-  outPath: string;
-
-}
+type PoseAnimation = YogaPoseAnimation;
 
 
 
@@ -368,106 +391,6 @@ const POSE_SPEC: Record<string, { in: number; hold: number; out: number; angle: 
   "Cat And Camel Pose": { in: 8, hold: 42, out: 10, angle: 180 },
 
   "Seated Forward": { in: 5, hold: 35, out: 5, angle: 180 },
-
-};
-
-
-
-const POSE_ANIMATIONS: Record<string, PoseAnimation> = {
-
-  "Downward Dog": {
-
-    inPath: "/Downward Dog Pose/in_compressed.glb",
-
-    mainPath: "/Downward Dog Pose/main_compressed.glb",
-
-    outPath: "/Downward Dog Pose/out_compressed.glb",
-
-  },
-  "Triangle Pose": {
-    inPath: "/Triangle Pose/in_compressed.glb",
-    mainPath: "/Triangle Pose/main_compressed.glb",
-    outPath: "/Triangle Pose/out_compressed.glb",
-  },
-  "Warrior Pose": {
-
-    inPath: "/Warrior Pose/in_compressed.glb",
-
-    mainPath: "/Warrior Pose/main_compressed.glb",
-
-    outPath: "/Warrior Pose/out_compressed.glb",
-
-  },
-
-  "Mountain Pose": {
-
-    inPath: "/Mountain Pose/in_compressed.glb",
-
-    mainPath: "/Mountain Pose/main_compressed.glb",
-
-    outPath: "/Mountain Pose/out_compressed.glb",
-
-  },
-
-  "Tree Pose": {
-
-    inPath: "/Tree Pose/in_compressed.glb",
-
-    mainPath: "/Tree Pose/main_compressed.glb",
-
-    outPath: "/Tree Pose/out_compressed.glb",
-
-  },
-
-  "Cat And Camel Pose": {
-
-    inPath: "/Cat And Camel Pose/in_compressed.glb",
-
-    mainPath: "/Cat And Camel Pose/main_compressed.glb",
-
-    outPath: "/Cat And Camel Pose/out_compressed.glb",
-
-  },
-
-  "Child Pose": {
-
-    inPath: "/Child Pose/in_compressed.glb",
-
-    mainPath: "/Child Pose/main_compressed.glb",
-
-    outPath: "/Child Pose/out_compressed.glb",
-
-  },
-
-  "Cobra Pose": {
-
-    inPath: "/Cobra Pose/in_compressed.glb",
-
-    mainPath: "/Cobra Pose/main_compressed.glb",
-
-    outPath: "/Cobra Pose/out_compressed.glb",
-
-  },
-
-  "Seated Forward": {
-
-    inPath: "/Seated Forward Pose/in_compressed.glb",
-
-    mainPath: "/Seated Forward Pose/main_compressed.glb",
-
-    outPath: "/Seated Forward Pose/out_compressed.glb",
-
-  },
-
-  "Warrior 1": {
-
-    inPath: "/Warrior 1 Pose/warrior_1_in_compressed.glb",
-
-    mainPath: "/Warrior 1 Pose/warrior_1_main_compressed.glb",
-
-    outPath: "/Warrior 1 Pose/warrior_1_out_compressed.glb",
-
-  },
 
 };
 
@@ -515,8 +438,16 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
   const animationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const animationFinishedCleanupRef = useRef<(() => void) | null>(null);
+  const loadRequestIdRef = useRef(0);
 
   const currentPoseRef = useRef<string>('');
+
+  const beginModelLoad = () => {
+    loadRequestIdRef.current += 1;
+    return loadRequestIdRef.current;
+  };
+
+  const isCurrentModelLoad = (requestId: number) => requestId === loadRequestIdRef.current;
 
   const scene = useThree((state) => state.scene); // Get scene from useThree hook
   const gl = useThree((state) => state.gl);
@@ -661,6 +592,8 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
   const loadChessAvatar = async (modelPath?: string) => {
 
+    const requestId = beginModelLoad();
+
     try {
 
       onLoadingChange?.(true);
@@ -687,10 +620,13 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
       } else {
         // Load yoga avatar as static model (use in animation)
         gltf = await loader.loadAsync(actualModelPath);
+        if (!isCurrentModelLoad(requestId)) return;
         cachedStaticGltf = gltf;
         cachedStaticModelPath = actualModelPath;
         console.log('Static avatar cached for future use');
       }
+
+      if (!isCurrentModelLoad(requestId)) return;
 
       // Clone the scene with deep clone for SkinnedMesh support
       const loadedModel = SkeletonUtils.clone(gltf.scene) as THREE.Group;
@@ -730,11 +666,14 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
 
 
-      // Position and scale the model
-
-      loadedModel.position.set(0, -1, 0);
-
-      loadedModel.scale.setScalar(1.2);
+      // Position and scale the model consistently across yoga static/animated states.
+      let displayModel: THREE.Group = loadedModel;
+      if (!actualModelPath.includes('Encouraging Gesture')) {
+        displayModel = normalizeYogaModelRoot(loadedModel);
+      } else {
+        loadedModel.position.set(0, -1, 0);
+        loadedModel.scale.setScalar(1.2);
+      }
 
 
 
@@ -746,13 +685,13 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
       }
 
-      scene.add(loadedModel);
+      scene.add(displayModel);
 
-      meshRef.current = loadedModel;
+      meshRef.current = displayModel;
 
-      setModel(loadedModel);
+      setModel(displayModel);
 
-      onModelLoaded?.(loadedModel);
+      onModelLoaded?.(displayModel);
 
       onLoadingChange?.(false);
 
@@ -854,6 +793,13 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
       return;
     }
 
+    // A custom animation path is used by setup previews and aux stages.
+    // Let the dedicated playAnimationPath effect own it so setup pose changes
+    // do not fall through to the default IN animation sequence.
+    if (playAnimationPath) {
+      return;
+    }
+
 
 
     // Clear any existing timeout
@@ -870,7 +816,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
 
 
-    if (!selectedPose || !POSE_ANIMATIONS[selectedPose]) {
+    if (!selectedPose || !YOGA_POSE_ANIMATIONS[selectedPose]) {
 
       console.log('No pose or animation found for:', selectedPose);
 
@@ -890,7 +836,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
 
 
-    const pose = POSE_ANIMATIONS[selectedPose];
+    const pose = YOGA_POSE_ANIMATIONS[selectedPose];
 
     const loader = new GLTFLoader();
 
@@ -948,6 +894,8 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
     async function loadStaticModel() {
 
+      const requestId = beginModelLoad();
+
       try {
 
         onLoadingChange?.(true);
@@ -971,7 +919,8 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
         // Load yoga avatar as static model (use in animation)
 
-        const gltf = await loader.loadAsync('/Mountain Pose/in_compressed.glb');
+        const gltf = await loader.loadAsync(YOGA_POSE_ANIMATIONS["Mountain Pose"].inPath);
+        if (!isCurrentModelLoad(requestId)) return;
 
         const loadedModel = gltf.scene;
 
@@ -1005,11 +954,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
 
 
-        // Position and scale the model
-
-        loadedModel.position.set(0, -1, 0);
-
-        loadedModel.scale.setScalar(1.2);
+        const displayModel = normalizeYogaModelRoot(loadedModel);
 
 
 
@@ -1021,11 +966,11 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
         }
 
-        scene.add(loadedModel);
+        scene.add(displayModel);
 
-        meshRef.current = loadedModel;
+        meshRef.current = displayModel;
 
-        setModel(loadedModel);
+        setModel(displayModel);
 
         onLoadingChange?.(false);
 
@@ -1084,6 +1029,8 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
     async function playAnimationSequence(pose: PoseAnimation, type: 'in' | 'main' | 'out') {
 
+      const requestId = beginModelLoad();
+
       try {
 
         // Preserve current rotation across in/main/out model swaps
@@ -1098,6 +1045,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
         const gltf = await new Promise<any>((resolve, reject) => {
           loader.load(loadPath, resolve, undefined, reject);
         });
+        if (!isCurrentModelLoad(requestId)) return;
 
         // Capture the previous phase's model so we can dispose it AFTER the new one
         // has been committed to the scene. Disposing before the swap would leave the
@@ -1228,6 +1176,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
             let remainingActions = playedActions.length;
             const playedActionSet = new Set(playedActions);
             const handleFinished = (event: { action?: THREE.AnimationAction }) => {
+              if (!isCurrentModelLoad(requestId)) return;
               if (!event.action || !playedActionSet.has(event.action)) {
                 return;
               }
@@ -1255,6 +1204,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
             let remainingIn = playedActions.length;
             const inActionSet = new Set(playedActions);
             const handleInFinished = (event: { action?: THREE.AnimationAction }) => {
+              if (!isCurrentModelLoad(requestId)) return;
               if (!event.action || !inActionSet.has(event.action)) {
                 return;
               }
@@ -1366,43 +1316,28 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
 
 
-        loadedModel.scale.set(1.2, 1.2, 1.2);
+        const displayModel = normalizeYogaModelRoot(loadedModel);
 
-        loadedModel.position.set(0, -1, 0);
-
-        // Normalize model position to ensure consistent viewport appearance across poses
-        const box = new THREE.Box3().setFromObject(loadedModel);
-        const bboxSize = new THREE.Vector3();
-        const bboxCenter = new THREE.Vector3();
-        box.getSize(bboxSize);
-        box.getCenter(bboxCenter);
-
-        // Offset to center horizontally and anchor vertically at "feet"
-        const normalizedPosition = new THREE.Vector3(
-          -bboxCenter.x,  // Center X globally
-          -(bboxCenter.y + bboxSize.y * 0.5) + 0.5,  // Anchor Y to feet
-          0
-        );
-        loadedModel.position.copy(normalizedPosition);
-
-        setModel(loadedModel);
+        setModel(displayModel);
 
         findJawBone(loadedModel);
 
         // Notify parent of the loaded model for camera fitting
-        onModelLoaded?.(loadedModel);
+        onModelLoaded?.(displayModel);
 
         // Dispose the previous phase's GPU + image-pixel memory now that React has
         // a new model to swap in. Deferred one macrotask so the scene-graph swap
         // commits before we free the old resources.
-        if (previousModel && previousModel !== loadedModel && !(previousModel as any).__isSharedClone) {
+        if (previousModel && previousModel !== displayModel && !(previousModel as any).__isSharedClone) {
           setTimeout(() => {
             try { disposeObject3D(previousModel); } catch { }
           }, 0);
         }
 
         // Clear loading state after model is set
-        onLoadingChange?.(false);
+        if (isCurrentModelLoad(requestId)) {
+          onLoadingChange?.(false);
+        }
 
         setCurrentAnimation(type);
 
@@ -1413,7 +1348,9 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
       } catch (error) {
 
-        onLoadingChange?.(false);
+        if (isCurrentModelLoad(requestId)) {
+          onLoadingChange?.(false);
+        }
         console.error(`Error loading ${type} animation:`, error);
 
       }
@@ -1423,6 +1360,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
 
     return () => {
+      loadRequestIdRef.current += 1;
 
       if (animationTimeoutRef.current) {
 
@@ -1432,13 +1370,13 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
     };
 
-  }, [selectedPose, staticMode, staticModelPath, playAnimationKey, onlyInAnimation, onlyOutAnimation]);
+  }, [selectedPose, staticMode, staticModelPath, playAnimationPath, playAnimationKey, onlyInAnimation, onlyOutAnimation]);
 
 
 
   useEffect(() => {
 
-    if (!staticMode || playAnimationKey === undefined || playAnimationKey === 0 || !playAnimationPath) {
+    if (!playAnimationPath) {
 
       return;
 
@@ -1452,7 +1390,10 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
     const playAnimation = async () => {
 
+      const requestId = beginModelLoad();
+
       try {
+        onLoadingChange?.(true);
         // TODO: Re-enable warm-up/cooldown logic later
         /*
           const isWarmUpOrCooldown = playAnimationPath && (
@@ -1492,6 +1433,9 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
             action.play();
           });
 
+          if (isCurrentModelLoad(requestId)) {
+            onLoadingChange?.(false);
+          }
           return;
         }
 
@@ -1517,7 +1461,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
         const gltf = await loader.loadAsync(playAnimationPath);
 
-        if (isCancelled) {
+        if (isCancelled || !isCurrentModelLoad(requestId)) {
 
           return;
 
@@ -1588,11 +1532,11 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
             scene.remove(meshRef.current);
           }
 
-          loadedModel.position.set(0, -1, 0);
-          loadedModel.scale.setScalar(1.2);
-          scene.add(loadedModel);
-          meshRef.current = loadedModel;
-          setModel(loadedModel);
+          const displayModel = normalizeYogaModelRoot(loadedModel);
+          scene.add(displayModel);
+          meshRef.current = displayModel;
+          setModel(displayModel);
+          onModelLoaded?.(displayModel);
         }
 
         // Detect blendshapes for TTS animation (for chess models) - PRIORITIZE main body mesh
@@ -1646,8 +1590,15 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
           console.log('🎭 Animation will continue for TTS sync');
         }
 
+        if (isCurrentModelLoad(requestId)) {
+          onLoadingChange?.(false);
+        }
+
       } catch (error) {
 
+        if (isCurrentModelLoad(requestId)) {
+          onLoadingChange?.(false);
+        }
         console.error('Error playing animation:', error);
 
       }
@@ -1663,6 +1614,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
     return () => {
 
       isCancelled = true;
+      loadRequestIdRef.current += 1;
 
       if (animationTimeoutRef.current) {
 
@@ -2179,6 +2131,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
 
   const [fitObject, setFitObject] = useState<THREE.Object3D | null>(null);
   const [cameraTarget, setCameraTarget] = useState<[number, number, number]>([0, 0, 0]);
+  const [cameraFitted, setCameraFitted] = useState(false);
   // When lockCamera is true (yoga session/instructions), seed with the universal yoga
   // bounding box so the camera distance is consistent regardless of each pose's
   // IN-animation first-frame size.
@@ -2186,6 +2139,28 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
     lockCamera ? YOGA_REFERENCE_SIZE.clone() : null
   );
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+
+  // Hide the canvas immediately when any avatar source changes. The actual model
+  // load happens inside YogaModel effects, which run after paint; doing this at
+  // the parent layout phase prevents a one-frame flash at the default camera.
+  React.useLayoutEffect(() => {
+    setModelLoading(true);
+    setFitObject(null);
+    setCameraFitted(false);
+  }, [
+    selectedPose,
+    staticMode,
+    staticModelPath,
+    playAnimationPath,
+    playAnimationKey,
+    onlyInAnimation,
+    onlyOutAnimation,
+  ]);
+
+  const avatarReady = !modelLoading && !!fitObject && cameraFitted;
+  const handleCameraFitted = useCallback(() => {
+    setCameraFitted(true);
+  }, []);
 
   useEffect(() => {
     if (!fitObject) return;
@@ -2239,7 +2214,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
     <div className="w-full h-full flex items-end justify-center" style={{ position: "relative" }} data-walktour="avatar">
       {webglSupported && !error ? (
         <div className="w-full h-full flex items-end justify-center" style={{ position: "relative" }}>
-          {modelLoading && (
+          {!avatarReady && (
             <div style={{
               position: 'absolute',
               inset: 0,
@@ -2276,7 +2251,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
               background: "transparent",
               width: "100%",
               height: "100%",
-              opacity: modelLoading ? 0 : 1,
+              opacity: avatarReady ? 1 : 0,
               transition: "opacity 0.3s ease-in",
             }}
           >
@@ -2291,7 +2266,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
             <directionalLight position={[-5, 5, 5]} intensity={0.8} />
             <pointLight position={[0, 2, 2]} intensity={0.6} />
             <hemisphereLight args={[0xffffff, 0x444444, 0.3]} />
-            <AutoFitCamera object={fitObject} referenceSize={referenceSizeRef.current} cameraZoom={cameraZoom} cameraTargetYOffset={cameraTargetYOffset} cameraPositionYRaise={cameraPositionYRaise} cameraDistanceScale={cameraDistanceScale} cameraManualDistanceFactor={cameraManualDistanceFactor} cameraManualTargetYOffsetFactor={cameraManualTargetYOffsetFactor} cameraManualTargetXOffsetFactor={cameraManualTargetXOffsetFactor} lockCamera={lockCamera} freezeCameraFit={freezeCameraFit} onTargetChange={setCameraTarget} />
+            <AutoFitCamera object={fitObject} referenceSize={referenceSizeRef.current} cameraZoom={cameraZoom} cameraTargetYOffset={cameraTargetYOffset} cameraPositionYRaise={cameraPositionYRaise} cameraDistanceScale={cameraDistanceScale} cameraManualDistanceFactor={cameraManualDistanceFactor} cameraManualTargetYOffsetFactor={cameraManualTargetYOffsetFactor} cameraManualTargetXOffsetFactor={cameraManualTargetXOffsetFactor} lockCamera={lockCamera} freezeCameraFit={freezeCameraFit} onTargetChange={setCameraTarget} onCameraFitted={handleCameraFitted} />
             <CameraControls target={cameraTarget} />
             <Suspense fallback={null}>
               <YogaModel
