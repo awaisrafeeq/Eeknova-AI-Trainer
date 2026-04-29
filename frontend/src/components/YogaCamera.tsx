@@ -554,7 +554,7 @@ export default function YogaCamera({
   useEffect(() => {
     const shouldPlay = playGuidedInstructions && speechReady && !!instructionSet && !!ttsRef.current;
 
-    if (shouldPlay && !prevPlayGuidedRef.current) {
+    if (playGuidedInstructions && !prevPlayGuidedRef.current) {
       entryPlayedRef.current = false;
       pendingGuidedEndRef.current = false;
       isGuidedPhaseRef.current = false;
@@ -583,7 +583,7 @@ export default function YogaCamera({
   useEffect(() => {
     const shouldPlay = playReleaseInstructions && speechReady && !!instructionSet && !!ttsRef.current;
 
-    if (shouldPlay && !prevPlayReleaseRef.current) {
+    if (playReleaseInstructions && !prevPlayReleaseRef.current) {
       releasePlayedRef.current = false;
       pendingReleaseEndRef.current = false;
       globalLastSpoken = null;

@@ -372,6 +372,8 @@ export class TTSFeedback {
   private playbackToken: number = 0;
   private audioCache: Map<string, Blob> = new Map();
   private prefetchRequests: Map<string, Promise<Blob>> = new Map();
+  private ttsAudioContext: AudioContext | null = null;
+  private ttsAudioFrame: number | null = null;
 
   constructor(onSpeakingChange?: (isSpeaking: boolean) => void, onTextChange?: (text: string) => void) {
     this.onSpeakingChange = onSpeakingChange || null;
@@ -574,6 +576,7 @@ export class TTSFeedback {
         audio.onended = () => resolve();
         audio.onerror = () => reject(new Error('Audio playback error'));
         audio.play().catch(reject);
+        this.startTTSLevelEmitter(audio, text);
       });
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -585,10 +588,85 @@ export class TTSFeedback {
         this.onSpeakingChange?.(false);
         this.onTextChange?.('');
         this.abortController = null;
+        this.stopTTSLevelEmitter();
 
         void this.prefetchNext();
         this.processQueue();
       }
+    }
+  }
+
+  private async startTTSLevelEmitter(audio: HTMLAudioElement, text: string): Promise<void> {
+    this.stopTTSLevelEmitter(false);
+
+    try {
+      const AudioContextCtor =
+        window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+
+      const ctx = new AudioContextCtor();
+      this.ttsAudioContext = ctx;
+      if (ctx.state === 'suspended') {
+        await ctx.resume().catch(() => undefined);
+      }
+
+      const source = ctx.createMediaElementSource(audio);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.35;
+      source.connect(analyser);
+      analyser.connect(ctx.destination);
+
+      const data = new Uint8Array(analyser.fftSize);
+      const tick = () => {
+        analyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i += 1) {
+          const centered = (data[i] - 128) / 128;
+          sum += centered * centered;
+        }
+        const rms = Math.sqrt(sum / data.length);
+        const level = Math.min(1, Math.max(0, rms * 5.5));
+        window.dispatchEvent(new CustomEvent('eeknova-tts-audio', {
+          detail: {
+            isSpeaking: true,
+            level,
+            text,
+            currentTime: audio.currentTime,
+            duration: Number.isFinite(audio.duration) ? audio.duration : 0,
+          },
+        }));
+
+        if (!audio.paused && !audio.ended) {
+          this.ttsAudioFrame = requestAnimationFrame(tick);
+        }
+      };
+
+      tick();
+    } catch (error) {
+      console.warn('TTS audio level analyser unavailable:', error);
+      window.dispatchEvent(new CustomEvent('eeknova-tts-audio', {
+        detail: { isSpeaking: true, level: 0.45, text, currentTime: 0, duration: 0 },
+      }));
+    }
+  }
+
+  private stopTTSLevelEmitter(dispatchEnded: boolean = true): void {
+    if (this.ttsAudioFrame !== null) {
+      cancelAnimationFrame(this.ttsAudioFrame);
+      this.ttsAudioFrame = null;
+    }
+
+    if (dispatchEnded) {
+      window.dispatchEvent(new CustomEvent('eeknova-tts-audio', {
+        detail: { isSpeaking: false, level: 0, text: '', currentTime: 0, duration: 0 },
+      }));
+    }
+
+    const ctx = this.ttsAudioContext;
+    this.ttsAudioContext = null;
+    if (ctx) {
+      void ctx.close().catch(() => undefined);
     }
   }
 
@@ -600,6 +678,7 @@ export class TTSFeedback {
       } catch {}
       this.currentAudio = null;
     }
+    this.stopTTSLevelEmitter();
     
     // Reset speaking state
     if (this.speaking) {

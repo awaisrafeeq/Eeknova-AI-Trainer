@@ -137,6 +137,71 @@ function applySkinTone(root: THREE.Object3D, tone: THREE.Color, strength: number
   });
 }
 
+type TextViseme = {
+  open: number;
+  wide: number;
+  round: number;
+  close: number;
+  lowerLip: number;
+  energy: number;
+};
+
+const IDLE_VISEME: TextViseme = {
+  open: 0.26,
+  wide: 0.08,
+  round: 0.05,
+  close: 0.08,
+  lowerLip: 0,
+  energy: 0.48,
+};
+
+function getTextViseme(text: string | undefined, elapsedSeconds: number): TextViseme {
+  const normalized = (text || '').toLowerCase();
+  if (!normalized.trim()) return IDLE_VISEME;
+
+  const charsPerSecond = 13.5;
+  const index = Math.min(normalized.length - 1, Math.max(0, Math.floor(elapsedSeconds * charsPerSecond)));
+  const current = normalized[index] || '';
+  const previous = normalized[index - 1] || '';
+  const next = normalized[index + 1] || '';
+  const localT = (elapsedSeconds * charsPerSecond) % 1;
+  const pulse = Math.sin(localT * Math.PI);
+
+  if (/[\s,.;:!?]/.test(current)) {
+    return { open: 0.02, wide: 0.01, round: 0.01, close: 0.68, lowerLip: 0, energy: 0.22 };
+  }
+
+  if ('mbp'.includes(current)) {
+    return { open: 0.02, wide: 0.02, round: 0.02, close: 0.95, lowerLip: 0, energy: 0.35 };
+  }
+
+  if ('fv'.includes(current)) {
+    return { open: 0.2 + 0.1 * pulse, wide: 0.12, round: 0.02, close: 0.26, lowerLip: 0.72, energy: 0.62 };
+  }
+
+  if ('ouqw'.includes(current) || (current === 'o' && next === 'o')) {
+    return { open: 0.34 + 0.24 * pulse, wide: 0.02, round: 0.95, close: 0.02, lowerLip: 0.12, energy: 0.82 };
+  }
+
+  if ('ae'.includes(current)) {
+    return { open: 0.78 + 0.18 * pulse, wide: current === 'e' ? 0.48 : 0.28, round: 0.03, close: 0.01, lowerLip: 0.14, energy: 0.95 };
+  }
+
+  if ('iy'.includes(current)) {
+    return { open: 0.34 + 0.12 * pulse, wide: 0.92, round: 0.02, close: 0.02, lowerLip: 0.08, energy: 0.78 };
+  }
+
+  if ('lr'.includes(current)) {
+    return { open: 0.4 + 0.15 * pulse, wide: 0.22, round: previous === 'o' ? 0.42 : 0.12, close: 0.05, lowerLip: 0.08, energy: 0.72 };
+  }
+
+  if ('tdnszkgchj'.includes(current)) {
+    return { open: 0.28 + 0.14 * pulse, wide: 0.18, round: 0.03, close: 0.34, lowerLip: 0.03, energy: 0.62 };
+  }
+
+  return { open: 0.34 + 0.18 * pulse, wide: 0.16, round: 0.08, close: 0.14, lowerLip: 0.05, energy: 0.66 };
+}
+
 function CameraControls({ target }: { target?: [number, number, number] }) {
 
   const { camera, gl } = useThree();
@@ -402,6 +467,7 @@ interface Avatar3DProps {
   onlyOutAnimation?: boolean;
   disablePoseMotion?: boolean;
   isTTSSpeaking?: boolean;
+  ttsText?: string;
   isPaused?: boolean;
   staticMode?: boolean;
   staticModelPath?: string;
@@ -428,7 +494,7 @@ interface Avatar3DProps {
   onReadyChange?: (ready: boolean) => void;
 }
 
-function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, inAnimationTargetDurationSec, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onError, onTTSSpeaking, onSessionEnd, onPhaseChange, onModelLoaded, onLoadingChange }: Avatar3DProps & { onLoadingChange?: (loading: boolean) => void }) {
+function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, ttsText = '', isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, inAnimationTargetDurationSec, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onError, onTTSSpeaking, onSessionEnd, onPhaseChange, onModelLoaded, onLoadingChange }: Avatar3DProps & { onLoadingChange?: (loading: boolean) => void }) {
 
   const [model, setModel] = useState<THREE.Group | null>(null);
 
@@ -518,8 +584,23 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
       } catch { }
     };
 
+    const onTTSAudio = (ev: Event) => {
+      try {
+        const detail = (ev as CustomEvent).detail as any;
+        if (!detail) return;
+        const lvl = typeof detail.level === 'number' ? detail.level : 0;
+        ttsAudioLevelRef.current = Math.max(0, Math.min(1, lvl));
+        ttsAudioSpeakingRef.current = !!detail.isSpeaking;
+        ttsAudioTimeRef.current = Math.max(0, typeof detail.currentTime === 'number' ? detail.currentTime : 0);
+      } catch { }
+    };
+
     window.addEventListener('eeknova-assistant-audio', onAssistantAudio as any);
-    return () => window.removeEventListener('eeknova-assistant-audio', onAssistantAudio as any);
+    window.addEventListener('eeknova-tts-audio', onTTSAudio as any);
+    return () => {
+      window.removeEventListener('eeknova-assistant-audio', onAssistantAudio as any);
+      window.removeEventListener('eeknova-tts-audio', onTTSAudio as any);
+    };
   }, []);
 
 
@@ -536,9 +617,14 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
   const assistantAudioLevelRef = useRef<number>(0);
   const assistantSpeakingRef = useRef<boolean>(false);
+  const ttsAudioLevelRef = useRef<number>(0);
+  const ttsAudioSpeakingRef = useRef<boolean>(false);
+  const ttsAudioTimeRef = useRef<number>(0);
   const blinkPhaseRef = useRef<number>(0);
   const speechEnvelopeRef = useRef<number>(0);
   const speechSeedRef = useRef<number>(Math.random() * 1000);
+  const speechStartTimeRef = useRef<number>(0);
+  const activeSpeechTextRef = useRef<string>('');
   const jawBoneRef = useRef<THREE.Bone | null>(null);
   const didLogAssistantDriverRef = useRef(false);
 
@@ -1658,12 +1744,23 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
 
       const assistantSpeaking = assistantSpeakingRef.current;
-      const effectiveSpeaking = (isTTSSpeaking || assistantSpeaking) && !isPaused;
+      const ttsAudioSpeaking = ttsAudioSpeakingRef.current;
+      const effectiveSpeaking = (isTTSSpeaking || ttsAudioSpeaking || assistantSpeaking) && !isPaused;
+      if (effectiveSpeaking && isTTSSpeaking && activeSpeechTextRef.current !== ttsText) {
+        activeSpeechTextRef.current = ttsText || '';
+        speechStartTimeRef.current = time;
+      }
+      if (!effectiveSpeaking) {
+        activeSpeechTextRef.current = '';
+      }
+      const textViseme = isTTSSpeaking
+        ? getTextViseme(activeSpeechTextRef.current, ttsAudioTimeRef.current || Math.max(0, time - speechStartTimeRef.current))
+        : IDLE_VISEME;
 
       // Smooth speech envelope (attack/release) so lip motion feels less robotic.
       // We use assistant audio level when available; otherwise fall back to a gentle baseline while TTS is active.
       const rawSpeechLevel = effectiveSpeaking
-        ? (assistantSpeaking ? assistantAudioLevelRef.current : 0.35)
+        ? (assistantSpeaking ? assistantAudioLevelRef.current : Math.max(ttsAudioLevelRef.current * 1.35, textViseme.energy * 0.55))
         : 0;
       const env = speechEnvelopeRef.current;
       const attack = 0.22;
@@ -1681,8 +1778,8 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
       }
 
       if (effectiveSpeaking && jawBoneRef.current) {
-        const target = Math.max(0, Math.min(0.42, speechEnvelopeRef.current * 0.7));
-        const targetRot = -target * 0.18;
+        const target = Math.max(0, Math.min(0.42, speechEnvelopeRef.current * 0.65));
+        const targetRot = -target * 0.16;
         jawBoneRef.current.rotation.x = THREE.MathUtils.lerp(jawBoneRef.current.rotation.x, targetRot, 0.18);
       }
 
@@ -1694,19 +1791,29 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
 
 
-        // Viseme-style gating: vary between wide / round / open shapes and add micro-pauses.
+        // Text-aware viseme gate: approximate current mouth shape from the text being spoken.
         const envLevel = Math.max(0, Math.min(1, speechEnvelopeRef.current));
         const syllable = 0.5 + 0.5 * Math.sin((time + speechSeedRef.current) * 7.2);
         const microPause = Math.pow(Math.max(0, Math.sin((time + speechSeedRef.current) * 3.1)), 12);
-        const gate = THREE.MathUtils.clamp(0.25 + 0.75 * syllable - microPause * 0.55, 0, 1);
+        const gate = isTTSSpeaking
+          ? THREE.MathUtils.clamp(textViseme.open, 0, 1)
+          : THREE.MathUtils.clamp(0.25 + 0.75 * syllable - microPause * 0.55, 0, 1);
 
-        // Jaw movement - moderate, not too extreme
-        const jawAmount = 0.25 + 0.45 * gate; // 0.25 to 0.70 - visible but not exaggerated
+        const audioDrive = isTTSSpeaking ? THREE.MathUtils.clamp(ttsAudioLevelRef.current * 2.8, 0.42, 1) : 1;
 
-        // Lip open - minimal, just subtle movement
-        const openAmount = envLevel * (0.02 + 0.06 * gate); // Very minimal lip movement
-        const wideAmount = envLevel * (0.02 + 0.06 * (0.5 + 0.5 * Math.sin((time + speechSeedRef.current) * 4.9)));
-        const roundAmount = envLevel * (0.01 + 0.04 * (0.5 + 0.5 * Math.sin((time + speechSeedRef.current) * 4.1 + 1.7)));
+        const jawAmount = isTTSSpeaking
+          ? THREE.MathUtils.clamp(0.05 + textViseme.open * 0.58 * audioDrive, 0.03, 0.62)
+          : 0.25 + 0.45 * gate;
+
+        const openAmount = isTTSSpeaking
+          ? envLevel * THREE.MathUtils.clamp(textViseme.open * 0.22 * audioDrive, 0.015, 0.18)
+          : envLevel * (0.02 + 0.06 * gate);
+        const wideAmount = isTTSSpeaking
+          ? envLevel * THREE.MathUtils.clamp(textViseme.wide * 0.36 * audioDrive, 0.015, 0.26)
+          : envLevel * (0.02 + 0.06 * (0.5 + 0.5 * Math.sin((time + speechSeedRef.current) * 4.9)));
+        const roundAmount = isTTSSpeaking
+          ? envLevel * THREE.MathUtils.clamp(textViseme.round * 0.48 * audioDrive, 0.015, 0.36)
+          : envLevel * (0.01 + 0.04 * (0.5 + 0.5 * Math.sin((time + speechSeedRef.current) * 4.1 + 1.7)));
 
         // Debug: Log available blendshapes once
         if (Math.floor(time * 2) % 8 === 0 && Math.floor((time - 0.01) * 2) % 8 !== 0) {
@@ -1736,14 +1843,16 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
           const jawIdx = (dict as any).jawOpen;
           if (typeof jawIdx === 'number') {
             didDriveArkitMouth = true;
-            influences[jawIdx] = THREE.MathUtils.lerp(influences[jawIdx] || 0, jawAmount, 0.28);
+            influences[jawIdx] = THREE.MathUtils.lerp(influences[jawIdx] || 0, jawAmount, 0.3);
           }
 
           // Mouth close - counteract jawOpen *only when needed*.
           // Use `gate` so vowels/open syllables can open naturally while keeping lips from over-opening.
           const closeIdx = (dict as any).mouthClose;
           if (typeof closeIdx === 'number') {
-            const closeAmount = THREE.MathUtils.clamp(jawAmount * (0.65 - 0.55 * gate), 0, 0.55);
+            const closeAmount = isTTSSpeaking
+              ? THREE.MathUtils.clamp(textViseme.close * 0.45 * audioDrive, 0, 0.42)
+              : THREE.MathUtils.clamp(jawAmount * (0.65 - 0.55 * gate), 0, 0.55);
             influences[closeIdx] = THREE.MathUtils.lerp(influences[closeIdx] || 0, closeAmount, 0.22);
           }
 
@@ -1754,11 +1863,11 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
           const lipUpperIdx = (dict as any).lipUpperUp;
 
           // Subtle upper lip movement only
-          const upperLipValue = openAmount * 0.18;
-          if (typeof upperUpLIdx === 'number') influences[upperUpLIdx] = THREE.MathUtils.lerp(influences[upperUpLIdx] || 0, upperLipValue, 0.2);
-          if (typeof upperUpRIdx === 'number') influences[upperUpRIdx] = THREE.MathUtils.lerp(influences[upperUpRIdx] || 0, upperLipValue, 0.2);
-          if (typeof upperUpIdx === 'number') influences[upperUpIdx] = THREE.MathUtils.lerp(influences[upperUpIdx] || 0, upperLipValue, 0.2);
-          if (typeof lipUpperIdx === 'number') influences[lipUpperIdx] = THREE.MathUtils.lerp(influences[lipUpperIdx] || 0, upperLipValue * 0.5, 0.2);
+          const upperLipValue = openAmount * 0.22;
+          if (typeof upperUpLIdx === 'number') influences[upperUpLIdx] = THREE.MathUtils.lerp(influences[upperUpLIdx] || 0, upperLipValue, 0.18);
+          if (typeof upperUpRIdx === 'number') influences[upperUpRIdx] = THREE.MathUtils.lerp(influences[upperUpRIdx] || 0, upperLipValue, 0.18);
+          if (typeof upperUpIdx === 'number') influences[upperUpIdx] = THREE.MathUtils.lerp(influences[upperUpIdx] || 0, upperLipValue, 0.18);
+          if (typeof lipUpperIdx === 'number') influences[lipUpperIdx] = THREE.MathUtils.lerp(influences[lipUpperIdx] || 0, upperLipValue * 0.55, 0.18);
 
           // Lower lip movement - MINIMAL, synced with jaw
           const lowerDownLIdx = (dict as any).mouthLowerDownLeft;
@@ -1767,18 +1876,25 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
           const lipLowerIdx = (dict as any).lipLowerDown;
 
           // Subtle lower lip movement
-          const lowerLipValue = jawAmount * 0.10;
-          if (typeof lowerDownLIdx === 'number') influences[lowerDownLIdx] = THREE.MathUtils.lerp(influences[lowerDownLIdx] || 0, lowerLipValue, 0.22);
-          if (typeof lowerDownRIdx === 'number') influences[lowerDownRIdx] = THREE.MathUtils.lerp(influences[lowerDownRIdx] || 0, lowerLipValue, 0.22);
-          if (typeof lowerDownIdx === 'number') influences[lowerDownIdx] = THREE.MathUtils.lerp(influences[lowerDownIdx] || 0, lowerLipValue, 0.22);
-          if (typeof lipLowerIdx === 'number') influences[lipLowerIdx] = THREE.MathUtils.lerp(influences[lipLowerIdx] || 0, lowerLipValue * 0.5, 0.22);
+          const lowerLipValue = isTTSSpeaking
+            ? THREE.MathUtils.clamp(jawAmount * 0.08 + textViseme.lowerLip * 0.12 * audioDrive, 0, 0.18)
+            : jawAmount * 0.10;
+          if (typeof lowerDownLIdx === 'number') influences[lowerDownLIdx] = THREE.MathUtils.lerp(influences[lowerDownLIdx] || 0, lowerLipValue, 0.2);
+          if (typeof lowerDownRIdx === 'number') influences[lowerDownRIdx] = THREE.MathUtils.lerp(influences[lowerDownRIdx] || 0, lowerLipValue, 0.2);
+          if (typeof lowerDownIdx === 'number') influences[lowerDownIdx] = THREE.MathUtils.lerp(influences[lowerDownIdx] || 0, lowerLipValue, 0.2);
+          if (typeof lipLowerIdx === 'number') influences[lipLowerIdx] = THREE.MathUtils.lerp(influences[lipLowerIdx] || 0, lowerLipValue * 0.55, 0.2);
+
+          const mouthOpenIdx = (dict as any).mouthOpen;
+          if (typeof mouthOpenIdx === 'number') {
+            influences[mouthOpenIdx] = THREE.MathUtils.lerp(influences[mouthOpenIdx] || 0, openAmount, 0.26);
+          }
 
           // Mouth funnel and pucker for rounded sounds
           const funnelIdx = (dict as any).mouthFunnel;
           if (typeof funnelIdx === 'number')
             influences[funnelIdx] = THREE.MathUtils.lerp(
               influences[funnelIdx] || 0,
-              roundAmount * (0.50 + 0.20 * (0.5 + 0.5 * Math.sin((time + speechSeedRef.current) * 2.0))),
+              roundAmount * (0.52 + 0.12 * (0.5 + 0.5 * Math.sin((time + speechSeedRef.current) * 2.0))),
               0.18
             );
 
@@ -1786,14 +1902,14 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
           if (typeof puckerIdx === 'number')
             influences[puckerIdx] = THREE.MathUtils.lerp(
               influences[puckerIdx] || 0,
-              roundAmount * (0.45 + 0.20 * (0.5 + 0.5 * Math.sin((time + speechSeedRef.current) * 1.6 + 0.6))),
+              roundAmount * (0.5 + 0.12 * (0.5 + 0.5 * Math.sin((time + speechSeedRef.current) * 1.6 + 0.6))),
               0.18
             );
 
           // Smile - subtle, adds life
           const smileIdx = (dict as any).mouthSmileLeft || (dict as any).mouthSmile;
           const smileRIdx = (dict as any).mouthSmileRight;
-          const smileValue = 0.03 + wideAmount * 0.5;
+          const smileValue = 0.02 + wideAmount * 0.45;
           if (typeof smileIdx === 'number') influences[smileIdx] = THREE.MathUtils.lerp(influences[smileIdx] || 0, smileValue, 0.12);
           if (typeof smileRIdx === 'number') influences[smileRIdx] = THREE.MathUtils.lerp(influences[smileRIdx] || 0, smileValue, 0.12);
 
@@ -1801,8 +1917,8 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
           const teethIdx = (dict as any).teeth || (dict as any).Teeth;
           if (typeof teethIdx === 'number') {
             // Teeth visible when jaw opens, hidden during pauses/closed
-            const teethVisible = jawAmount > 0.15 ? jawAmount * 0.6 : 0;
-            influences[teethIdx] = THREE.MathUtils.lerp(influences[teethIdx] || 0, teethVisible, 0.2);
+            const teethVisible = jawAmount > 0.18 ? jawAmount * 0.35 : 0;
+            influences[teethIdx] = THREE.MathUtils.lerp(influences[teethIdx] || 0, teethVisible, 0.18);
           }
         } catch { }
 
@@ -2090,6 +2206,8 @@ interface Avatar3DProps {
 
   isTTSSpeaking?: boolean; // New prop for TTS sync
 
+  ttsText?: string;
+
   isPaused?: boolean; // New prop for pause/resume
 
   staticMode?: boolean; // New prop for static avatar without animation
@@ -2132,7 +2250,7 @@ interface Avatar3DProps {
 
 
 
-export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, inAnimationTargetDurationSec, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, cameraDistanceScale = 1, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera = false, freezeCameraFit = false, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onTTSSpeaking, onError, onSessionEnd, onPhaseChange, onReadyChange }: Avatar3DProps) {
+export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, ttsText = '', isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, inAnimationTargetDurationSec, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, cameraDistanceScale = 1, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera = false, freezeCameraFit = false, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onTTSSpeaking, onError, onSessionEnd, onPhaseChange, onReadyChange }: Avatar3DProps) {
 
   const [webglSupported, setWebglSupported] = useState(true);
 
@@ -2313,6 +2431,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
                 onlyOutAnimation={onlyOutAnimation}
                 disablePoseMotion={disablePoseMotion}
                 isTTSSpeaking={isTTSSpeaking}
+                ttsText={ttsText}
                 isPaused={isPaused || !avatarReady}
                 staticMode={staticMode}
                 staticModelPath={staticModelPath}

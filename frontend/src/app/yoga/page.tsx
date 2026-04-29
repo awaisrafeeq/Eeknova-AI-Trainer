@@ -1047,6 +1047,7 @@ export default function YogaPage() {
                     staticMode={true}
                     disablePoseMotion={true}
                     isTTSSpeaking={isTTSSpeaking}
+                    ttsText={currentTTSFeedback}
                     isPaused={false}
                     cameraManualDistanceFactor={1.6}
                     cameraManualTargetYOffsetFactor={0.16}
@@ -1062,6 +1063,7 @@ export default function YogaPage() {
                     onlyOutAnimation={flowStage === 'release' && releasePlaybackReady}
                     staticMode={flowStage !== 'pose' && (flowStage !== 'release' || !releasePlaybackReady)}
                     isTTSSpeaking={isTTSSpeaking}
+                    ttsText={currentTTSFeedback}
                     isPaused={isPaused}
                     playAnimationKey={poseRestartKey}
                     inAnimationTargetDurationSec={flowStage === 'pose' ? getInInstructionDuration(selectedPose) : undefined}
