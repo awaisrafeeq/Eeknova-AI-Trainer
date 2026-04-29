@@ -264,6 +264,7 @@ export default function YogaPage() {
   const releaseFinalizedRef = useRef(false);
   const [releaseInstructionsDone, setReleaseInstructionsDone] = useState(false);
   const [releaseAnimationDone, setReleaseAnimationDone] = useState(false);
+  const [releasePlaybackReady, setReleasePlaybackReady] = useState(false);
 
   const transitionToRelease = useCallback(() => {
     // Abort any ongoing TTS feedback before exit instructions start
@@ -278,18 +279,17 @@ export default function YogaPage() {
 
     setReleaseInstructionsDone(false);
     setReleaseAnimationDone(false);
+    setReleasePlaybackReady(false);
     releaseFinalizedRef.current = false;
     
-    setIsStageTransitioning(true);
-    setTimeout(() => {
-      setIsSessionStarted(false);
-      setShouldAnalyze(false);
-      setShouldPlayAnimation(false);
-      setPlayGuidedInstructions(false);
-      setPlayReleaseInstructions(true);
-      setFlowStage('release');
-      setTimeout(() => setIsStageTransitioning(false), 350);
-    }, 220);
+    setIsStageTransitioning(false);
+    setIsSessionStarted(false);
+    setShouldAnalyze(false);
+    setShouldPlayAnimation(false);
+    setPlayGuidedInstructions(false);
+    setFlowStage('release');
+    setReleasePlaybackReady(true);
+    setPlayReleaseInstructions(true);
   }, [selectedPose]);
 
   // Timer state for pose duration
@@ -590,6 +590,7 @@ export default function YogaPage() {
     setShouldAnalyze(false);
     setPlayGuidedInstructions(false);
     setPlayReleaseInstructions(false);
+    setReleasePlaybackReady(false);
     setTimeLeft(0);
     setCurrentPhase('in');
     setTimerActive(false); // Reset timer active state
@@ -987,7 +988,7 @@ export default function YogaPage() {
 
             <div className={`flex ${
               flowStage !== 'setup' ? 'h-full items-end' : 'h-full items-end'
-            } justify-center w-full ${isStageTransitioning ? 'opacity-0' : 'opacity-100'}`}
+            } justify-center w-full opacity-100`}
               style={{ background: 'transparent' }}>
 
               <div className={`${
@@ -1029,12 +1030,14 @@ export default function YogaPage() {
                     cameraManualTargetYOffsetFactor={0.16}
                     lockCamera={true}
                   />
+                ) : flowStage === 'release' && !releasePlaybackReady ? (
+                  <div className="h-full w-full" />
                 ) : (
                   <Avatar3D
                     selectedPose={selectedPose}
                     onlyInAnimation={flowStage === 'pose' && shouldPlayAnimation}
-                    onlyOutAnimation={flowStage === 'release'}
-                    staticMode={flowStage !== 'pose' && flowStage !== 'release'}
+                    onlyOutAnimation={flowStage === 'release' && releasePlaybackReady}
+                    staticMode={flowStage !== 'pose' && (flowStage !== 'release' || !releasePlaybackReady)}
                     isTTSSpeaking={isTTSSpeaking}
                     isPaused={isPaused}
                     playAnimationKey={poseRestartKey}

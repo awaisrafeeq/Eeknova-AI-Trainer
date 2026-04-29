@@ -145,6 +145,7 @@ export default function Page() {
                                     cameraManualDistanceFactor={1.50}
                                     cameraManualTargetYOffsetFactor={0.08}
                                     cameraManualTargetXOffsetFactor={-0.08}
+                                    lockCamera={true}
                                 />
                                 {/* Fake shadow removed to stop float illusion */}
                             </div>

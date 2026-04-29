@@ -1054,9 +1054,6 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
         const loadedModel = gltf.scene;
 
-        // Apply previous rotation immediately so we don't snap back to front-facing (90deg)
-        loadedModel.rotation.y = previousRotationY;
-
         applySkinTone(loadedModel, new THREE.Color(skinToneColor), skinToneStrength);
 
         // Only cache clips for the chess static-model replay path. Caching yoga pose
@@ -1317,6 +1314,10 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
 
         const displayModel = normalizeYogaModelRoot(loadedModel);
+        // Preserve the phase-to-phase angle on the normalized wrapper. Applying it
+        // to the raw child model makes OUT appear to snap/reset because live pose
+        // rotation is driven on the wrapper in useFrame.
+        displayModel.rotation.y = previousRotationY;
 
         setModel(displayModel);
 
@@ -2013,7 +2014,9 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
               diffOut -= 2 * Math.PI;
             }
 
-            const maxStepOut = (15 * Math.PI / 180) * delta;
+            const outDuration = Math.max(1, spec.out || 1);
+            const maxOutSpeed = Math.max(15, 180 / outDuration) * (Math.PI / 180);
+            const maxStepOut = maxOutSpeed * delta;
 
             // Clamp to avoid overshoot: if we're within one step, snap exactly to target.
             if (Math.abs(diffOut) <= maxStepOut) {
@@ -2132,6 +2135,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
   const [fitObject, setFitObject] = useState<THREE.Object3D | null>(null);
   const [cameraTarget, setCameraTarget] = useState<[number, number, number]>([0, 0, 0]);
   const [cameraFitted, setCameraFitted] = useState(false);
+  const revealFrameRef = useRef<number | null>(null);
   // When lockCamera is true (yoga session/instructions), seed with the universal yoga
   // bounding box so the camera distance is consistent regardless of each pose's
   // IN-animation first-frame size.
@@ -2147,6 +2151,10 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
     setModelLoading(true);
     setFitObject(null);
     setCameraFitted(false);
+    if (revealFrameRef.current !== null) {
+      cancelAnimationFrame(revealFrameRef.current);
+      revealFrameRef.current = null;
+    }
   }, [
     selectedPose,
     staticMode,
@@ -2159,7 +2167,23 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
 
   const avatarReady = !modelLoading && !!fitObject && cameraFitted;
   const handleCameraFitted = useCallback(() => {
-    setCameraFitted(true);
+    if (revealFrameRef.current !== null) {
+      cancelAnimationFrame(revealFrameRef.current);
+    }
+    revealFrameRef.current = requestAnimationFrame(() => {
+      revealFrameRef.current = requestAnimationFrame(() => {
+        revealFrameRef.current = null;
+        setCameraFitted(true);
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (revealFrameRef.current !== null) {
+        cancelAnimationFrame(revealFrameRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -2252,7 +2276,8 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
               width: "100%",
               height: "100%",
               opacity: avatarReady ? 1 : 0,
-              transition: "opacity 0.3s ease-in",
+              visibility: avatarReady ? "visible" : "hidden",
+              transition: "none",
             }}
           >
             <ambientLight intensity={0.6} />
@@ -2275,7 +2300,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
                 onlyOutAnimation={onlyOutAnimation}
                 disablePoseMotion={disablePoseMotion}
                 isTTSSpeaking={isTTSSpeaking}
-                isPaused={isPaused}
+                isPaused={isPaused || !avatarReady}
                 staticMode={staticMode}
                 staticModelPath={staticModelPath}
                 playAnimationPath={playAnimationPath}
