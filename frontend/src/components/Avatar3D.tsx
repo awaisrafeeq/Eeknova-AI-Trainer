@@ -494,7 +494,7 @@ interface Avatar3DProps {
   onReadyChange?: (ready: boolean) => void;
 }
 
-function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, ttsText = '', isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, inAnimationTargetDurationSec, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onError, onTTSSpeaking, onSessionEnd, onPhaseChange, onModelLoaded, onLoadingChange }: Avatar3DProps & { onLoadingChange?: (loading: boolean) => void }) {
+function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, ttsText = '', isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, inAnimationTargetDurationSec, skinToneColor = '#f3cdac', skinToneStrength = 0.45, onError, onTTSSpeaking, onSessionEnd, onPhaseChange, onModelLoaded, onLoadingChange }: Avatar3DProps & { onLoadingChange?: (loading: boolean) => void }) {
 
   const [model, setModel] = useState<THREE.Group | null>(null);
 
@@ -2250,7 +2250,7 @@ interface Avatar3DProps {
 
 
 
-export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, ttsText = '', isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, inAnimationTargetDurationSec, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, cameraDistanceScale = 1, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera = false, freezeCameraFit = false, skinToneColor = '#d9a07f', skinToneStrength = 0.28, onTTSSpeaking, onError, onSessionEnd, onPhaseChange, onReadyChange }: Avatar3DProps) {
+export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, ttsText = '', isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, inAnimationTargetDurationSec, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, cameraDistanceScale = 1, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera = false, freezeCameraFit = false, skinToneColor = '#f3cdac', skinToneStrength = 0.45, onTTSSpeaking, onError, onSessionEnd, onPhaseChange, onReadyChange }: Avatar3DProps) {
 
   const [webglSupported, setWebglSupported] = useState(true);
 
@@ -2411,17 +2411,17 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
               transition: "none",
             }}
           >
-            <ambientLight intensity={0.6} />
+            <ambientLight intensity={0.95} />
             <directionalLight
               position={[5, 5, 5]}
-              intensity={1}
+              intensity={1.35}
               castShadow
               shadow-mapSize-width={512}
               shadow-mapSize-height={512}
             />
-            <directionalLight position={[-5, 5, 5]} intensity={0.8} />
-            <pointLight position={[0, 2, 2]} intensity={0.6} />
-            <hemisphereLight args={[0xffffff, 0x444444, 0.3]} />
+            <directionalLight position={[-5, 5, 5]} intensity={1.1} />
+            <pointLight position={[0, 2, 2]} intensity={0.85} />
+            <hemisphereLight args={[0xffffff, 0x888888, 0.55]} />
             <AutoFitCamera object={fitObject} referenceSize={referenceSizeRef.current} cameraZoom={cameraZoom} cameraTargetYOffset={cameraTargetYOffset} cameraPositionYRaise={cameraPositionYRaise} cameraDistanceScale={cameraDistanceScale} cameraManualDistanceFactor={cameraManualDistanceFactor} cameraManualTargetYOffsetFactor={cameraManualTargetYOffsetFactor} cameraManualTargetXOffsetFactor={cameraManualTargetXOffsetFactor} lockCamera={lockCamera} freezeCameraFit={freezeCameraFit} onTargetChange={setCameraTarget} onCameraFitted={handleCameraFitted} />
             <CameraControls target={cameraTarget} />
             <Suspense fallback={null}>

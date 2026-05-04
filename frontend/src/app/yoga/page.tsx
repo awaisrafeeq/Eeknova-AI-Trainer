@@ -531,13 +531,11 @@ export default function YogaPage() {
     setIsPaused(false);
     setShowWarmupSkipWarning(false);
     setUseStaticSetupPreview(false);
+    // Reset finalized flag so End Session can fire on the new run
+    releaseFinalizedRef.current = false;
 
-    setFlowStage('instructions');
-    setIsSessionStarted(false);
-    setShouldPlayAnimation(false);
-    setShouldAnalyze(false);
-    setPlayGuidedInstructions(true);
-    setPlayReleaseInstructions(false);
+    // Skip the standalone pre-instruction stage — instructions are spoken during the IN animation
+    startPoseSession();
   };
 
   const startWarmup = () => {
@@ -1034,7 +1032,7 @@ export default function YogaPage() {
                       playAnimationKey={useStaticSetupPreview ? undefined : previewAnimKey}
                       isPaused={false}
                       cameraManualDistanceFactor={1.75}
-                      cameraManualTargetYOffsetFactor={0.28}
+                      cameraManualTargetYOffsetFactor={0.00}
                       lockCamera={true} // LOCKUP-SETUP: Camera lock for setup stage
                       onReadyChange={handleAvatarReadyChange}
                     />
@@ -1050,7 +1048,7 @@ export default function YogaPage() {
                     ttsText={currentTTSFeedback}
                     isPaused={false}
                     cameraManualDistanceFactor={1.6}
-                    cameraManualTargetYOffsetFactor={0.16}
+                    cameraManualTargetYOffsetFactor={0.0}
                     lockCamera={true}
                     onReadyChange={handleAvatarReadyChange}
                   />
@@ -1068,7 +1066,7 @@ export default function YogaPage() {
                     playAnimationKey={poseRestartKey}
                     inAnimationTargetDurationSec={flowStage === 'pose' ? getInInstructionDuration(selectedPose) : undefined}
                     cameraManualDistanceFactor={1.6}
-                    cameraManualTargetYOffsetFactor={0.16}
+                    cameraManualTargetYOffsetFactor={0.0}
                     lockCamera={true}
                     freezeCameraFit={flowStage === 'pose' || flowStage === 'release'}
                     onReadyChange={handleAvatarReadyChange}
@@ -1289,9 +1287,10 @@ export default function YogaPage() {
             <div className="hidden">
               <YogaCamera
                 selectedPose={selectedPose}
-                shouldAnalyze={flowStage === 'pose' && isSessionStarted && !isPaused && shouldAnalyze}
-                playGuidedInstructions={flowStage === 'instructions' && playGuidedInstructions && !isPaused}
-                playReleaseInstructions={flowStage === 'release' && playReleaseInstructions && !isPaused}
+                shouldAnalyze={flowStage === 'pose' && isSessionStarted && shouldAnalyze}
+                playGuidedInstructions={flowStage === 'instructions' && playGuidedInstructions}
+                playReleaseInstructions={flowStage === 'release' && playReleaseInstructions}
+                isPaused={isPaused}
                 speechReady={avatarSpeechReady}
                 onGuidedInstructionsEnd={() => {
                   // Smooth transition into detection/animation

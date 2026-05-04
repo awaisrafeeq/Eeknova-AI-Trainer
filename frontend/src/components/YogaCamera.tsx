@@ -31,6 +31,7 @@ interface YogaCameraProps {
   shouldAnalyze: boolean;
   playGuidedInstructions: boolean;
   playReleaseInstructions: boolean;
+  isPaused?: boolean;
   speechReady?: boolean;
   onSessionEnd: (summary: SessionSummary | null) => void;
   onAccuracyUpdate: (accuracy: number) => void;
@@ -53,6 +54,7 @@ export default function YogaCamera({
   shouldAnalyze,
   playGuidedInstructions,
   playReleaseInstructions,
+  isPaused = false,
   speechReady = true,
   onSessionEnd,
   onAccuracyUpdate,
@@ -118,6 +120,7 @@ export default function YogaCamera({
   const playGuidedInstructionsRef = useRef(playGuidedInstructions);
   const playReleaseInstructionsRef = useRef(playReleaseInstructions);
   const suppressFeedbackRef = useRef(suppressFeedback);
+  const isPausedRef = useRef(isPaused);
 
   useEffect(() => {
     playGuidedInstructionsRef.current = playGuidedInstructions;
@@ -130,6 +133,21 @@ export default function YogaCamera({
   useEffect(() => {
     suppressFeedbackRef.current = suppressFeedback;
   }, [suppressFeedback]);
+
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
+
+  // When pause toggles ON, abort any speaking TTS so it doesn't keep talking through the pause.
+  useEffect(() => {
+    if (!isPaused) return;
+    try {
+      if (ttsRef.current) {
+        ignoreSpeakingFalseRef.current = true;
+        ttsRef.current.stop();
+      }
+    } catch { }
+  }, [isPaused]);
 
   // When the suppression window opens (final seconds of hold), stop any correction
   // TTS that is already speaking. Guided/release instruction TTS is only active in
@@ -492,12 +510,12 @@ export default function YogaCamera({
 
         const phaseInstructionActive = Date.now() < phaseInstructionSuppressUntilRef.current;
 
-        if (result.corrections && result.corrections.length > 0 && !suppressFeedbackRef.current && !phaseInstructionActive) {
+        if (result.corrections && result.corrections.length > 0 && !suppressFeedbackRef.current && !phaseInstructionActive && !isPausedRef.current) {
           onCorrectionsUpdate(result.corrections);
 
           // Speak correction feedback (if enabled)
           // During guided/release instruction phases, suppress feedback TTS to avoid overlapping.
-          if (ttsEnabled && !(playGuidedInstructionsRef.current || playReleaseInstructionsRef.current)) {
+          if (ttsEnabled && !(playGuidedInstructionsRef.current || playReleaseInstructionsRef.current) && !isPausedRef.current) {
             if (result.accuracy !== null && result.accuracy !== undefined && result.accuracy < 80) {
               // Only speak the first correction to avoid overwhelming
               const correctionText = result.corrections[0];
@@ -606,6 +624,7 @@ export default function YogaCamera({
 
   useEffect(() => {
     if (!shouldAnalyze || currentPhase !== 'hold' || !speechReady || !ttsRef.current) return;
+    if (isPaused) return;
     const mainInstruction = getYogaPhaseInstruction(selectedPose, 'mainIntro');
     if (!mainInstruction || mainInstructionPlayedRef.current === selectedPose) return;
 
@@ -617,7 +636,7 @@ export default function YogaCamera({
       ttsRef.current.prefetch(videoReleaseInstruction);
     }
     ttsRef.current.speak(mainInstruction, true);
-  }, [currentPhase, selectedPose, shouldAnalyze, speechReady]);
+  }, [currentPhase, selectedPose, shouldAnalyze, speechReady, isPaused]);
 
   useEffect(() => {
     if (!shouldAnalyze) {
@@ -627,13 +646,14 @@ export default function YogaCamera({
 
     if (currentPhase !== 'in' || !speechReady || !ttsRef.current) return;
     if (inInstructionPlayedRef.current) return;
+    if (isPaused) return;
 
     inInstructionPlayedRef.current = true;
     ttsRef.current.speak(
       getYogaPhaseInstruction(selectedPose, 'in') || `Starting ${selectedPose} detection. Get into position.`,
       true
     );
-  }, [currentPhase, selectedPose, shouldAnalyze, speechReady]);
+  }, [currentPhase, selectedPose, shouldAnalyze, speechReady, isPaused]);
 
   // Start/Stop analysis based on shouldAnalyze prop
   useEffect(() => {
@@ -827,6 +847,7 @@ export default function YogaCamera({
     // Capture frames every 500ms (2 FPS for smooth analysis without overloading)
     frameIntervalRef.current = setInterval(async () => {
       if (!videoRef.current || !canvasRef.current || !wsRef.current) return;
+      if (isPausedRef.current) return;
 
       const video = videoRef.current;
       const canvas = canvasRef.current;
