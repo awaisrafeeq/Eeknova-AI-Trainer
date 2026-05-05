@@ -2277,6 +2277,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
     setModelLoading(true);
     setFitObject(null);
     setCameraFitted(false);
+    referenceSizeRef.current = lockCamera ? YOGA_REFERENCE_SIZE.clone() : null;
     if (revealFrameRef.current !== null) {
       cancelAnimationFrame(revealFrameRef.current);
       revealFrameRef.current = null;
@@ -2319,6 +2320,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
 
   useEffect(() => {
     if (!fitObject) return;
+    if (lockCamera) return;
     try {
       const box = new THREE.Box3().setFromObject(fitObject);
       const size = new THREE.Vector3();
@@ -2333,7 +2335,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
         );
       }
     } catch { }
-  }, [fitObject]);
+  }, [fitObject, lockCamera]);
 
   // Free the WebGL context on unmount. Without this, each Avatar3D remount
   // (flowStage change, pose restart) leaves a live GL context holding GPU memory

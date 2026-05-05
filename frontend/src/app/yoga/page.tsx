@@ -177,6 +177,14 @@ export default function YogaPage() {
   const isInstructionStage = flowStage === 'instructions' || flowStage === 'release';
   const isAvatarFullStage = flowStage !== 'setup';
 
+  useEffect(() => {
+    if (flowStage !== 'setup') return;
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [flowStage]);
+
   const WARMUP_STEPS = [
     {
       label: 'Deep Breathing Cycle',
@@ -817,16 +825,6 @@ export default function YogaPage() {
   const applySessionSummary = useCallback((summary: SessionSummary | null) => {
     setSessionSummary(summary);
 
-    // Auto-scroll to session summary when session ends
-    if (summary) {
-      setTimeout(() => {
-        const summaryElement = document.getElementById('session-summary');
-        if (summaryElement) {
-          summaryElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }, 100);
-    }
-
     // Stop TTS gracefully when session ends
     try {
       if (ttsRef.current) {
@@ -1025,7 +1023,7 @@ export default function YogaPage() {
                 ) : flowStage === 'setup' && !isSessionStarted ? (
                   setupViewportReady ? (
                     <Avatar3D
-                      key={`setup-avatar-${selectedPose}-${useStaticSetupPreview ? 'static' : 'preview'}-${isPortraitDisplay ? 'portrait' : 'desktop'}`}
+                      key={`setup-avatar-${selectedPose}-${useStaticSetupPreview ? 'static' : 'preview'}-${previewAnimKey}-${isPortraitDisplay ? 'portrait' : 'desktop'}`}
                       selectedPose={selectedPose}
                       staticMode={useStaticSetupPreview}
                       playAnimationPath={useStaticSetupPreview ? undefined : getMainPosePath(selectedPose)}
