@@ -480,6 +480,26 @@ async def process_frame(frame_data: str, session_id: str) -> Dict[str, Any]:
                     'within_tolerance': result['within_tolerance'],
                     'difference': result['difference']
                 }
+
+        # DEBUG: Log captured vs reference angles for this frame
+        try:
+            captured_angles_log = {k: float(v) if v is not None else None for k, v in pose_angles[0].items()}
+            logger.info("DEBUG-ANGLE-TRACE captured_angles=%s", captured_angles_log)
+            if gt_angles:
+                reference_angles_log = {k: float(v) if v is not None else None for k, v in gt_angles.items()}
+                logger.info("DEBUG-ANGLE-TRACE reference_angles=%s", reference_angles_log)
+            if comparison_results:
+                for angle_name, result in comparison_results.items():
+                    logger.info(
+                        "DEBUG-ANGLE-TRACE %s: captured=%s, reference=%s, diff=%s, within_tolerance=%s",
+                        angle_name,
+                        None if result['calculated'] is None else f"{result['calculated']:.1f}",
+                        None if result['ground_truth'] is None else f"{result['ground_truth']:.1f}",
+                        None if result['difference'] is None else f"{result['difference']:.1f}",
+                        result['within_tolerance']
+                    )
+        except Exception as log_error:
+            logger.warning(f"DEBUG-ANGLE-TRACE logging failed: {log_error}")
         
         # return {
         #     'pose_detected': True,
@@ -517,6 +537,18 @@ async def process_frame(frame_data: str, session_id: str) -> Dict[str, Any]:
                 'within_tolerance': bool(v['within_tolerance']),
                 'difference': float(v['difference']) if v['difference'] is not None else None
             } for k, v in angle_status.items()},
+            # DEBUG-ANGLE-TRACE: raw captured angles from camera
+            'debug_captured_angles': {k: float(v) if v is not None else None for k, v in pose_angles[0].items()},
+            # DEBUG-ANGLE-TRACE: reference angles used for matching
+            'debug_reference_angles': {k: float(v) if v is not None else None for k, v in gt_angles.items()} if gt_angles else None,
+            # DEBUG-ANGLE-TRACE: comparison results for each angle
+            'debug_comparison_results': {k: {
+                'calculated': float(v['calculated']) if v['calculated'] is not None else None,
+                'ground_truth': float(v['ground_truth']) if v['ground_truth'] is not None else None,
+                'difference': float(v['difference']) if v['difference'] is not None else None,
+                'within_tolerance': bool(v['within_tolerance'])
+            } for k, v in comparison_results.items()} if comparison_results else None,
+            'debug_corrections': corrections[:3],
             'session_stats': {
                 'frames_processed': int(session.frame_count),
                 'average_accuracy': float(session.get_average_accuracy())

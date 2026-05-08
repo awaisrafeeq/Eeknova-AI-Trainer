@@ -1,0 +1,9 @@
+Angle,Reference_Angle,Camera_Captured_Angle,Deviation,Within_Tolerance
+Left Shoulder Angle,172.48,33.6594352722168,138.8205647277832,False
+Right Shoulder Angle,170.26,60.20534896850586,110.05465103149414,False
+Left Elbow Angle,170.93,165.16636657714844,5.7636334228515625,True
+Right Elbow Angle,172.93,88.72877502441406,84.20122497558594,False
+Left Knee Angle,171.17,,171.17,False
+Right Knee Angle,176.31,,176.31,False
+Left Hip Angle,173.9,,173.9,False
+Right Hip Angle,172.63,,172.63,False

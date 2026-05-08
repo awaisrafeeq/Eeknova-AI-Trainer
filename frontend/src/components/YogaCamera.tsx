@@ -692,6 +692,9 @@ export default function YogaCamera({
     }
   }, [selectedPose, shouldAnalyze, isCameraReady]);
 
+  const formatAngleValue = (value: number | null | undefined) =>
+    value === null || value === undefined ? '—' : value.toFixed(1);
+
   // Convert pose name to API format
   const convertPoseNameToApi = (poseName: string): string => {
     // Convert "Mountain Pose" to "mountain_pose" format
@@ -1018,6 +1021,26 @@ export default function YogaCamera({
             <div
               className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
                 }`}
+            />
+            <span>
+              {isConnected ? 'Connected' : 'Connecting...'}
+            </span>
+            {isAnalyzing && (
+              <>
+                <span className="mx-1">•</span>
+                <span>Analyzing...</span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {shouldAnalyze && (
+        <div className="mt-2 flex justify-center">
+          <div className="flex items-center gap-2 text-sm text-[var(--ink-med)]">
+            <div
+              className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+                }`} 
             />
             <span>
               {isConnected ? 'Connected' : 'Connecting...'}

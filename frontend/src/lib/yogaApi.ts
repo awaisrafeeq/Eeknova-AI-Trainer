@@ -30,6 +30,19 @@ export interface PoseAnalysisResult {
   angles?: Record<string, number | null>;
   corrections?: string[];
   angle_status?: Record<string, { within_tolerance: boolean; difference: number | null }>;
+  // DEBUG: Backend debug traces for captured vs reference angle matching.
+  debug_captured_angles?: Record<string, number | null>;
+  debug_reference_angles?: Record<string, number | null> | null;
+  debug_comparison_results?: Record<
+    string,
+    {
+      calculated?: number | null;
+      ground_truth?: number | null;
+      difference?: number | null;
+      within_tolerance: boolean;
+    }
+  >;
+  debug_corrections?: string[];
   session_stats?: {
     frames_processed: number;
     average_accuracy: number;
