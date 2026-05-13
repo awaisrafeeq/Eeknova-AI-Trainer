@@ -4,9 +4,11 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface User {
-  id: string;
+  id?: string;
+  username?: string;
   email: string;
   name?: string;
+  full_name?: string;
 }
 
 interface AuthState {
@@ -63,10 +65,11 @@ export function useAuth() {
       }
 
       const userData = await response.json();
+      const resolvedUser = userData.user || userData;
       console.log('✅ Auth success - user data:', userData);
       
       setAuthState({
-        user: userData.user,
+        user: resolvedUser,
         isLoading: false,
         isAuthenticated: true,
         error: null,
@@ -134,13 +137,14 @@ export function useAuthenticatedFetch() {
   return useCallback(async (url: string, options: RequestInit = {}) => {
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+      const optionHeaders = options.headers as Record<string, string> | undefined;
 
       const response = await fetch(url, {
         ...options,
         credentials: 'include', // Include auth cookies
         headers: {
           'Content-Type': 'application/json',
-          ...(token && !(options.headers as any)?.Authorization && !(options.headers as any)?.authorization
+          ...(token && !optionHeaders?.Authorization && !optionHeaders?.authorization
             ? { Authorization: `Bearer ${token}` }
             : {}),
           ...options.headers,

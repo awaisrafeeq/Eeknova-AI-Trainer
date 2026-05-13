@@ -63,8 +63,12 @@ class ZumbaSessionManager:
                 'performance_metrics': {
                     'good_frames': 0,
                     'total_frames': 0,
+                    'detected_frames': 0,
+                    'comparable_frames': 0,
+                    'active_frames': 0,
                     'feedback_count': 0
-                }
+                },
+                'last_angles': None
             }
             
             self.sessions[session_id] = session_data
@@ -89,7 +93,14 @@ class ZumbaSessionManager:
                 'pose_detected': False,
                 'message': 'Session ended - frame processing stopped',
                 'timestamp': datetime.now().isoformat(),
-                'performance_metrics': {'total_frames': 0, 'good_frames': 0, 'feedback_count': 0}
+                'performance_metrics': {
+                    'total_frames': 0,
+                    'good_frames': 0,
+                    'detected_frames': 0,
+                    'comparable_frames': 0,
+                    'active_frames': 0,
+                    'feedback_count': 0
+                }
             }
         
         try:
@@ -117,11 +128,16 @@ class ZumbaSessionManager:
                 if len(keypoints) == 0:
                     session['frames_processed'] += 1
                     session['performance_metrics']['total_frames'] += 1
+                    comparable_frames = session['performance_metrics'].get('comparable_frames', 0)
+                    accuracy = 0
+                    if comparable_frames > 0:
+                        accuracy = (session['performance_metrics']['good_frames'] / comparable_frames) * 100
                     
                     return {
                         'session_id': session_id,
                         'pose_detected': False,
                         'message': 'No valid keypoints detected',
+                        'accuracy': accuracy,
                         'timestamp': datetime.now().isoformat(),
                         'performance_metrics': session['performance_metrics']
                     }
@@ -131,7 +147,31 @@ class ZumbaSessionManager:
                 
                 # Compare with reference and get feedback
                 target_move = session['target_move']
-                
+                ref = analyzer.reference_angles.get(target_move, {})
+                comparable_angles = [name for name in angles.keys() if name in ref]
+                has_enough_angles = len(comparable_angles) >= 4
+
+                session['frames_processed'] += 1
+                session['performance_metrics']['total_frames'] += 1
+
+                if not has_enough_angles:
+                    accuracy = 0
+                    if session['performance_metrics']['comparable_frames'] > 0:
+                        accuracy = (session['performance_metrics']['good_frames'] /
+                                   session['performance_metrics']['comparable_frames']) * 100
+
+                    return {
+                        'session_id': session_id,
+                        'pose_detected': False,
+                        'target_move': target_move,
+                        'angles': angles,
+                        'feedback_messages': ['Move fully into the camera view so your arms and legs are visible.'],
+                        'corrections': [],
+                        'accuracy': accuracy,
+                        'timestamp': datetime.now().isoformat(),
+                        'performance_metrics': session['performance_metrics']
+                    }
+
                 bad_parts = analyzer.compare(angles)
                 
                 feedback_messages = []
@@ -142,16 +182,47 @@ class ZumbaSessionManager:
                         feedback_messages.append(issue_data['message'])
                         corrections.append(f"{joint_name.replace('_', ' ').title()}: {issue_data['message']}")
                 
-                session['frames_processed'] += 1
-                session['performance_metrics']['total_frames'] += 1
+                session['performance_metrics']['detected_frames'] += 1
+                session['performance_metrics']['comparable_frames'] += 1
+
+                move_signatures = analyzer.move_signatures.get(target_move, {})
+                cyclic_angle_names = [
+                    name for name, signature in move_signatures.items()
+                    if signature.get('pattern') == 'cyclic' and name in angles
+                ]
+                last_angles = session.get('last_angles')
+                motion_score = 0.0
+                is_active_movement = True
+
+                if cyclic_angle_names:
+                    if last_angles:
+                        deltas = [
+                            abs(angles[name] - last_angles[name])
+                            for name in cyclic_angle_names
+                            if name in last_angles
+                        ]
+                        motion_score = float(np.mean(deltas)) if deltas else 0.0
+                    else:
+                        is_active_movement = False
+
+                    # Zumba cyclic moves must show actual motion, not only a static body match.
+                    if motion_score < 2.0:
+                        is_active_movement = False
+
+                session['last_angles'] = dict(angles)
+
+                if is_active_movement:
+                    session['performance_metrics']['active_frames'] += 1
+                else:
+                    feedback_messages.append('Keep moving with the selected dance step.')
                 
-                if not bad_parts:  # Good form
+                if is_active_movement and not bad_parts:  # Good form
                     session['performance_metrics']['good_frames'] += 1
                 
                 accuracy = None
-                if session['performance_metrics']['total_frames'] > 0:
+                if session['performance_metrics']['comparable_frames'] > 0:
                     accuracy = (session['performance_metrics']['good_frames'] / 
-                               session['performance_metrics']['total_frames']) * 100
+                               session['performance_metrics']['comparable_frames']) * 100
                 
                 # Add new feedback to session
                 session['feedback_messages'].extend(feedback_messages)
@@ -177,6 +248,8 @@ class ZumbaSessionManager:
                     'feedback_messages': feedback_messages,
                     'corrections': corrections,
                     'accuracy': accuracy,
+                    'motion_score': motion_score,
+                    'active_movement': is_active_movement,
                     # 'processed_frame': f"data:image/jpeg;base64,{processed_frame}", # TESTING: Remove this line for production
                     'timestamp': datetime.now().isoformat(),
                     'performance_metrics': session['performance_metrics']
@@ -200,11 +273,16 @@ class ZumbaSessionManager:
             else:
                 session['frames_processed'] += 1
                 session['performance_metrics']['total_frames'] += 1
+                comparable_frames = session['performance_metrics'].get('comparable_frames', 0)
+                accuracy = 0
+                if comparable_frames > 0:
+                    accuracy = (session['performance_metrics']['good_frames'] / comparable_frames) * 100
                 
                 return {
                     'session_id': session_id,
                     'pose_detected': False,
                     'message': 'No pose detected in frame',
+                    'accuracy': accuracy,
                     'timestamp': datetime.now().isoformat(),
                     'performance_metrics': session['performance_metrics']
                 }
@@ -222,8 +300,9 @@ class ZumbaSessionManager:
         
         # Calculate final accuracy
         accuracy = 0
-        if metrics['total_frames'] > 0:
-            accuracy = (metrics['good_frames'] / metrics['total_frames']) * 100
+        comparable_frames = metrics.get('comparable_frames', metrics['total_frames'])
+        if comparable_frames > 0:
+            accuracy = (metrics['good_frames'] / comparable_frames) * 100
         
         return {
             'session_id': session_id,

@@ -16,7 +16,7 @@ export interface ZumbaSessionStartRequest {
 export interface ZumbaSessionResponse {
   session_id: string;
   target_move: string;
-  settings: Record<string, any>;
+  settings: Record<string, unknown>;
   created_at: string;
   status: string;
 }
@@ -29,11 +29,16 @@ export interface ZumbaAnalysisResult {
   feedback_messages: string[];
   corrections: string[];
   accuracy?: number;
+  motion_score?: number;
+  active_movement?: boolean;
   processed_frame?: string;
   timestamp: string;
   performance_metrics: {
     good_frames: number;
     total_frames: number;
+    detected_frames?: number;
+    comparable_frames?: number;
+    active_frames?: number;
     feedback_count: number;
   };
   message?: string;
@@ -153,6 +158,7 @@ export class ZumbaWebSocket {
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
   private isConnecting = false;
+  private shouldReconnect = true;
 
   constructor(
     private onResult: (result: ZumbaAnalysisResult) => void,
@@ -167,6 +173,7 @@ export class ZumbaWebSocket {
     }
 
     this.isConnecting = true;
+    this.shouldReconnect = true;
     this.sessionId = sessionId;
 
     try {
@@ -217,7 +224,7 @@ export class ZumbaWebSocket {
         this.onDisconnect();
         
         // Don't reconnect if it was a normal closure
-        if (event.code === 1000) {
+        if (!this.shouldReconnect || event.code === 1000) {
           return;
         }
         
@@ -267,6 +274,7 @@ export class ZumbaWebSocket {
 
   disconnect(): void {
     if (this.ws) {
+      this.shouldReconnect = false;
       this.ws.close();
       this.ws = null;
     }

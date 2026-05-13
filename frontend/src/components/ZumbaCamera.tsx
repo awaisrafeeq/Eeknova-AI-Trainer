@@ -1,17 +1,14 @@
 // ZumbaCamera.tsx - Real-time Zumba dance analysis component
 'use client';
 
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   ZumbaWebSocket,
   startZumbaSession,
   endZumbaSession,
-  analyzeZumbaFrame,
-  getZumbaMoves,
   ZumbaSessionStartRequest,
   ZumbaAnalysisResult,
   ZumbaSessionSummary,
-  canvasToBase64,
 } from '@/lib/zumbaApi';
 
 interface ZumbaCameraProps {
@@ -51,24 +48,9 @@ export default function ZumbaCamera({
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [poseDetected, setPoseDetected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [availableMoves, setAvailableMoves] = useState<string[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [processedFrame, setProcessedFrame] = useState<string | null>(null);
   const [feedbackMessages, setFeedbackMessages] = useState<string[]>([]);
-
-  // Load available moves on mount
-  useEffect(() => {
-    const loadMoves = async () => {
-      try {
-        const moves = await getZumbaMoves();
-        setAvailableMoves(moves);
-      } catch (error) {
-        console.error('Failed to load Zumba moves:', error);
-        setError('Failed to load available moves');
-      }
-    };
-    loadMoves();
-  }, []);
 
   // Initialize camera
   useEffect(() => {
@@ -123,9 +105,7 @@ export default function ZumbaCamera({
         if (result.accuracy !== undefined) {
           onAccuracyUpdate(result.accuracy);
         }
-        if (result.feedback_messages && result.feedback_messages.length > 0) {
-          onFeedbackUpdate(result.feedback_messages);
-        }
+        onFeedbackUpdate(result.feedback_messages || []);
         if (onFrameProcessed) {
           onFrameProcessed(result);
         }
@@ -159,7 +139,7 @@ export default function ZumbaCamera({
         ws.disconnect();
       }
     };
-  }, [sessionId]);
+  }, [sessionId, onAccuracyUpdate, onError, onFeedbackUpdate, onFrameProcessed]);
 
   // Start/Stop analysis
   useEffect(() => {

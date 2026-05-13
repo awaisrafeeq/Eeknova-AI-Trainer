@@ -1,111 +1,118 @@
 'use client';
-import React, { useEffect, useMemo, useState } from 'react';
+
+import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Avatar3D from '@/components/Avatar3D';
-import ZumbaCamera from '@/components/ZumbaCamera';
-import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
-import { getZumbaMoves, ZumbaSessionSummary } from '@/lib/zumbaApi';
-import { useAuth, useAuthenticatedFetch } from '@/hooks/useAuth';
+import ZumbaCamera from '@/components/ZumbaCamera';
+import { getZumbaMoves, ZumbaAnalysisResult, ZumbaSessionSummary } from '@/lib/zumbaApi';
+import { useAuth } from '@/hooks/useAuth';
 
 /**
- * Zumba Module page with real-time camera integration
- * Features:
- * - Live camera feed with pose detection
- * - Real-time feedback and accuracy tracking
- * - Session management and progress tracking
- * - Move selection and settings
+ * Zumba module UI aligned with the Yoga page:
+ * display area first, controls and stats below, camera processing hidden.
  */
-
 export default function ZumbaPage() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
-  const authenticatedFetch = useAuthenticatedFetch();
 
-  // State management
   const [availableMoves, setAvailableMoves] = useState<string[]>([]);
   const [selectedMove, setSelectedMove] = useState<string>('');
   const [isStarted, setIsStarted] = useState(false);
   const [currentAccuracy, setCurrentAccuracy] = useState(0);
+  const [framesProcessed, setFramesProcessed] = useState(0);
+  const [validFrames, setValidFrames] = useState(0);
+  const [activeFrames, setActiveFrames] = useState(0);
+  const [poseDetected, setPoseDetected] = useState(false);
+  const [activeMovement, setActiveMovement] = useState(false);
   const [currentFeedback, setCurrentFeedback] = useState<string[]>([]);
   const [sessionSummary, setSessionSummary] = useState<ZumbaSessionSummary | null>(null);
-  const [showResults, setShowResults] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Session types with state
-  const [sessions, setSessions] = useState([
-    { id: 'warmup', title: 'Warm-Up', state: 'completed' as 'completed' | 'ongoing' | 'locked', progress: 100 },
-    { id: 'main', title: 'Main Routine', state: 'ongoing' as 'completed' | 'ongoing' | 'locked', progress: 45 },
-    { id: 'power', title: 'Power Finish', state: 'locked' as 'completed' | 'ongoing' | 'locked', progress: 0 },
-  ]);
-
-  // Load available moves
   useEffect(() => {
-    if (!isAuthenticated) return; // Only load if authenticated
-    
+    if (authLoading) return;
+
+    if (!isAuthenticated) {
+      setIsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
     const loadMoves = async () => {
       try {
         const moves = await getZumbaMoves();
+        if (cancelled) return;
+
         setAvailableMoves(moves);
-        if (moves.length > 0 && !selectedMove) {
-          setSelectedMove(moves[0]);
-        }
+        setSelectedMove((current) => current || moves[0] || '');
       } catch (error) {
         console.error('Failed to load Zumba moves:', error);
-        setError('Failed to load available moves');
+        if (!cancelled) {
+          setError('Failed to load available moves');
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
     loadMoves();
-  }, [selectedMove, isAuthenticated]);
 
-  // Toggle session state on click
-  function toggleSessionState(id: string) {
-    setSessions(prev =>
-      prev.map(s => {
-        if (s.id !== id) return s;
-        if (s.state === 'locked') return s;
-        return { ...s, state: s.state === 'completed' ? 'ongoing' : 'completed' };
-      })
-    );
-  }
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAuthenticated]);
 
-  // Handle session end
-  const handleSessionEnd = (summary: ZumbaSessionSummary | null) => {
-    setSessionSummary(summary);
-    setShowResults(true);
+  const handleSessionEnd = useCallback((summary: ZumbaSessionSummary | null) => {
+    if (summary && summary.frames_processed > 0) {
+      setSessionSummary(summary);
+    } else {
+      setSessionSummary(null);
+      setError('Session ended before any frames were analyzed. Please keep camera access enabled and try again.');
+    }
     setIsStarted(false);
-  };
+  }, []);
 
-  // Handle accuracy update
-  const handleAccuracyUpdate = (accuracy: number) => {
+  const handleAccuracyUpdate = useCallback((accuracy: number) => {
     setCurrentAccuracy(accuracy);
-  };
+  }, []);
 
-  // Handle feedback update
-  const handleFeedbackUpdate = (feedback: string[]) => {
+  const handleFeedbackUpdate = useCallback((feedback: string[]) => {
     setCurrentFeedback(feedback);
-  };
+  }, []);
 
-  // Start/Stop session
+  const handleFrameProcessed = useCallback((result: ZumbaAnalysisResult) => {
+    const metrics = result.performance_metrics;
+    setFramesProcessed(metrics?.total_frames || 0);
+    setValidFrames(metrics?.comparable_frames || 0);
+    setActiveFrames(metrics?.active_frames || 0);
+    setPoseDetected(Boolean(result.pose_detected));
+    setActiveMovement(Boolean(result.active_movement));
+  }, []);
+
   const toggleAnalysisSession = () => {
     if (!selectedMove) {
       setError('Please select a Zumba move first');
       return;
     }
-    setIsStarted(!isStarted);
+
     if (!isStarted) {
-      setShowResults(false);
       setSessionSummary(null);
       setCurrentFeedback([]);
       setCurrentAccuracy(0);
+      setFramesProcessed(0);
+      setValidFrames(0);
+      setActiveFrames(0);
+      setPoseDetected(false);
+      setActiveMovement(false);
+      setError(null);
     }
+
+    setIsStarted((value) => !value);
   };
 
-  // Go back to dashboard
   const handleBack = () => {
     if (isStarted) {
       setIsStarted(false);
@@ -113,11 +120,14 @@ export default function ZumbaPage() {
     router.push('/dashboard');
   };
 
-  if (isLoading) {
+  if (authLoading || isLoading) {
     return (
-      <main className="min-h-screen w-full flex items-center justify-center">
+      <main
+        className="min-h-screen w-full flex items-center justify-center text-[var(--ink-hi)]"
+        style={{ background: 'var(--bg-gradient)', fontFamily: 'var(--font-ui)' }}
+      >
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--brand-neo)] mx-auto mb-4" />
           <div>Loading Zumba moves...</div>
         </div>
       </main>
@@ -127,321 +137,324 @@ export default function ZumbaPage() {
   return (
     <main
       className="min-h-screen w-full overflow-hidden text-[var(--ink-hi)]"
-      style={{ background: 'var(--bg-gradient)', fontFamily: 'var(--font-ui)' }}
+      style={{
+        background: isStarted ? 'transparent' : 'var(--bg-gradient)',
+        fontFamily: 'var(--font-ui)',
+        transition: 'background 0.5s ease',
+      }}
     >
-      <Particles />
+      {!isStarted && <Particles />}
 
-      <div className="mx-auto max-w-[1080px] px-6 md:px-8 py-6 md:py-8 relative">
-        {/* Back Button */}
-        <button
-          onClick={handleBack}
-          className="absolute left-4 top-6 z-30 rounded-full border border-[var(--glass-stroke)] bg-[var(--glass)] px-4 py-2 text-[16px] font-semibold text-[var(--brand-neo)] transition-all hover:shadow-[var(--glow-neo)]"
-        >
-          ← Back
-        </button>
+      <div className={`mx-auto relative ${
+        isStarted ? 'w-full max-w-none p-0' : 'max-w-[1400px] px-6 md:px-8 pb-6 md:pb-8'
+      }`}>
+        {!isStarted && (
+          <button
+            onClick={handleBack}
+            className="absolute left-4 top-6 z-20 rounded-full border border-[var(--glass-stroke)] bg-[var(--glass)] px-5 py-2 text-[18px] font-semibold text-[var(--brand-neo)] transition-all hover:shadow-[var(--glow-neo)]"
+          >
+            Back
+          </button>
+        )}
 
-        <section className="relative grid grid-cols-12 gap-4 md:gap-6 mt-6">
-          {/* Camera Section */}
-          <div className="col-span-12 lg:col-span-7 xl:col-span-7 relative">
-            <div
-              className="camera-wrap relative h-[72vh] rounded-[var(--radius-lg)] border border-[var(--glass-stroke)] overflow-hidden"
-              style={{
-                background: 'linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02))',
-                backdropFilter: 'blur(12px)',
-              }}
-            >
+        <section className={`${
+          isStarted ? 'fixed inset-0 flex flex-col z-10' : 'relative grid grid-cols-12 gap-4 md:gap-6'
+        }`}>
+          <div className={`${
+            isStarted ? 'absolute inset-x-0 bottom-0 h-screen' : 'col-span-12 h-[50vh]'
+          } transition-all duration-700 ease-in-out`}>
+            <div className="flex h-full w-full items-end justify-center">
+              <div className={`relative flex ${
+                isStarted ? 'h-[80vh]' : 'h-[50vh]'
+              } w-full items-end justify-center overflow-hidden`}>
+                <div
+                  className={`absolute ${
+                    isStarted ? 'inset-x-[18%] bottom-[6%] h-[78%]' : 'inset-x-[8%] bottom-0 h-[82%]'
+                  } rounded-[var(--radius-lg)] border border-[rgba(25,227,255,.18)]`}
+                  style={{
+                    background:
+                      isStarted
+                        ? 'linear-gradient(180deg, rgba(255,255,255,.03), rgba(25,227,255,.02) 54%, rgba(4,13,35,.04))'
+                        : 'linear-gradient(180deg, rgba(25,227,255,.05), rgba(106,93,255,.05) 54%, rgba(4,13,35,.08))',
+                    boxShadow:
+                      'inset 0 0 48px rgba(25,227,255,.08), 0 0 28px rgba(25,227,255,.08)',
+                  }}
+                />
+
+                <div className={`relative z-10 flex flex-col items-center text-center ${
+                  isStarted ? 'mb-[12vh]' : 'mb-6'
+                }`}>
+                  <div className={`mb-5 grid ${
+                    isStarted ? 'h-32 w-32' : 'h-24 w-24'
+                  } place-items-center rounded-full border border-[var(--glass-stroke)] bg-[var(--glass)] shadow-[var(--glow-neo)]`}>
+                    <Image src="/logo.png" alt="Eeknova AI Trainer" width={68} height={68} priority />
+                  </div>
+                  <div
+                    className={`font-black leading-none text-[var(--brand-neo)] ${
+                      isStarted ? 'text-[58px]' : 'text-[42px]'
+                    }`}
+                    style={{ fontFamily: 'var(--font-future)' }}
+                  >
+                    Zumba
+                  </div>
+                  <div className={`${isStarted ? 'mt-4 text-[24px]' : 'mt-2 text-[18px]'} font-semibold text-white`}>
+                    {isStarted ? 'Live dance detection is active' : 'Ready for AI dance analysis'}
+                  </div>
+                  <div className={`${isStarted ? 'mt-3 max-w-[680px] text-[18px]' : 'mt-2 max-w-[520px] text-[15px]'} text-[var(--ink-med)]`}>
+                    {selectedMove
+                      ? `Selected move: ${formatMove(selectedMove)}`
+                      : 'Select a move below to start your session.'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className={`${
+            isStarted ? 'fixed inset-x-0 bottom-0 z-20 pointer-events-none' : 'col-span-12 relative h-[50vh]'
+          }`}>
+            <div className="mb-4">
+              {!isStarted && (
+                <h2
+                  className="text-[28px] font-bold leading-tight text-[var(--brand-neo)] text-center"
+                  style={{ fontFamily: 'var(--font-future)' }}
+                >
+                  Live Detection
+                </h2>
+              )}
+            </div>
+
+            {!isStarted && (
+            <div className="mt-7">
+              <GlassCard title="Move Selector">
+                <div className="space-y-3">
+                  <select
+                    value={selectedMove}
+                    onChange={(event) => setSelectedMove(event.target.value)}
+                    disabled={isStarted}
+                    className="w-full px-4 py-3 rounded-lg border border-[var(--glass-stroke)] bg-[var(--glass)] text-[var(--ink-hi)] text-[16px] focus:outline-none focus:ring-2 focus:ring-[var(--brand-neo)] focus:border-transparent transition-all disabled:opacity-50"
+                    style={{
+                      background: 'linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02))',
+                      backdropFilter: 'blur(12px)',
+                      colorScheme: 'dark',
+                    }}
+                  >
+                    <option value="">Select Move</option>
+                    {availableMoves.map((move) => (
+                      <option key={move} value={move} className="bg-[#0B132B] text-white">
+                        {formatMove(move)}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="text-center text-[14px] text-[var(--ink-med)]">
+                    Target move:{' '}
+                    <span className="text-[var(--brand-neo)] font-semibold">
+                      {selectedMove ? formatMove(selectedMove) : 'Not selected'}
+                    </span>
+                  </div>
+                </div>
+              </GlassCard>
+            </div>
+            )}
+
+            <div className={`flex flex-wrap gap-3 justify-center transition-all duration-700 ease-in-out pointer-events-auto ${
+              isStarted ? 'fixed bottom-8 left-1/2 -translate-x-1/2 z-30' : 'mt-7'
+            }`}>
+              <ControlButton
+                label={isStarted ? 'End Session' : 'Start'}
+                active={!isStarted}
+                danger={isStarted}
+                disabled={!selectedMove}
+                onClick={toggleAnalysisSession}
+              />
+            </div>
+
+            <div className="fixed left-[-10000px] top-0 h-[240px] w-[320px] overflow-hidden pointer-events-none">
               <ZumbaCamera
                 selectedMove={selectedMove}
                 isStarted={isStarted}
                 onSessionEnd={handleSessionEnd}
                 onAccuracyUpdate={handleAccuracyUpdate}
                 onFeedbackUpdate={handleFeedbackUpdate}
+                onFrameProcessed={handleFrameProcessed}
                 onError={setError}
               />
-              
-              {/* Camera Controls Overlay */}
-              <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
-                <div className="flex gap-3">
-                  {/* Move Selector */}
-                  <select
-                    value={selectedMove}
-                    onChange={(e) => setSelectedMove(e.target.value)}
-                    disabled={isStarted}
-                    className="bg-black/50 backdrop-blur-sm text-white rounded-lg px-3 py-2 text-sm border border-white/20 disabled:opacity-50"
-                  >
-                    <option value="">Select Move</option>
-                    {availableMoves.map((move) => (
-                      <option key={move} value={move}>
-                        {move.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Start/Stop Button */}
-                <button
-                  onClick={toggleAnalysisSession}
-                  disabled={!selectedMove}
-                  className={`px-6 py-3 rounded-lg font-semibold transition-all ${
-                    isStarted
-                      ? 'bg-red-500 hover:bg-red-600 text-white'
-                      : 'bg-green-500 hover:bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed'
-                  }`}
-                >
-                  {isStarted ? 'Stop Session' : 'Start Session'}
-                </button>
-              </div>
             </div>
-          </div>
 
-          {/* Divider */}
-          <div className="hidden lg:block col-span-1 relative">
-            <div className="absolute inset-y-6 left-1/2 w-px -translate-x-1/2 bg-gradient-to-b from-[rgba(25,227,255,.0)] via-[rgba(25,227,255,.75)] to-[rgba(25,227,255,.0)] shadow-[0_0_16px_rgba(25,227,255,.65),0_0_48px_rgba(25,227,255,.28)]" />
-          </div>
+            {!isStarted && (
+            <GlassCard title="Session Stats" className="mt-7">
+              <ul className="space-y-1 text-[16px] text-[var(--ink-med)]">
+                <li>
+                  Move
+                  <span className="float-right font-semibold text-white">
+                    {selectedMove ? formatMove(selectedMove) : 'Not selected'}
+                  </span>
+                </li>
+                <li>
+                  Session
+                  <span className={`float-right font-semibold ${isStarted ? 'text-green-400' : 'text-yellow-400'}`}>
+                    {isStarted ? 'Active' : 'Inactive'}
+                  </span>
+                </li>
+                <li>
+                  Avg Accuracy
+                  <span className="float-right font-semibold text-[var(--brand-neo)]">
+                    {validFrames > 0 ? `${currentAccuracy.toFixed(1)}%` : '--'}
+                  </span>
+                </li>
+                <li>
+                  Frames
+                  <span className="float-right font-semibold">{framesProcessed}</span>
+                </li>
+                <li>
+                  Valid Frames
+                  <span className="float-right font-semibold">{validFrames}</span>
+                </li>
+                <li>
+                  Active Frames
+                  <span className="float-right font-semibold">{activeFrames}</span>
+                </li>
+                <li>
+                  Pose Detected
+                  <span className={`float-right font-semibold ${poseDetected ? 'text-green-400' : 'text-[var(--ink-med)]'}`}>
+                    {poseDetected ? 'Yes' : 'No'}
+                  </span>
+                </li>
+                <li>
+                  Active Movement
+                  <span className={`float-right font-semibold ${activeMovement ? 'text-green-400' : 'text-yellow-400'}`}>
+                    {activeMovement ? 'Yes' : 'No'}
+                  </span>
+                </li>
+                <li>
+                  User
+                  <span className="float-right font-semibold">
+                    {user?.full_name || user?.username || user?.name || user?.email || 'Guest'}
+                  </span>
+                </li>
+              </ul>
+            </GlassCard>
+            )}
 
-          {/* Right Panel */}
-          <aside className="col-span-12 lg:col-span-4 xl:col-span-4 content-center">
-            <div className="rounded-[var(--radius-lg)] border border-[var(--glass-stroke)] p-6 btn-glass" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01))' }}>
-              {/* Logo + Title */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 rounded-full border border-[var(--glass-stroke)] bg-[var(--glass)] grid place-items-center shadow-[var(--glow-neo)]">
-                    <Image src="/logo.png" alt="Logo" width={36} height={36} />
-                  </div>
-                  <div>
-                    <div className="text-[18px] font-semibold text-[var(--brand-neo)]">Eeknova</div>
-                    <div className="text-[12px] text-[var(--ink-med)]">AITrainer</div>
-                  </div>
-                </div>
-
-                {/* Accuracy Display */}
-                <div className="text-right">
-                  <div className="text-[20px] font-bold text-[var(--brand-neo)]">
-                    {currentAccuracy.toFixed(1)}%
-                  </div>
-                  <div className="text-[12px] text-[var(--ink-med)]">Accuracy</div>
-                </div>
-              </div>
-
-              <h2 className="text-[28px] font-extrabold text-[var(--brand-neo)] mb-2">ZUMBA</h2>
-              <p className="text-[14px] text-[var(--ink-med)] mb-6">
-                Real-time dance analysis with AI-powered feedback
-              </p>
-
-              {/* Current Status */}
-              <div className="mb-6">
-                <h3 className="text-[14px] font-semibold text-[var(--brand-neo)] mb-3">CURRENT STATUS</h3>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[var(--ink-med)]">Move:</span>
-                    <span className="text-white font-medium">
-                      {selectedMove ? selectedMove.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Not Selected'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[var(--ink-med)]">Session:</span>
-                    <span className={`font-medium ${isStarted ? 'text-green-400' : 'text-yellow-400'}`}>
-                      {isStarted ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[var(--ink-med)]">Accuracy:</span>
-                    <span className="text-white font-medium">{currentAccuracy.toFixed(1)}%</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Live Feedback */}
-              {currentFeedback.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="text-[14px] font-semibold text-[var(--brand-neo)] mb-3">LIVE FEEDBACK</h3>
-                  <div className="bg-black/30 rounded-lg p-3 max-h-32 overflow-y-auto">
-                    {currentFeedback.map((feedback, index) => (
-                      <div key={index} className="text-xs text-yellow-300 mb-1">
-                        • {feedback}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Session Types */}
-              <div className="mb-6">
-                <h3 className="text-[14px] font-semibold text-[var(--brand-neo)] mb-3">SESSION TYPES</h3>
-                <div className="space-y-2">
-                  {sessions.map(s => (
-                    <motion.button
-                      key={s.id}
-                      onClick={() => toggleSessionState(s.id)}
-                      whileTap={{ scale: s.state === 'locked' ? 1 : 0.98 }}
-                      className={`w-full text-left rounded-lg border px-3 py-2 flex items-center justify-between transition-all text-sm
-                        ${s.state === 'completed' ? 'border-[rgba(25,227,255,.18)] bg-[rgba(25,227,255,.02)]' : ''}
-                        ${s.state === 'ongoing' ? 'border-[var(--brand-neo)] shadow-[0_0_10px_rgba(25,227,255,.22)]' : ''}
-                        ${s.state === 'locked' ? 'opacity-70 bg-[rgba(255,255,255,.01)] pointer-events-auto' : ''}
-                      `}
-                      style={{ borderColor: s.state === 'ongoing' ? 'var(--brand-neo)' : undefined }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className={`w-5 h-5 grid place-items-center rounded-md text-xs ${s.state === 'completed' ? 'bg-[rgba(25,227,255,.12)]' : ''}`}>
-                          {s.state === 'completed' ? '✔' : s.state === 'locked' ? '🔒' : '▶'}
-                        </span>
-                        <div>
-                          <div className={`text-xs font-semibold ${s.state === 'ongoing' ? 'text-[var(--brand-neo)]' : ''}`}>{s.title}</div>
-                          <div className="text-[11px] text-[var(--ink-med)]">
-                            {s.state === 'locked' ? 'Locked' : s.state === 'ongoing' ? 'Ongoing' : 'Completed'}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="text-right text-[11px">
-                        <div className="text-[11px] text-[var(--brand-neo)] font-semibold">{s.progress}%</div>
-                      </div>
-                    </motion.button>
+            {!isStarted && (
+            <GlassCard title="Live Feedback" className="mt-7">
+              {currentFeedback.length > 0 ? (
+                <div className="space-y-2 text-[14px] text-yellow-300">
+                  {currentFeedback.slice(0, 5).map((feedback, index) => (
+                    <div key={`${feedback}-${index}`} className="rounded-lg border border-yellow-300/20 bg-yellow-300/5 px-3 py-2">
+                      {feedback}
+                    </div>
                   ))}
                 </div>
-              </div>
-
-              {/* Error Display */}
-              {error && (
-                <div className="mb-4">
-                  <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3">
-                    <div className="text-red-300 text-sm font-semibold mb-1">Error</div>
-                    <div className="text-red-200 text-xs">{error}</div>
-                  </div>
+              ) : (
+                <div className="text-[14px] text-[var(--ink-med)] text-center py-2">
+                  {isStarted ? 'Analyzing your movement...' : 'Feedback will appear during the session.'}
                 </div>
               )}
-            </div>
-          </aside>
+            </GlassCard>
+            )}
+
+            {error && (
+              <GlassCard title="Error" className="mt-7 border-red-500/50">
+                <div className="text-[14px] text-red-200">{error}</div>
+              </GlassCard>
+            )}
+
+            {sessionSummary && !isStarted && (
+              <div id="zumba-session-summary">
+                <GlassCard title="Session Summary" className="mt-7">
+                  <ul className="space-y-1 text-[14px] text-[var(--ink-med)]">
+                    <li>
+                      Move
+                      <span className="float-right font-semibold text-white">
+                        {formatMove(sessionSummary.target_move)}
+                      </span>
+                    </li>
+                    <li>
+                      Frames Processed
+                      <span className="float-right font-semibold">{sessionSummary.frames_processed}</span>
+                    </li>
+                    <li>
+                      Avg Accuracy
+                      <span className="float-right font-semibold text-[var(--brand-neo)]">
+                        {sessionSummary.average_accuracy.toFixed(1)}%
+                      </span>
+                    </li>
+                    <li>
+                      Feedback Count
+                      <span className="float-right font-semibold">{sessionSummary.feedback_count}</span>
+                    </li>
+                  </ul>
+                </GlassCard>
+              </div>
+            )}
+          </div>
         </section>
       </div>
-
-      {/* Results Modal */}
-      <AnimatePresence>
-        {showResults && sessionSummary && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50"
-            onClick={() => setShowResults(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-[var(--glass)] border border-[var(--glass-stroke)] rounded-[var(--radius-lg)] p-6 max-w-md w-full mx-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="text-[24px] font-bold text-[var(--brand-neo)] mb-4">Session Complete!</h3>
-              
-              <div className="space-y-3 mb-6">
-                <div className="flex justify-between">
-                  <span className="text-[var(--ink-med)]">Move:</span>
-                  <span className="text-white font-medium">{sessionSummary.target_move}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--ink-med)]">Frames Processed:</span>
-                  <span className="text-white font-medium">{sessionSummary.frames_processed}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--ink-med)]">Average Accuracy:</span>
-                  <span className="text-[var(--brand-neo)] font-bold">{sessionSummary.average_accuracy.toFixed(1)}%</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--ink-med)]">Feedback Count:</span>
-                  <span className="text-white font-medium">{sessionSummary.feedback_count}</span>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setShowResults(false)}
-                className="w-full bg-[var(--brand-neo)] text-white rounded-lg py-3 font-semibold hover:opacity-90 transition-opacity"
-              >
-                Close
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </main>
   );
 }
 
-/* ================= Progress Ring Component =================
-   Animated SVG circle that fills to `percentage`. */
-function ProgressRing({ size = 72, stroke = 8, percentage = 0 }: { size?: number; stroke?: number; percentage: number }) {
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const dash = (percentage / 100) * circumference;
+function formatMove(move: string) {
+  return move
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
-  const [offset, setOffset] = useState(circumference);
-
-  useEffect(() => {
-    // animate to target dash
-    const target = circumference - dash;
-    // small animation using requestAnimationFrame
-    let rafId = 0;
-    const duration = 700;
-    const start = performance.now();
-    const from = offset;
-    const animate = (t: number) => {
-      const elapsed = Math.min(1, (t - start) / duration);
-      const value = from + (target - from) * elapsed;
-      setOffset(value);
-      if (elapsed < 1) rafId = requestAnimationFrame(animate);
-    };
-    rafId = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(rafId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [percentage]);
-
+function GlassCard({
+  title,
+  children,
+  className = '',
+}: {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <defs>
-        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="4" result="coloredBlur" />
-          <feMerge>
-            <feMergeNode in="coloredBlur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
-
-      {/* background circle */}
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        stroke="rgba(255,255,255,0.06)"
-        strokeWidth={stroke}
-        fill="transparent"
-      />
-
-      {/* progress circle */}
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        stroke="var(--brand-neo)"
-        strokeWidth={stroke}
-        strokeLinecap="round"
-        fill="transparent"
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        style={{ transition: 'stroke-dashoffset 0.2s linear' }}
-        filter="url(#glow)"
-        transform={`rotate(-90 ${size / 2} ${size / 2})`}
-      />
-
-      {/* percentage text */}
-      <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fontSize={14} fontWeight={700} fill="var(--brand-neo)">
-        {percentage}%
-      </text>
-    </svg>
+    <div
+      className={`rounded-[var(--radius-lg)] border border-[var(--glass-stroke)] p-4 btn-glass ${className}`}
+      style={{
+        background: 'linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02))',
+      }}
+    >
+      <h3 className="text-[20px] font-semibold mb-2 text-[var(--brand-neo)]">{title}</h3>
+      {children}
+    </div>
   );
 }
 
-/* ================= Particles (re-used) ================= */
+function ControlButton({
+  label,
+  active,
+  danger,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  active?: boolean;
+  danger?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded-[var(--radius-md)] border border-[var(--glass-stroke)] px-5 py-2 text-[16px] font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+        danger
+          ? 'bg-red-500/80 text-white hover:bg-red-600/80'
+          : active
+            ? 'bg-[var(--brand-neo)] text-black shadow-[0_0_18px_rgba(25,227,255,.55)]'
+            : 'bg-[var(--glass)] text-[var(--brand-neo)] hover:shadow-[var(--glow-neo)]'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
 function Particles() {
   return (
     <div aria-hidden className="particles pointer-events-none fixed inset-0 -z-10">
