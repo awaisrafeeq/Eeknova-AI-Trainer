@@ -3,9 +3,111 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import Avatar3D from '@/components/Avatar3D';
 import ZumbaCamera from '@/components/ZumbaCamera';
 import { getZumbaMoves, ZumbaAnalysisResult, ZumbaSessionSummary } from '@/lib/zumbaApi';
 import { useAuth } from '@/hooks/useAuth';
+
+type ZumbaVisualPhase = 'in' | 'main' | 'out';
+
+type ZumbaAnimationSet = {
+  in: string;
+  main: string;
+  out: string;
+};
+
+const ZUMBA_ANIMATIONS: Record<string, ZumbaAnimationSet> = {
+  body_rolls: {
+    in: '/zumba pose/Body Rolls/Idle in Body Rolls_compressed.glb',
+    main: '/zumba pose/Body Rolls/Main Body Rolls_compressed.glb',
+    out: '/zumba pose/Body Rolls/Idle out Body Rolls_compressed.glb',
+  },
+  cumbia_step: {
+    in: '/zumba pose/Cumbia Step/Idle In Cumbia Step_compressed.glb',
+    main: '/zumba pose/Cumbia Step/Main Cumbia Step_compressed.glb',
+    out: '/zumba pose/Cumbia Step/Idle Out Cumbia Step_compressed.glb',
+  },
+  grape_vine: {
+    in: '/zumba pose/Grape Vine/Idle In Grape Vine_compressed.glb',
+    main: '/zumba pose/Grape Vine/Main Grape Vine_compressed.glb',
+    out: '/zumba pose/Grape Vine/Idle Out Grape Vine_compressed.glb',
+  },
+  heel_taps: {
+    in: '/zumba pose/Heel Taps/Idle in Heel Taps_compressed.glb',
+    main: '/zumba pose/Heel Taps/Main Heel Taps_compressed.glb',
+    out: '/zumba pose/Heel Taps/Idle out Heel Taps_compressed.glb',
+  },
+  jumping_jacks: {
+    in: '/zumba pose/Jumping Jacks/Idle In Jumping Jacks_compressed.glb',
+    main: '/zumba pose/Jumping Jacks/Main Jumping Jacks_compressed.glb',
+    out: '/zumba pose/Jumping Jacks/Idle Out Jumping Jacks_compressed.glb',
+  },
+  knee_lifts: {
+    in: '/zumba pose/Knee Lifts/Idle in Knee Lift_compressed.glb',
+    main: '/zumba pose/Knee Lifts/Main Knee Lift_compressed.glb',
+    out: '/zumba pose/Knee Lifts/Idle out Knee Lift_compressed.glb',
+  },
+  lunge_with_punches: {
+    in: '/zumba pose/Lunge with Punches/Idle in Lunge with Punches_compressed.glb',
+    main: '/zumba pose/Lunge with Punches/Main Lunge with Punches_compressed.glb',
+    out: '/zumba pose/Lunge with Punches/Idle out Lunge with Punches_compressed.glb',
+  },
+  mambo_step: {
+    in: '/zumba pose/Mambo/Idle in Mambo_compressed.glb',
+    main: '/zumba pose/Mambo/Main Mambo_compressed.glb',
+    out: '/zumba pose/Mambo/Idle out Mambo_compressed.glb',
+  },
+  march_in_place: {
+    in: '/zumba pose/March in Place/Idle in March in place_compressed.glb',
+    main: '/zumba pose/March in Place/Main March in place_compressed.glb',
+    out: '/zumba pose/March in Place/Idle out March in place_compressed.glb',
+  },
+  merengue_march: {
+    in: '/zumba pose/Merengue March/Idle In Merengue March_compressed.glb',
+    main: '/zumba pose/Merengue March/Main Merengue March_compressed.glb',
+    out: '/zumba pose/Merengue March/Idle Out Merengue March_compressed.glb',
+  },
+  reggaeton_stomp: {
+    in: '/zumba pose/Reggaeton Stomp/Idle in Reggaeton stomp_compressed.glb',
+    main: '/zumba pose/Reggaeton Stomp/Main Reggaeton stomp_compressed.glb',
+    out: '/zumba pose/Reggaeton Stomp/Idle out Reggaeton stomp_compressed.glb',
+  },
+  shimmy: {
+    in: '/zumba pose/Shimmy/Idle in Shimmy_compressed.glb',
+    main: '/zumba pose/Shimmy/Main Shimmy_compressed.glb',
+    out: '/zumba pose/Shimmy/Idle out Shimmy_compressed.glb',
+  },
+  side_punches: {
+    in: '/zumba pose/Side Punches/Idle in Side punches_compressed.glb',
+    main: '/zumba pose/Side Punches/Main Side punches_compressed.glb',
+    out: '/zumba pose/Side Punches/Idle out Side punches_compressed.glb',
+  },
+  squat_with_clap: {
+    in: '/zumba pose/Squat With Clap/Idle In Squat With Clap_compressed.glb',
+    main: '/zumba pose/Squat With Clap/Main Squat With Clap_compressed.glb',
+    out: '/zumba pose/Squat With Clap/Idle Out Squat With Clap_compressed.glb',
+  },
+  step_clap: {
+    in: '/zumba pose/Step Clap/Idle in Step clap_compressed.glb',
+    main: '/zumba pose/Step Clap/Main Step clap_compressed.glb',
+    out: '/zumba pose/Step Clap/Idle out Step clap_compressed.glb',
+  },
+  step_touch: {
+    in: '/zumba pose/Step Touch/Idle in Step touch_compressed.glb',
+    main: '/zumba pose/Step Touch/Main Step touch_compressed.glb',
+    out: '/zumba pose/Step Touch/Idle out Step touch_compressed.glb',
+  },
+  twist_step: {
+    in: '/zumba pose/Twist Step/Idle in Twist Step_compressed.glb',
+    main: '/zumba pose/Twist Step/Main Twist Step_compressed.glb',
+    out: '/zumba pose/Twist Step/Idle out Twist Step_compressed.glb',
+  },
+  'zumba_turn_(pivot)': {
+    in: '/zumba pose/Zumba Turn(Pivot)/Idle in Zumba turn (pivot)_compressed.glb',
+    main: '/zumba pose/Zumba Turn(Pivot)/Main Zumba turn (pivot)_compressed.glb',
+    out: '/zumba pose/Zumba Turn(Pivot)/Idle out Zumba turn (pivot)_compressed.glb',
+  },
+};
 
 /**
  * Zumba module UI aligned with the Yoga page:
@@ -18,6 +120,9 @@ export default function ZumbaPage() {
   const [availableMoves, setAvailableMoves] = useState<string[]>([]);
   const [selectedMove, setSelectedMove] = useState<string>('');
   const [isStarted, setIsStarted] = useState(false);
+  const [isSessionViewActive, setIsSessionViewActive] = useState(false);
+  const [visualPhase, setVisualPhase] = useState<ZumbaVisualPhase>('main');
+  const [visualAnimKey, setVisualAnimKey] = useState(0);
   const [currentAccuracy, setCurrentAccuracy] = useState(0);
   const [framesProcessed, setFramesProcessed] = useState(0);
   const [validFrames, setValidFrames] = useState(0);
@@ -28,6 +133,17 @@ export default function ZumbaPage() {
   const [sessionSummary, setSessionSummary] = useState<ZumbaSessionSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const selectedAnimationSet = selectedMove ? ZUMBA_ANIMATIONS[selectedMove] : undefined;
+  const visualAnimationPath = selectedAnimationSet?.[isSessionViewActive ? visualPhase : 'main'];
+  const shouldLoopVisualAnimation = !isSessionViewActive || visualPhase === 'main';
+
+  useEffect(() => {
+    if (!isSessionViewActive) {
+      setVisualPhase('main');
+      setVisualAnimKey((key) => key + 1);
+    }
+  }, [selectedMove, isSessionViewActive]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -92,7 +208,28 @@ export default function ZumbaPage() {
     setActiveMovement(Boolean(result.active_movement));
   }, []);
 
+  const handleVisualAnimationEnd = useCallback(() => {
+    if (!isSessionViewActive) return;
+
+    if (visualPhase === 'in') {
+      setVisualPhase('main');
+      setVisualAnimKey((key) => key + 1);
+      return;
+    }
+
+    if (visualPhase === 'out') {
+      setIsSessionViewActive(false);
+      setVisualPhase('main');
+      setVisualAnimKey((key) => key + 1);
+    }
+  }, [isSessionViewActive, visualPhase]);
+
   const toggleAnalysisSession = () => {
+    if (isSessionViewActive && !isStarted) {
+      setIsSessionViewActive(false);
+      return;
+    }
+
     if (!selectedMove) {
       setError('Please select a Zumba move first');
       return;
@@ -108,15 +245,28 @@ export default function ZumbaPage() {
       setPoseDetected(false);
       setActiveMovement(false);
       setError(null);
+      setIsSessionViewActive(true);
+      setVisualPhase(selectedAnimationSet ? 'in' : 'main');
+      setVisualAnimKey((key) => key + 1);
+      setIsStarted(true);
+      return;
     }
 
-    setIsStarted((value) => !value);
+    setIsStarted(false);
+    if (selectedAnimationSet) {
+      setIsSessionViewActive(true);
+      setVisualPhase('out');
+      setVisualAnimKey((key) => key + 1);
+    } else {
+      setIsSessionViewActive(false);
+    }
   };
 
   const handleBack = () => {
     if (isStarted) {
       setIsStarted(false);
     }
+    setIsSessionViewActive(false);
     router.push('/dashboard');
   };
 
@@ -138,17 +288,17 @@ export default function ZumbaPage() {
     <main
       className="min-h-screen w-full overflow-hidden text-[var(--ink-hi)]"
       style={{
-        background: isStarted ? 'transparent' : 'var(--bg-gradient)',
+        background: isSessionViewActive ? 'transparent' : 'var(--bg-gradient)',
         fontFamily: 'var(--font-ui)',
         transition: 'background 0.5s ease',
       }}
     >
-      {!isStarted && <Particles />}
+      {!isSessionViewActive && <Particles />}
 
       <div className={`mx-auto relative ${
-        isStarted ? 'w-full max-w-none p-0' : 'max-w-[1400px] px-6 md:px-8 pb-6 md:pb-8'
+        isSessionViewActive ? 'w-full max-w-none p-0' : 'max-w-[1400px] px-6 md:px-8 pb-6 md:pb-8'
       }`}>
-        {!isStarted && (
+        {!isSessionViewActive && (
           <button
             onClick={handleBack}
             className="absolute left-4 top-6 z-20 rounded-full border border-[var(--glass-stroke)] bg-[var(--glass)] px-5 py-2 text-[18px] font-semibold text-[var(--brand-neo)] transition-all hover:shadow-[var(--glow-neo)]"
@@ -158,22 +308,22 @@ export default function ZumbaPage() {
         )}
 
         <section className={`${
-          isStarted ? 'fixed inset-0 flex flex-col z-10' : 'relative grid grid-cols-12 gap-4 md:gap-6'
+          isSessionViewActive ? 'fixed inset-0 flex flex-col z-10' : 'relative grid grid-cols-12 gap-4 md:gap-6'
         }`}>
           <div className={`${
-            isStarted ? 'absolute inset-x-0 bottom-0 h-screen' : 'col-span-12 h-[50vh]'
+            isSessionViewActive ? 'absolute inset-x-0 bottom-0 h-screen' : 'col-span-12 h-[50vh]'
           } transition-all duration-700 ease-in-out`}>
             <div className="flex h-full w-full items-end justify-center">
               <div className={`relative flex ${
-                isStarted ? 'h-[80vh]' : 'h-[50vh]'
+                isSessionViewActive ? 'h-[80vh]' : 'h-[50vh]'
               } w-full items-end justify-center overflow-hidden`}>
                 <div
                   className={`absolute ${
-                    isStarted ? 'inset-x-[18%] bottom-[6%] h-[78%]' : 'inset-x-[8%] bottom-0 h-[82%]'
+                    isSessionViewActive ? 'inset-x-[18%] bottom-[6%] h-[78%]' : 'inset-x-[8%] bottom-0 h-[82%]'
                   } rounded-[var(--radius-lg)] border border-[rgba(25,227,255,.18)]`}
                   style={{
                     background:
-                      isStarted
+                      isSessionViewActive
                         ? 'linear-gradient(180deg, rgba(255,255,255,.03), rgba(25,227,255,.02) 54%, rgba(4,13,35,.04))'
                         : 'linear-gradient(180deg, rgba(25,227,255,.05), rgba(106,93,255,.05) 54%, rgba(4,13,35,.08))',
                     boxShadow:
@@ -181,40 +331,52 @@ export default function ZumbaPage() {
                   }}
                 />
 
-                <div className={`relative z-10 flex flex-col items-center text-center ${
-                  isStarted ? 'mb-[12vh]' : 'mb-6'
-                }`}>
-                  <div className={`mb-5 grid ${
-                    isStarted ? 'h-32 w-32' : 'h-24 w-24'
-                  } place-items-center rounded-full border border-[var(--glass-stroke)] bg-[var(--glass)] shadow-[var(--glow-neo)]`}>
-                    <Image src="/logo.png" alt="Eeknova AI Trainer" width={68} height={68} priority />
-                  </div>
-                  <div
-                    className={`font-black leading-none text-[var(--brand-neo)] ${
-                      isStarted ? 'text-[58px]' : 'text-[42px]'
-                    }`}
-                    style={{ fontFamily: 'var(--font-future)' }}
-                  >
-                    Zumba
-                  </div>
-                  <div className={`${isStarted ? 'mt-4 text-[24px]' : 'mt-2 text-[18px]'} font-semibold text-white`}>
-                    {isStarted ? 'Live dance detection is active' : 'Ready for AI dance analysis'}
-                  </div>
-                  <div className={`${isStarted ? 'mt-3 max-w-[680px] text-[18px]' : 'mt-2 max-w-[520px] text-[15px]'} text-[var(--ink-med)]`}>
-                    {selectedMove
-                      ? `Selected move: ${formatMove(selectedMove)}`
-                      : 'Select a move below to start your session.'}
-                  </div>
+                <div className={`relative z-10 h-full w-full ${visualAnimationPath ? '' : 'flex flex-col items-center justify-center text-center'}`}>
+                  {visualAnimationPath ? (
+                    <Avatar3D
+                      key={`zumba-avatar-${selectedMove}-${isSessionViewActive ? visualPhase : 'preview'}-${visualAnimKey}`}
+                      selectedPose=""
+                      staticMode={false}
+                      playAnimationPath={visualAnimationPath}
+                      playAnimationKey={visualAnimKey}
+                      loopCustomAnimation={shouldLoopVisualAnimation}
+                      cameraManualDistanceFactor={isSessionViewActive ? 1.65 : 1.75}
+                      cameraManualTargetYOffsetFactor={isSessionViewActive ? 0.04 : 0.02}
+                      lockCamera={true}
+                      freezeCameraFit={isSessionViewActive}
+                      onCustomAnimationEnd={handleVisualAnimationEnd}
+                    />
+                  ) : (
+                    <div className={`relative z-10 flex flex-col items-center text-center ${isSessionViewActive ? 'mb-[12vh]' : 'mb-6'}`}>
+                      <div className={`mb-5 grid ${isSessionViewActive ? 'h-32 w-32' : 'h-24 w-24'} place-items-center rounded-full border border-[var(--glass-stroke)] bg-[var(--glass)] shadow-[var(--glow-neo)]`}>
+                        <Image src="/logo.png" alt="Eeknova AI Trainer" width={68} height={68} priority />
+                      </div>
+                      <div
+                        className={`font-black leading-none text-[var(--brand-neo)] ${isSessionViewActive ? 'text-[58px]' : 'text-[42px]'}`}
+                        style={{ fontFamily: 'var(--font-future)' }}
+                      >
+                        Zumba
+                      </div>
+                      <div className={`${isSessionViewActive ? 'mt-4 text-[24px]' : 'mt-2 text-[18px]'} font-semibold text-white`}>
+                        {isSessionViewActive ? 'Live dance detection is active' : 'Ready for AI dance analysis'}
+                      </div>
+                      <div className={`${isSessionViewActive ? 'mt-3 max-w-[680px] text-[18px]' : 'mt-2 max-w-[520px] text-[15px]'} text-[var(--ink-med)]`}>
+                        {selectedMove
+                          ? `Selected move: ${formatMove(selectedMove)}`
+                          : 'Select a move below to start your session.'}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
           <div className={`${
-            isStarted ? 'fixed inset-x-0 bottom-0 z-20 pointer-events-none' : 'col-span-12 relative h-[50vh]'
+            isSessionViewActive ? 'fixed inset-x-0 bottom-0 z-20 pointer-events-none' : 'col-span-12 relative h-[50vh]'
           }`}>
             <div className="mb-4">
-              {!isStarted && (
+              {!isSessionViewActive && (
                 <h2
                   className="text-[28px] font-bold leading-tight text-[var(--brand-neo)] text-center"
                   style={{ fontFamily: 'var(--font-future)' }}
@@ -224,7 +386,7 @@ export default function ZumbaPage() {
               )}
             </div>
 
-            {!isStarted && (
+            {!isSessionViewActive && (
             <div className="mt-7">
               <GlassCard title="Move Selector">
                 <div className="space-y-3">
@@ -258,12 +420,12 @@ export default function ZumbaPage() {
             )}
 
             <div className={`flex flex-wrap gap-3 justify-center transition-all duration-700 ease-in-out pointer-events-auto ${
-              isStarted ? 'fixed bottom-8 left-1/2 -translate-x-1/2 z-30' : 'mt-7'
+              isSessionViewActive ? 'fixed bottom-8 left-1/2 -translate-x-1/2 z-30' : 'mt-7'
             }`}>
               <ControlButton
-                label={isStarted ? 'End Session' : 'Start'}
-                active={!isStarted}
-                danger={isStarted}
+                label={isSessionViewActive ? 'End Session' : 'Start'}
+                active={!isSessionViewActive}
+                danger={isSessionViewActive}
                 disabled={!selectedMove}
                 onClick={toggleAnalysisSession}
               />
@@ -281,7 +443,7 @@ export default function ZumbaPage() {
               />
             </div>
 
-            {!isStarted && (
+            {!isSessionViewActive && (
             <GlassCard title="Session Stats" className="mt-7">
               <ul className="space-y-1 text-[16px] text-[var(--ink-med)]">
                 <li>
@@ -336,7 +498,7 @@ export default function ZumbaPage() {
             </GlassCard>
             )}
 
-            {!isStarted && (
+            {!isSessionViewActive && (
             <GlassCard title="Live Feedback" className="mt-7">
               {currentFeedback.length > 0 ? (
                 <div className="space-y-2 text-[14px] text-yellow-300">
@@ -360,7 +522,7 @@ export default function ZumbaPage() {
               </GlassCard>
             )}
 
-            {sessionSummary && !isStarted && (
+            {sessionSummary && !isSessionViewActive && (
               <div id="zumba-session-summary">
                 <GlassCard title="Session Summary" className="mt-7">
                   <ul className="space-y-1 text-[14px] text-[var(--ink-med)]">

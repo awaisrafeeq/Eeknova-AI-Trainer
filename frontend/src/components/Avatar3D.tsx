@@ -473,6 +473,7 @@ interface Avatar3DProps {
   staticModelPath?: string;
   playAnimationPath?: string;
   playAnimationKey?: number;
+  loopCustomAnimation?: boolean;
   inAnimationTargetDurationSec?: number;
   cameraZoom?: number;
   cameraTargetYOffset?: number;
@@ -488,13 +489,14 @@ interface Avatar3DProps {
   onTTSSpeaking?: (speaking: boolean) => void;
   onError?: (error: string) => void;
   onSessionEnd?: () => void;
+  onCustomAnimationEnd?: () => void;
   onPhaseChange?: (phase: 'in' | 'main' | 'out') => void; // New prop to notify parent of phase changes
   assistantModeActive?: boolean;
   onModelLoaded?: (model: THREE.Object3D | null) => void;
   onReadyChange?: (ready: boolean) => void;
 }
 
-function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, ttsText = '', isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, inAnimationTargetDurationSec, skinToneColor = '#f3cdac', skinToneStrength = 0.45, onError, onTTSSpeaking, onSessionEnd, onPhaseChange, onModelLoaded, onLoadingChange }: Avatar3DProps & { onLoadingChange?: (loading: boolean) => void }) {
+function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, ttsText = '', isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, loopCustomAnimation = false, inAnimationTargetDurationSec, skinToneColor = '#f3cdac', skinToneStrength = 0.45, onError, onTTSSpeaking, onSessionEnd, onCustomAnimationEnd, onPhaseChange, onModelLoaded, onLoadingChange }: Avatar3DProps & { onLoadingChange?: (loading: boolean) => void }) {
 
   const [model, setModel] = useState<THREE.Group | null>(null);
 
@@ -1583,6 +1585,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
 
         let maxDuration = 0;
+        const playedCustomActions: THREE.AnimationAction[] = [];
 
         if (gltf.animations && gltf.animations.length > 0) {
 
@@ -1604,12 +1607,17 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
                 action.clampWhenFinished = true;
               }
             */
-            // Chess animations: play once
-            action.setLoop(THREE.LoopOnce, 1);
-            action.clampWhenFinished = true;
+            if (loopCustomAnimation) {
+              action.setLoop(THREE.LoopRepeat, Infinity);
+              action.clampWhenFinished = false;
+            } else {
+              action.setLoop(THREE.LoopOnce, 1);
+              action.clampWhenFinished = true;
+            }
 
             action.play();
             maxDuration = Math.max(maxDuration, clip.duration);
+            playedCustomActions.push(action);
           });
 
         } else {
@@ -1657,6 +1665,29 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
         });
 
         console.log('🎭 FINAL: Using blendshape mesh:', blendshapeMeshRef.current?.name, 'with', blendshapeNamesRef.current.length, 'blendshapes');
+
+        if (!loopCustomAnimation && onCustomAnimationEnd && playedCustomActions.length > 0) {
+          let remainingCustomActions = playedCustomActions.length;
+          const customActionSet = new Set(playedCustomActions);
+          const handleCustomFinished = (event: { action?: THREE.AnimationAction }) => {
+            if (!isCurrentModelLoad(requestId)) return;
+            if (!event.action || !customActionSet.has(event.action)) {
+              return;
+            }
+
+            remainingCustomActions -= 1;
+            if (remainingCustomActions <= 0) {
+              animationMixer.removeEventListener('finished', handleCustomFinished as never);
+              animationFinishedCleanupRef.current = null;
+              onCustomAnimationEnd();
+            }
+          };
+
+          animationMixer.addEventListener('finished', handleCustomFinished as never);
+          animationFinishedCleanupRef.current = () => {
+            animationMixer.removeEventListener('finished', handleCustomFinished as never);
+          };
+        }
 
         // Set timeout only for chess animations (not warm-up/cooldown) - DISABLED for TTS sync
         // TODO: Re-enable warm-up/cooldown logic later
@@ -1721,7 +1752,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
     };
 
-  }, [playAnimationKey, playAnimationPath, staticMode]);
+  }, [playAnimationKey, playAnimationPath, staticMode, loopCustomAnimation, onCustomAnimationEnd]);
 
 
 
@@ -2218,6 +2249,8 @@ interface Avatar3DProps {
 
   playAnimationKey?: number; // Increment to trigger one-shot animation
 
+  loopCustomAnimation?: boolean;
+
   inAnimationTargetDurationSec?: number;
 
   cameraZoom?: number;
@@ -2242,6 +2275,8 @@ interface Avatar3DProps {
 
   onSessionEnd?: () => void; // Callback when OUT animation completes
 
+  onCustomAnimationEnd?: () => void;
+
   onModelLoaded?: (model: THREE.Object3D | null) => void;
 
   onReadyChange?: (ready: boolean) => void;
@@ -2250,7 +2285,7 @@ interface Avatar3DProps {
 
 
 
-export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, ttsText = '', isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, inAnimationTargetDurationSec, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, cameraDistanceScale = 1, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera = false, freezeCameraFit = false, skinToneColor = '#f3cdac', skinToneStrength = 0.45, onTTSSpeaking, onError, onSessionEnd, onPhaseChange, onReadyChange }: Avatar3DProps) {
+export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, ttsText = '', isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, loopCustomAnimation = false, inAnimationTargetDurationSec, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, cameraDistanceScale = 1, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera = false, freezeCameraFit = false, skinToneColor = '#f3cdac', skinToneStrength = 0.45, onTTSSpeaking, onError, onSessionEnd, onCustomAnimationEnd, onPhaseChange, onReadyChange }: Avatar3DProps) {
 
   const [webglSupported, setWebglSupported] = useState(true);
 
@@ -2288,6 +2323,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
     staticModelPath,
     playAnimationPath,
     playAnimationKey,
+    loopCustomAnimation,
     onlyInAnimation,
     onlyOutAnimation,
   ]);
@@ -2439,6 +2475,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
                 staticModelPath={staticModelPath}
                 playAnimationPath={playAnimationPath}
                 playAnimationKey={playAnimationKey}
+                loopCustomAnimation={loopCustomAnimation}
                 inAnimationTargetDurationSec={inAnimationTargetDurationSec}
                 skinToneColor={skinToneColor}
                 skinToneStrength={skinToneStrength}
@@ -2446,6 +2483,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
                 onTTSSpeaking={onTTSSpeaking}
                 onModelLoaded={setFitObject}
                 onSessionEnd={onSessionEnd}
+                onCustomAnimationEnd={onCustomAnimationEnd}
                 onPhaseChange={onPhaseChange}
                 onLoadingChange={setModelLoading}
               />
