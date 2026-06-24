@@ -79,13 +79,38 @@ class ZumbaSessionManager:
         except Exception as e:
             raise Exception(f"Failed to create Zumba session: {str(e)}")
     
-    def process_frame(self, session_id: str, frame_data: str) -> Dict[str, Any]:
-        """Process a frame for Zumba pose analysis"""
+    def process_frame(
+        self,
+        session_id: str,
+        frame_data: str,
+        target_move: str = None,
+        target_move_name: str = None,
+        timeline_ms: float = None,
+    ) -> Dict[str, Any]:
+        """Process a frame for Zumba pose analysis.
+
+        For timeline-driven sessions the frontend sends the move the timeline
+        currently expects (target_move) with each frame. We switch the session's
+        comparison target in place — without creating a new session — so metrics
+        accumulate across the whole song. If no target_move is supplied we keep
+        the session's initial target (single-move backward compatibility).
+        """
         if not ZUMBA_AVAILABLE:
             raise Exception("Zumba functionality not available")
-            
+
         if session_id not in self.sessions:
             raise Exception("Session not found")
+
+        # Apply an incoming per-frame target move if it is valid and changed.
+        if target_move and session_id in self.analyzers:
+            session = self.sessions[session_id]
+            if target_move != session.get('target_move'):
+                analyzer = self.analyzers[session_id]
+                if target_move in analyzer.reference_angles:
+                    session['target_move'] = target_move
+                    analyzer.target_move = target_move
+                    # Reset motion baseline so cyclic motion isn't compared across moves.
+                    session['last_angles'] = None
             
         if session_id not in self.analyzers:
             return {

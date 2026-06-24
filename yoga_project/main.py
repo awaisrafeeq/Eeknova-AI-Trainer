@@ -1028,7 +1028,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 frame_data = data.get('data')
                 session_id = data.get('session_id')
                 session_type = data.get('session_type', 'yoga')  # 'yoga' or 'zumba'
-                
+                target_move = data.get('target_move')
+                target_move_name = data.get('target_move_name')
+                timeline_ms = data.get('timeline_ms')
+
                 logger.info(f"Received frame for {session_type} session {session_id}")
                 
                 if not frame_data or not session_id:
@@ -1043,7 +1046,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     try:
                         result = zumba_session_manager.process_frame(
                             session_id=session_id,
-                            frame_data=frame_data
+                            frame_data=frame_data,
+                            target_move=target_move,
+                            target_move_name=target_move_name,
+                            timeline_ms=timeline_ms
                         )
                         result['type'] = 'zumba_analysis'
                         result['timestamp'] = datetime.now().isoformat()

@@ -12,12 +12,20 @@ import {
 } from '@/lib/zumbaApi';
 
 interface ZumbaCameraProps {
+  /** Stable backend move key used to create the session (does not change mid-session). */
   selectedMove: string;
+  /** Backend move key the timeline currently expects; sent with each frame. */
+  currentMoveKey?: string;
+  /** Human-readable current move name; sent with each frame. */
+  currentMoveName?: string;
+  /** Current timeline position in ms; sent with each frame. */
+  currentTimelineMs?: number;
   isStarted: boolean;
   onSessionEnd: (summary: ZumbaSessionSummary | null) => void;
   onAccuracyUpdate: (accuracy: number) => void;
   onFeedbackUpdate: (feedback: string[]) => void;
   onFrameProcessed?: (result: ZumbaAnalysisResult) => void;
+  onReadyChange?: (ready: boolean) => void;
   onError?: (error: string) => void;
   tolerance?: number;
   mirrorMode?: boolean;
@@ -25,11 +33,15 @@ interface ZumbaCameraProps {
 
 export default function ZumbaCamera({
   selectedMove,
+  currentMoveKey,
+  currentMoveName,
+  currentTimelineMs,
   isStarted,
   onSessionEnd,
   onAccuracyUpdate,
   onFeedbackUpdate,
   onFrameProcessed,
+  onReadyChange,
   onError,
   tolerance = 15.0,
   mirrorMode = true,
@@ -41,6 +53,14 @@ export default function ZumbaCamera({
   const frameIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  // Latest timeline context, read inside the frame-capture interval closure.
+  const targetMoveRef = useRef<string>(selectedMove);
+  const targetMoveNameRef = useRef<string | undefined>(currentMoveName);
+  const timelineMsRef = useRef<number | undefined>(currentTimelineMs);
+  targetMoveRef.current = currentMoveKey || selectedMove;
+  targetMoveNameRef.current = currentMoveName;
+  timelineMsRef.current = currentTimelineMs;
+
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -51,6 +71,14 @@ export default function ZumbaCamera({
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [processedFrame, setProcessedFrame] = useState<string | null>(null);
   const [feedbackMessages, setFeedbackMessages] = useState<string[]>([]);
+
+  useEffect(() => {
+    const ready = Boolean(isStarted && isCameraReady && isAnalyzing && isConnected && sessionId);
+    onReadyChange?.(ready);
+    return () => {
+      if (ready) onReadyChange?.(false);
+    };
+  }, [isStarted, isCameraReady, isAnalyzing, isConnected, sessionId, onReadyChange]);
 
   // Initialize camera
   useEffect(() => {
@@ -247,7 +275,11 @@ export default function ZumbaCamera({
         try {
           // Send frame for analysis via WebSocket
           if (wsRef.current?.isConnected()) {
-            wsRef.current.sendFrame(frameData);
+            wsRef.current.sendFrame(frameData, {
+              targetMove: targetMoveRef.current,
+              targetMoveName: targetMoveNameRef.current,
+              timelineMs: timelineMsRef.current,
+            });
             lastFrameTime = now;
           }
         } catch (err) {

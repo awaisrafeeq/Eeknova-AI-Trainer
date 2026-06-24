@@ -150,6 +150,13 @@ export const endZumbaSession = async (sessionId: string): Promise<ZumbaSessionSu
   return response.json();
 };
 
+// Per-frame timeline context sent alongside each pose frame.
+export interface ZumbaFrameMeta {
+  targetMove?: string;
+  targetMoveName?: string;
+  timelineMs?: number;
+}
+
 // WebSocket class for real-time Zumba analysis
 export class ZumbaWebSocket {
   private ws: WebSocket | null = null;
@@ -253,7 +260,7 @@ export class ZumbaWebSocket {
     }
   }
 
-  sendFrame(frameData: string): void {
+  sendFrame(frameData: string, meta?: ZumbaFrameMeta): void {
     if (!this.isConnected()) {
       throw new Error('WebSocket not connected or session not established');
     }
@@ -262,12 +269,17 @@ export class ZumbaWebSocket {
       throw new Error('Session not established');
     }
 
-    const message = {
+    // Every frame is self-describing: it carries the move the timeline expects
+    // right now, so the backend can switch comparison target without a new session.
+    const message: Record<string, unknown> = {
       type: 'pose_frame',
       session_id: this.sessionId,
       session_type: 'zumba',
-      data: frameData
+      data: frameData,
     };
+    if (meta?.targetMove) message.target_move = meta.targetMove;
+    if (meta?.targetMoveName) message.target_move_name = meta.targetMoveName;
+    if (typeof meta?.timelineMs === 'number') message.timeline_ms = meta.timelineMs;
 
     this.ws?.send(JSON.stringify(message));
   }

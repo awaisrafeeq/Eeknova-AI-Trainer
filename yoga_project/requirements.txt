@@ -18,3 +18,4 @@ passlib[bcrypt]==1.7.4
 python-multipart==0.0.9
 chess==1.10.0
 sqlalchemy==2.0.23
+openpyxl==3.1.5
