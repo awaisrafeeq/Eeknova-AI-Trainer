@@ -1,13 +1,15 @@
 'use client';
 
-// Persistent, double-buffered (per-move) Zumba avatar player.
+// Persistent, prewarmed Zumba avatar player.
 //
 // Each Zumba move ships its own dedicated GLB. To switch moves with no visible
 // delay we preload + GPU-warm one runtime instance per unique move BEFORE the
 // session starts, keep them all in a single persistent scene (hidden), and at
 // each timeline boundary simply toggle visibility + (re)start that move's mixer.
 // No GLB is fetched, parsed, or uploaded to the GPU during active playback, and
-// React never remounts the canvas on a move change.
+// React never remounts the canvas on a move change. Model swaps are atomic:
+// authored material depth/transparency settings are never changed because the
+// avatar's body and clothing are separate layered meshes.
 
 import {
   forwardRef,
@@ -54,13 +56,10 @@ type MoveInstance = {
   container: THREE.Group;
   mixer: THREE.AnimationMixer;
   actions: THREE.AnimationAction[];
-  materials: THREE.Material[];
   loop: boolean;
   /** Removes a pending 'finished' listener (e.g. intro -> main handoff). */
   clearFinished?: () => void;
 };
-
-const DEFAULT_CROSSFADE_MS = 140;
 
 function clearInstanceFinished(inst: MoveInstance) {
   if (inst.clearFinished) {
@@ -71,39 +70,6 @@ function clearInstanceFinished(inst: MoveInstance) {
 
 function instanceId(moveKey: string, phase: Phase): string {
   return `${moveKey}:${phase}`;
-}
-
-type MatOrig = { transparent: boolean; opacity: number; depthWrite: boolean };
-
-// Fade an instance WITHOUT permanently altering the GLB's authored material
-// flags. At full opacity we restore exactly what the asset shipped (so hair /
-// eyelashes / mouth render as designed); only mid-crossfade do we force blending.
-function setInstanceOpacity(inst: MoveInstance, opacity: number) {
-  const clamped = THREE.MathUtils.clamp(opacity, 0, 1);
-  for (const m of inst.materials) {
-    const mat = m as THREE.Material & {
-      opacity: number;
-      transparent: boolean;
-      depthWrite: boolean;
-      userData: { __orig?: MatOrig };
-    };
-    const orig: MatOrig = mat.userData.__orig ?? {
-      transparent: mat.transparent,
-      opacity: mat.opacity,
-      depthWrite: mat.depthWrite,
-    };
-    if (!mat.userData.__orig) mat.userData.__orig = orig;
-
-    if (clamped >= 1) {
-      mat.transparent = orig.transparent;
-      mat.opacity = orig.opacity;
-      mat.depthWrite = orig.depthWrite;
-    } else {
-      mat.transparent = true;
-      mat.opacity = orig.opacity * clamped;
-      mat.depthWrite = false;
-    }
-  }
 }
 
 function applyDefaultSkinTone(root: THREE.Object3D, color: THREE.Color, strength: number) {
@@ -166,12 +132,6 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
 
     const instancesRef = useRef<Map<string, MoveInstance>>(new Map());
     const activeRef = useRef<MoveInstance | null>(null);
-    const crossfadeRef = useRef<{
-      from: MoveInstance | null;
-      to: MoveInstance;
-      start: number;
-      duration: number;
-    } | null>(null);
     const cameraFittedRef = useRef(false);
     // Bumped every time the scene/renderer is (re)created. React Strict Mode in
     // dev mounts -> unmounts -> mounts, tearing down the first scene; async loads
@@ -286,26 +246,6 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         const active = activeRef.current;
         if (active) active.mixer.update(delta);
 
-        // Drive an in-progress opacity crossfade; keep the outgoing move's
-        // mixer ticking so it animates while fading out (no frozen pose).
-        const cf = crossfadeRef.current;
-        if (cf) {
-          if (cf.from && cf.from !== active) cf.from.mixer.update(delta);
-          const t = THREE.MathUtils.clamp((performance.now() - cf.start) / cf.duration, 0, 1);
-          setInstanceOpacity(cf.to, t);
-          if (cf.from) setInstanceOpacity(cf.from, 1 - t);
-          if (t >= 1) {
-            if (cf.from) {
-              clearInstanceFinished(cf.from);
-              cf.from.container.visible = false;
-              try { cf.from.mixer.stopAllAction(); } catch { /* noop */ }
-              setInstanceOpacity(cf.from, 1);
-            }
-            setInstanceOpacity(cf.to, 1);
-            crossfadeRef.current = null;
-          }
-        }
-
         renderer.render(scene, camera);
         rafRef.current = requestAnimationFrame(renderLoop);
       };
@@ -318,7 +258,6 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         resizeObserver.disconnect();
         if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
-        crossfadeRef.current = null;
         for (const inst of instances.values()) {
           clearInstanceFinished(inst);
           try { inst.mixer.stopAllAction(); } catch { /* noop */ }
@@ -397,25 +336,37 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         actions.push(action);
       }
 
-      const materials: THREE.Material[] = [];
-      clone.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          const ms = Array.isArray(child.material) ? child.material : child.material ? [child.material] : [];
-          for (const m of ms) if (m) materials.push(m);
-        }
-      });
-
-      const inst: MoveInstance = { container, mixer, actions, materials, loop };
+      const inst: MoveInstance = { container, mixer, actions, loop };
       instancesRef.current.set(id, inst);
 
-      // GPU warm-up: render two frames with this instance briefly visible so the
-      // first real switch doesn't stutter on texture/geometry upload.
+      // Evaluate the authored first frame before any render. Some exports drive
+      // clothing/morph state from animation tracks, so rendering the bind state
+      // can expose the body for one frame.
+      for (const action of actions) action.play();
       mixer.update(0);
+      for (const action of actions) {
+        action.stop();
+        action.reset();
+      }
+
+      // GPU warm-up happens in a private render target. Rendering warm-up frames
+      // into the visible canvas can expose an incomplete/bind-state avatar until
+      // the next RAF presents the real scene.
       const prevVisible = container.visible;
+      const previousTarget = renderer.getRenderTarget();
+      const warmupTarget = new THREE.WebGLRenderTarget(2, 2, {
+        depthBuffer: true,
+        stencilBuffer: false,
+      });
       container.visible = true;
-      renderer.render(scene, camera);
-      renderer.render(scene, camera);
-      container.visible = prevVisible;
+      try {
+        renderer.setRenderTarget(warmupTarget);
+        renderer.render(scene, camera);
+      } finally {
+        renderer.setRenderTarget(previousTarget);
+        container.visible = prevVisible;
+        warmupTarget.dispose();
+      }
 
       if (!cameraFittedRef.current && phase === 'main') {
         fitCameraTo(container);
@@ -423,27 +374,11 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       return inst;
     }
 
-    // Finalize any crossfade still in flight so a rapid second switch is clean.
-    function settleCrossfade() {
-      const cf = crossfadeRef.current;
-      if (!cf) return;
-      if (cf.from && cf.from !== activeRef.current) {
-        clearInstanceFinished(cf.from);
-        cf.from.container.visible = false;
-        try { cf.from.mixer.stopAllAction(); } catch { /* noop */ }
-        setInstanceOpacity(cf.from, 1);
-      }
-      setInstanceOpacity(cf.to, 1);
-      crossfadeRef.current = null;
-    }
-
     function showInstance(
       inst: MoveInstance,
-      opts?: { startAtSeconds?: number; crossfadeMs?: number; onFinished?: () => void },
+      opts?: { startAtSeconds?: number; onFinished?: () => void },
     ) {
-      settleCrossfade();
       const startAtSeconds = opts?.startAtSeconds ?? 0;
-      const crossfadeMs = opts?.crossfadeMs ?? 0;
       const previous = activeRef.current;
       if (previous === inst) {
         // Same instance already on screen (e.g. repeated block of one move):
@@ -460,6 +395,9 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         if (startAtSeconds > 0) action.time = startAtSeconds;
         action.play();
       }
+      // Apply the requested animation state while the model is still hidden.
+      // The following visible render therefore starts at a fully valid frame.
+      inst.mixer.update(0);
       if (opts?.onFinished && inst.actions.length > 0) {
         const onFinished = opts.onFinished;
         const handle = (e: { action?: THREE.AnimationAction }) => {
@@ -471,22 +409,17 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         inst.mixer.addEventListener('finished', handle as never);
         inst.clearFinished = () => inst.mixer.removeEventListener('finished', handle as never);
       }
+
+      // Atomic scene-graph swap. A full-model opacity crossfade is unsafe here:
+      // forcing depthWrite=false on separate body/outfit meshes can draw the body
+      // over the clothing and produce a brief "naked avatar" frame.
+      if (previous && previous !== inst) {
+        clearInstanceFinished(previous);
+        previous.container.visible = false;
+        try { previous.mixer.stopAllAction(); } catch { /* noop */ }
+      }
       inst.container.visible = true;
       activeRef.current = inst;
-
-      if (previous && previous !== inst) {
-        if (crossfadeMs > 0) {
-          setInstanceOpacity(inst, 0);
-          setInstanceOpacity(previous, 1);
-          crossfadeRef.current = { from: previous, to: inst, start: performance.now(), duration: crossfadeMs };
-        } else {
-          clearInstanceFinished(previous);
-          previous.container.visible = false;
-          try { previous.mixer.stopAllAction(); } catch { /* noop */ }
-        }
-      } else {
-        setInstanceOpacity(inst, 1);
-      }
     }
 
     // Load + GPU-warm everything the selected song/mode needs. Tagged with the
@@ -572,7 +505,6 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         }
         showInstance(inst, {
           startAtSeconds: options?.startAtSeconds ?? 0,
-          crossfadeMs: options?.crossfadeMs ?? DEFAULT_CROSSFADE_MS,
         });
       },
 
@@ -584,14 +516,13 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         if (!introInst) {
           const fallbackInst = instancesRef.current.get(instanceId(moveKey, 'main'));
           if (fallbackInst) {
-            showInstance(fallbackInst, { crossfadeMs: DEFAULT_CROSSFADE_MS });
+            showInstance(fallbackInst);
           }
           return;
         }
         showInstance(introInst, {
-          crossfadeMs: DEFAULT_CROSSFADE_MS,
           onFinished: () => {
-            if (mainInst) showInstance(mainInst, { crossfadeMs: DEFAULT_CROSSFADE_MS });
+            if (mainInst) showInstance(mainInst);
           },
         });
       },
@@ -599,7 +530,7 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       playOutro(moveKey: string, onFinished?: () => void) {
         const outInst = instancesRef.current.get(instanceId(moveKey, 'out'));
         if (!outInst) return false;
-        showInstance(outInst, { crossfadeMs: DEFAULT_CROSSFADE_MS, onFinished });
+        showInstance(outInst, { onFinished });
         return true;
       },
 
