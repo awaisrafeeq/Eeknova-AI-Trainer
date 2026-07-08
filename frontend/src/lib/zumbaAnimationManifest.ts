@@ -11,6 +11,7 @@ import type {
   ZumbaMoveAsset,
   ZumbaMoveKey,
   ZumbaTimelineBlock,
+  ZumbaTimelineMeta,
 } from './zumbaTimelineTypes';
 
 export type { ZumbaMoveKey, ZumbaMode } from './zumbaTimelineTypes';
@@ -49,6 +50,14 @@ export function getModesForSong(mapping: ZumbaMappingsJson, song: string): Zumba
 
 export function getSongAudio(mapping: ZumbaMappingsJson, song: string): string | undefined {
   return mapping.audio?.[song];
+}
+
+export function getTimelineMeta(
+  mapping: ZumbaMappingsJson,
+  song: string,
+  mode: ZumbaMode,
+): ZumbaTimelineMeta | null {
+  return mapping.timelineMeta?.[song]?.[mode] ?? null;
 }
 
 export function getTimeline(

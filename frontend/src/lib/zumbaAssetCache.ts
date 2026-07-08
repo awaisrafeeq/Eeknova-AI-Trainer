@@ -92,6 +92,38 @@ export class ZumbaAssetCache {
     return clone;
   }
 
+  /**
+   * Fully release a cached GLB's GPU + CPU resources (geometries, textures,
+   * source materials). Call ONLY after every runtime clone of this GLB has
+   * been removed from the scene — clones share geometries/textures with the
+   * cached source. This keeps VRAM bounded when the user switches songs/modes
+   * (unbounded growth here caused WebGL context loss on 4GB GPUs).
+   */
+  evict(url: string): void {
+    const pending = this.gltfCache.get(url);
+    if (!pending) return;
+    this.gltfCache.delete(url);
+    pending
+      .then((loaded) => {
+        loaded.scene.traverse((child) => {
+          if (!(child instanceof THREE.Mesh)) return;
+          try { child.geometry?.dispose(); } catch { /* noop */ }
+          const mats = Array.isArray(child.material) ? child.material : child.material ? [child.material] : [];
+          for (const m of mats) {
+            if (!m) continue;
+            for (const key of Object.keys(m)) {
+              const val = (m as unknown as Record<string, unknown>)[key] as THREE.Texture | undefined;
+              if (val && (val as THREE.Texture).isTexture) {
+                try { val.dispose(); } catch { /* noop */ }
+              }
+            }
+            try { m.dispose(); } catch { /* noop */ }
+          }
+        });
+      })
+      .catch(() => { /* failed loads have nothing to release */ });
+  }
+
   dispose(): void {
     this.gltfCache.clear();
     try { this.draco.dispose(); } catch { /* noop */ }

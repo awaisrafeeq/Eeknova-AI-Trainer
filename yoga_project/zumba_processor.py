@@ -19,6 +19,10 @@ except ImportError as e:
     print(f"Warning: Zumba module not available: {e}")
     ZUMBA_AVAILABLE = False
 
+import time
+
+import zumba_scoring
+
 class ZumbaSessionManager:
     """Manages Zumba analysis sessions"""
     
@@ -55,6 +59,7 @@ class ZumbaSessionManager:
                 'session_id': session_id,
                 'target_move': target_move,
                 'created_at': datetime.now().isoformat(),
+                'started_at_monotonic': time.monotonic(),
                 'settings': settings or {},
                 'status': 'active',
                 'frames_processed': 0,
@@ -70,10 +75,13 @@ class ZumbaSessionManager:
                 },
                 'last_angles': None
             }
-            
+
+            # Post-session analytics accumulators (per-move, body-part, beat sync).
+            zumba_scoring.init_session_scoring(session_data, settings)
+
             self.sessions[session_id] = session_data
             self.analyzers[session_id] = analyzer
-            
+
             return session_data
             
         except Exception as e:
@@ -243,11 +251,29 @@ class ZumbaSessionManager:
                 
                 if is_active_movement and not bad_parts:  # Good form
                     session['performance_metrics']['good_frames'] += 1
-                
+
                 accuracy = None
                 if session['performance_metrics']['comparable_frames'] > 0:
-                    accuracy = (session['performance_metrics']['good_frames'] / 
+                    accuracy = (session['performance_metrics']['good_frames'] /
                                session['performance_metrics']['comparable_frames']) * 100
+
+                # Post-session analytics: graded pose accuracy + body-part scores
+                # for this frame, plus motion sample for beat-sync detection.
+                frame_score = zumba_scoring.score_frame(
+                    angles,
+                    ref,
+                    analyzer.angle_tolerances.get(target_move, {}),
+                    target_move,
+                )
+                zumba_scoring.record_frame(
+                    session,
+                    target_move,
+                    target_move_name,
+                    frame_score,
+                    motion_score,
+                    is_active_movement,
+                    timeline_ms,
+                )
                 
                 # Add new feedback to session
                 session['feedback_messages'].extend(feedback_messages)
@@ -322,30 +348,51 @@ class ZumbaSessionManager:
         
         session = self.sessions[session_id]
         metrics = session['performance_metrics']
-        
+
         # Calculate final accuracy
         accuracy = 0
         comparable_frames = metrics.get('comparable_frames', metrics['total_frames'])
         if comparable_frames > 0:
             accuracy = (metrics['good_frames'] / comparable_frames) * 100
-        
+
+        started = session.get('started_at_monotonic')
+        duration_seconds = round(time.monotonic() - started, 1) if started else 0
+
+        # Full post-session score object (Overall, Beat Sync, body parts, ...).
+        try:
+            scores = zumba_scoring.build_scores(session, duration_seconds)
+        except Exception as exc:  # scoring must never block session end
+            print(f"Warning: Zumba scoring failed for {session_id}: {exc}")
+            scores = None
+
         return {
             'session_id': session_id,
             'target_move': session['target_move'],
-            'duration_seconds': 0,  # TODO: Calculate actual duration
+            'duration_seconds': duration_seconds,
             'frames_processed': metrics['total_frames'],
             'average_accuracy': accuracy,
             'feedback_count': metrics['feedback_count'],
             'created_at': session['created_at'],
-            'status': session['status']
+            'status': session['status'],
+            'song_title': (session.get('scoring') or {}).get('song_title') or '',
+            'mode': (session.get('scoring') or {}).get('mode') or '',
+            'username': (session.get('scoring') or {}).get('username') or '',
+            'scores': scores,
         }
     
     def end_session(self, session_id: str) -> Dict[str, Any]:
         """End a Zumba session and return summary"""
+        # Reuse the frozen summary if the session was already ended.
+        existing = self.sessions.get(session_id, {}).get('final_summary')
+        if existing:
+            return existing
+
         summary = self.get_session_summary(session_id)
-        
+        summary['status'] = 'completed'
+
         if session_id in self.sessions:
             self.sessions[session_id]['status'] = 'completed'
+            self.sessions[session_id]['final_summary'] = summary
         
         import threading
         def cleanup_analyzer():

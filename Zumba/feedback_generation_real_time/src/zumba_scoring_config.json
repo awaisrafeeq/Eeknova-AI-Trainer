@@ -1,0 +1,82 @@
+{
+  "_comment": "Tunable Zumba post-session scoring config (AITrainer_Zumba_Post_Session_Stats_Guide). Product can adjust weights here without a code change.",
+
+  "overall_weights": {
+    "pose_accuracy": 0.45,
+    "beat_sync": 0.25,
+    "completion": 0.15,
+    "energy": 0.10,
+    "consistency": 0.05
+  },
+
+  "pose_accuracy": {
+    "_comment": "Joint Accuracy = 1 - min(|user-ref| / allowed, 1). allowed = max(move tolerance * multiplier, min_allowed_error_deg).",
+    "allowed_error_multiplier": 2.0,
+    "min_allowed_error_deg": 20.0
+  },
+
+  "beat_sync": {
+    "_comment": "Key beats = 8-count block start times from the choreography timeline. A beat is matched when a movement peak lands within match_window_ms of it.",
+    "match_window_ms": 500,
+    "peak_search_window_ms": 900,
+    "min_peak_motion": 1.5,
+    "bands_ms": { "excellent": 150, "good": 300, "average": 500 }
+  },
+
+  "energy_targets": {
+    "_comment": "Expected mean movement energy (avg joint-angle delta per analysed frame, degrees) per intensity mode.",
+    "Beginner": 4.0,
+    "Easy": 5.0,
+    "Moderate": 7.0,
+    "High": 9.0,
+    "HIIT": 11.0
+  },
+
+  "met_values": {
+    "Beginner": 3.5,
+    "Easy": 4.5,
+    "Moderate": 6.0,
+    "High": 7.5,
+    "HIIT": 8.5
+  },
+  "default_weight_range_kg": [55, 85],
+
+  "min_frames_per_move": 5,
+
+  "body_part_joints": {
+    "_comment": "Only the 8 angles the live extractor actually measures. Core = hip flexion (torso-hip relationship). Balance is computed in code as left/right symmetry.",
+    "arms": ["left_arm_angle", "right_arm_angle", "left_shoulder_lift", "right_shoulder_lift"],
+    "legs": ["left_leg_angle", "right_leg_angle"],
+    "core": ["left_hip_flex", "right_hip_flex"],
+    "balance": []
+  },
+  "balance_symmetry_pairs": [
+    ["left_arm_angle", "right_arm_angle"],
+    ["left_leg_angle", "right_leg_angle"],
+    ["left_shoulder_lift", "right_shoulder_lift"],
+    ["left_hip_flex", "right_hip_flex"]
+  ],
+
+  "move_body_part_weights": {
+    "_comment": "Per-move body-part emphasis (sums to 1). Keys are backend move keys.",
+    "default": { "arms": 0.30, "legs": 0.35, "core": 0.20, "balance": 0.15 },
+    "step_touch": { "arms": 0.25, "legs": 0.50, "core": 0.15, "balance": 0.10 },
+    "body_rolls": { "arms": 0.15, "legs": 0.10, "core": 0.55, "balance": 0.20 },
+    "jumping_jacks": { "arms": 0.35, "legs": 0.40, "core": 0.10, "balance": 0.15 },
+    "lunge_with_punches": { "arms": 0.35, "legs": 0.40, "core": 0.15, "balance": 0.10 },
+    "squat_with_clap": { "arms": 0.25, "legs": 0.50, "core": 0.15, "balance": 0.10 },
+    "reggaeton_stomp": { "arms": 0.20, "legs": 0.50, "core": 0.20, "balance": 0.10 },
+    "knee_lifts": { "arms": 0.20, "legs": 0.55, "core": 0.15, "balance": 0.10 },
+    "cumbia_step": { "arms": 0.20, "legs": 0.50, "core": 0.20, "balance": 0.10 },
+    "grape_vine": { "arms": 0.20, "legs": 0.55, "core": 0.15, "balance": 0.10 },
+    "mambo_step": { "arms": 0.20, "legs": 0.50, "core": 0.20, "balance": 0.10 },
+    "march_in_place": { "arms": 0.25, "legs": 0.50, "core": 0.15, "balance": 0.10 },
+    "merengue_march": { "arms": 0.25, "legs": 0.45, "core": 0.20, "balance": 0.10 },
+    "heel_taps": { "arms": 0.20, "legs": 0.55, "core": 0.15, "balance": 0.10 },
+    "step_clap": { "arms": 0.35, "legs": 0.40, "core": 0.15, "balance": 0.10 },
+    "side_punches": { "arms": 0.55, "legs": 0.20, "core": 0.15, "balance": 0.10 },
+    "shimmy": { "arms": 0.35, "legs": 0.15, "core": 0.35, "balance": 0.15 },
+    "twist_step": { "arms": 0.15, "legs": 0.35, "core": 0.35, "balance": 0.15 },
+    "zumba_turn_(pivot)": { "arms": 0.15, "legs": 0.40, "core": 0.25, "balance": 0.20 }
+  }
+}

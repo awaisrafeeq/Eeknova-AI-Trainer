@@ -96,6 +96,31 @@ class YogaInstruction(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class ZumbaSessionRecord(Base):
+    """Persisted Zumba session summaries (post-session analytics history).
+
+    Aggregates only — no raw keypoints are stored (privacy-first). The full
+    score object (per-move table, body parts, beat sync detail) is kept as
+    JSON so the schema does not need to change when scoring evolves.
+    """
+    __tablename__ = "zumba_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(String(64), unique=True, index=True, nullable=False)
+    username = Column(String(50), index=True, nullable=True)
+    session_date = Column(DateTime, default=datetime.utcnow)
+    song_title = Column(String(120), default="")
+    mode = Column(String(30), default="")
+    duration_seconds = Column(Float, default=0.0)
+    frames_processed = Column(Integer, default=0)
+    overall_score = Column(Integer, nullable=True)
+    pose_accuracy = Column(Integer, nullable=True)
+    beat_sync = Column(Integer, nullable=True)
+    calories = Column(Integer, nullable=True)
+    scores_json = Column(Text, default="{}")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class ChessProgress(Base):
     """Chess progress tracking model"""
     __tablename__ = "chess_progress"
@@ -681,6 +706,96 @@ def create_yoga_session(username: str, session_data: Dict[str, Any]) -> Optional
         db.rollback()
         logger.error(f"Error creating yoga session: {e}")
         return None
+    finally:
+        db.close()
+
+
+# ===================== Zumba Session Operations =====================
+
+def save_zumba_session(summary: Dict[str, Any]) -> Optional[int]:
+    """Persist a Zumba post-session summary (aggregates only)."""
+    db = SessionLocal()
+    try:
+        session_id = summary.get("session_id")
+        if not session_id:
+            return None
+        # Idempotent: ending the same session twice must not duplicate rows.
+        existing = (
+            db.query(ZumbaSessionRecord)
+            .filter(ZumbaSessionRecord.session_id == session_id)
+            .first()
+        )
+        if existing:
+            return existing.id
+
+        scores = summary.get("scores") or {}
+        calories = None
+        cal = scores.get("calories") or {}
+        if isinstance(cal, dict):
+            if cal.get("value") is not None:
+                calories = int(cal["value"])
+            elif cal.get("range"):
+                calories = int(round(sum(cal["range"]) / len(cal["range"])))
+
+        record = ZumbaSessionRecord(
+            session_id=session_id,
+            username=summary.get("username") or None,
+            song_title=summary.get("song_title") or "",
+            mode=summary.get("mode") or "",
+            duration_seconds=float(summary.get("duration_seconds") or 0),
+            frames_processed=int(summary.get("frames_processed") or 0),
+            overall_score=scores.get("overall"),
+            pose_accuracy=scores.get("pose_accuracy"),
+            beat_sync=scores.get("beat_sync"),
+            calories=calories,
+            scores_json=json.dumps(scores),
+        )
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+        return record.id
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error saving zumba session: {e}")
+        return None
+    finally:
+        db.close()
+
+
+def list_zumba_sessions(username: str, limit: int = 20) -> List[Dict[str, Any]]:
+    """Recent Zumba session summaries for a user (history/progress)."""
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(ZumbaSessionRecord)
+            .filter(ZumbaSessionRecord.username == username)
+            .order_by(ZumbaSessionRecord.session_date.desc())
+            .limit(limit)
+            .all()
+        )
+        out = []
+        for r in rows:
+            try:
+                scores = json.loads(r.scores_json) if r.scores_json else {}
+            except Exception:
+                scores = {}
+            out.append({
+                "session_id": r.session_id,
+                "session_date": r.session_date.isoformat() if r.session_date else None,
+                "song_title": r.song_title,
+                "mode": r.mode,
+                "duration_seconds": r.duration_seconds,
+                "frames_processed": r.frames_processed,
+                "overall_score": r.overall_score,
+                "pose_accuracy": r.pose_accuracy,
+                "beat_sync": r.beat_sync,
+                "calories": r.calories,
+                "scores": scores,
+            })
+        return out
+    except Exception as e:
+        logger.error(f"Error listing zumba sessions: {e}")
+        return []
     finally:
         db.close()
 

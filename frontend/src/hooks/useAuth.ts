@@ -9,6 +9,10 @@ interface User {
   email: string;
   name?: string;
   full_name?: string;
+  age?: number | null;
+  height?: number | null;
+  /** kg — used for the post-session calories estimate. */
+  weight?: number | null;
 }
 
 interface AuthState {

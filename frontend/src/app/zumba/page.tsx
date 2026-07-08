@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import ZumbaAvatarPlayer, { ZumbaAvatarPlayerHandle } from '@/components/ZumbaAvatarPlayer';
 import ZumbaCamera from '@/components/ZumbaCamera';
+import ZumbaSummary from '@/components/ZumbaSummary';
 import { ZumbaAnalysisResult, ZumbaSessionSummary } from '@/lib/zumbaApi';
 import {
   getBackendMoveKey,
@@ -12,6 +13,7 @@ import {
   getSongAudio,
   getSongTitles,
   getTimeline,
+  getTimelineMeta,
   getUniqueMoveKeys,
   loadZumbaMappings,
 } from '@/lib/zumbaAnimationManifest';
@@ -20,8 +22,11 @@ import type {
   ZumbaMode,
   ZumbaPreloadStatus,
 } from '@/lib/zumbaTimelineTypes';
-import { useZumbaTimelinePlayer } from '@/hooks/useZumbaTimelinePlayer';
+import { useZumbaTimelinePlayer, type ZumbaSwitchLogEntry } from '@/hooks/useZumbaTimelinePlayer';
 import { useAuth } from '@/hooks/useAuth';
+
+// A switch within this window of the sheet's time counts as on-beat.
+const BEAT_PASS_MS = 120;
 
 /**
  * Zumba module UI aligned with the Yoga page. The avatar canvas stays mounted
@@ -72,6 +77,10 @@ export default function ZumbaPage() {
     () => (mapping && selectedSong && selectedMode ? getTimeline(mapping, selectedSong, selectedMode) : []),
     [mapping, selectedSong, selectedMode],
   );
+  const timelineMeta = useMemo(
+    () => (mapping && selectedSong && selectedMode ? getTimelineMeta(mapping, selectedSong, selectedMode) : null),
+    [mapping, selectedSong, selectedMode],
+  );
   const uniqueMoveKeys = useMemo(() => getUniqueMoveKeys(timeline), [timeline]);
 
   const closeSessionView = useCallback(() => {
@@ -113,12 +122,14 @@ export default function ZumbaPage() {
     playOutroThenClose(timeline[timeline.length - 1]?.moveKey);
   }, [playOutroThenClose, timeline]);
 
-  const { isRunning, currentBlock, nextBlock, timelineMs, start, stop } = useZumbaTimelinePlayer({
+  const { isRunning, currentBlock, nextBlock, timelineMs, switchLog, start, stop } = useZumbaTimelinePlayer({
     timeline,
+    meta: timelineMeta,
     playerRef,
     audioRef,
     onComplete: handleComplete,
   });
+  const [showBeatTest, setShowBeatTest] = useState(false);
 
   // Stable backend move key used to create the camera session.
   const sessionTargetMove = useMemo(
@@ -129,6 +140,20 @@ export default function ZumbaPage() {
     () => (mapping && currentBlock ? getBackendMoveKey(mapping, currentBlock.moveKey) : sessionTargetMove),
     [mapping, currentBlock, sessionTargetMove],
   );
+
+  // Session analytics context: the key-beat grid (8-count block starts) drives
+  // the backend Beat Sync score; song/mode/user feed calories and history.
+  const sessionInfo = useMemo(() => {
+    if (!mapping || timeline.length === 0) return undefined;
+    return {
+      mode: selectedMode || undefined,
+      songTitle: selectedSong || undefined,
+      username: user?.username || user?.email || undefined,
+      weightKg: user?.weight ?? null,
+      keyBeatsMs: timeline.map((b) => b.startMs),
+      keyBeatMoves: timeline.map((b) => getBackendMoveKey(mapping, b.moveKey)),
+    };
+  }, [mapping, timeline, selectedMode, selectedSong, user]);
 
   // Load the mapping JSON once after auth resolves.
   useEffect(() => {
@@ -144,7 +169,9 @@ export default function ZumbaPage() {
         if (cancelled) return;
         setMapping(data);
         const songs = getSongTitles(data);
-        setSelectedSong((cur) => cur || songs[0] || '');
+        // Restore the last chosen song across refreshes.
+        const savedSong = window.localStorage.getItem('zumba.selectedSong');
+        setSelectedSong((cur) => cur || (savedSong && songs.includes(savedSong) ? savedSong : songs[0] || ''));
       })
       .catch((err) => {
         console.error('Failed to load Zumba mappings:', err);
@@ -158,15 +185,30 @@ export default function ZumbaPage() {
     };
   }, [authLoading, isAuthenticated]);
 
-  // Default mode to the first available when the song changes.
+  // Default mode when the song changes: keep current, else the saved one, else first.
   useEffect(() => {
     if (availableModes.length > 0) {
+      const savedMode = window.localStorage.getItem('zumba.selectedMode') as ZumbaMode | null;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- selected mode is derived from the loaded workbook.
-      setSelectedMode((cur) => (cur && availableModes.includes(cur) ? cur : availableModes[0]));
+      setSelectedMode((cur) =>
+        cur && availableModes.includes(cur)
+          ? cur
+          : savedMode && availableModes.includes(savedMode)
+            ? savedMode
+            : availableModes[0],
+      );
     } else {
       setSelectedMode('');
     }
   }, [availableModes]);
+
+  // Remember the selection across refreshes.
+  useEffect(() => {
+    if (selectedSong) window.localStorage.setItem('zumba.selectedSong', selectedSong);
+  }, [selectedSong]);
+  useEffect(() => {
+    if (selectedMode) window.localStorage.setItem('zumba.selectedMode', selectedMode);
+  }, [selectedMode]);
 
   // Preload all GLBs for the selected song/mode whenever the timeline changes.
   useEffect(() => {
@@ -179,8 +221,8 @@ export default function ZumbaPage() {
     const player = playerRef.current;
     if (!player) return;
     setPreloadStatus({ state: 'loading', total: 0, loaded: 0, failed: [] });
-    void player.preloadTimeline(timeline);
-  }, [timeline, isStarted]);
+    void player.preloadTimeline(timeline, { corrected: Boolean(timelineMeta?.corrected) });
+  }, [timeline, timelineMeta, isStarted]);
 
   useEffect(() => {
     if (!isStarted || !analysisReady || isRunning || startingTimelineRef.current) return;
@@ -268,6 +310,9 @@ export default function ZumbaPage() {
         audio.muted = false;
       }
     }
+    // Hold on the ready pose while the camera/backend connect; the timeline
+    // then starts Main exactly on the song's count 1 (no silent dancing).
+    if (timeline[0]) playerRef.current?.playLeadIn(timeline[0].moveKey);
     setIsSessionViewActive(true);
     setIsStarted(true);
   };
@@ -316,7 +361,9 @@ export default function ZumbaPage() {
 
   return (
     <main
-      className="min-h-screen w-full overflow-hidden text-[var(--ink-hi)]"
+      className={`min-h-screen w-full overflow-x-hidden text-[var(--ink-hi)] ${
+        isSessionViewActive ? 'overflow-y-hidden' : ''
+      }`}
       style={{
         background: isSessionViewActive ? 'transparent' : 'var(--bg-gradient)',
         fontFamily: 'var(--font-ui)',
@@ -324,6 +371,22 @@ export default function ZumbaPage() {
       }}
     >
       {!isSessionViewActive && <Particles />}
+
+      {/* Beat verification: on-screen proof that switches land on the sheet's
+          times — no console needed. Toggle stays available in every state. */}
+      <button
+        onClick={() => setShowBeatTest((v) => !v)}
+        className="fixed bottom-4 left-4 z-50 rounded-full border border-[var(--glass-stroke)] bg-black/60 px-4 py-1.5 text-[13px] font-semibold text-[var(--brand-neo)] backdrop-blur-md transition-all hover:shadow-[var(--glow-neo)]"
+      >
+        {showBeatTest ? 'Hide Beat Test' : 'Beat Test'}
+      </button>
+      {showBeatTest && (
+        <BeatTestPanel
+          entries={switchLog}
+          isRunning={isRunning}
+          corrected={Boolean(timelineMeta?.corrected)}
+        />
+      )}
 
       <div className={`mx-auto relative ${
         isSessionViewActive ? 'w-full max-w-none p-0' : 'max-w-[1400px] px-6 md:px-8 pb-6 md:pb-8'
@@ -493,6 +556,7 @@ export default function ZumbaPage() {
                 currentMoveKey={currentBackendMoveKey}
                 currentMoveName={currentBlock?.moveName}
                 currentTimelineMs={timelineMs}
+                sessionInfo={sessionInfo}
                 isStarted={isStarted}
                 onReadyChange={setAnalysisReady}
                 onSessionEnd={handleSessionEnd}
@@ -589,35 +653,86 @@ export default function ZumbaPage() {
             )}
 
             {sessionSummary && !isSessionViewActive && (
-              <div id="zumba-session-summary">
-                <GlassCard title="Session Summary" className="mt-7">
-                  <ul className="space-y-1 text-[14px] text-[var(--ink-med)]">
-                    <li>
-                      Song
-                      <span className="float-right font-semibold text-white">{selectedSong}</span>
-                    </li>
-                    <li>
-                      Frames Processed
-                      <span className="float-right font-semibold">{sessionSummary.frames_processed}</span>
-                    </li>
-                    <li>
-                      Avg Accuracy
-                      <span className="float-right font-semibold text-[var(--brand-neo)]">
-                        {sessionSummary.average_accuracy.toFixed(1)}%
-                      </span>
-                    </li>
-                    <li>
-                      Feedback Count
-                      <span className="float-right font-semibold">{sessionSummary.feedback_count}</span>
-                    </li>
-                  </ul>
-                </GlassCard>
+              <div id="zumba-session-summary" className="mt-7">
+                <ZumbaSummary
+                  summary={sessionSummary}
+                  songTitle={selectedSong}
+                  mode={selectedMode || undefined}
+                  userName={user?.full_name || user?.username || user?.name || undefined}
+                />
               </div>
             )}
           </div>
         </section>
       </div>
     </main>
+  );
+}
+
+function formatMs(ms: number): string {
+  const total = Math.max(0, ms) / 1000;
+  const minutes = Math.floor(total / 60);
+  const seconds = total - minutes * 60;
+  return `${minutes}:${seconds.toFixed(3).padStart(6, '0')}`;
+}
+
+function BeatTestPanel({
+  entries,
+  isRunning,
+  corrected,
+}: {
+  entries: ZumbaSwitchLogEntry[];
+  isRunning: boolean;
+  corrected: boolean;
+}) {
+  const passed = entries.filter((e) => Math.abs(e.latencyMs) <= BEAT_PASS_MS).length;
+
+  return (
+    <div className="fixed bottom-16 left-4 z-50 w-[min(520px,92vw)] rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-black/75 p-3 text-[12px] backdrop-blur-md">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="font-semibold text-[var(--brand-neo)]">
+          Beat Test {corrected ? '(beat-corrected sheet)' : '(legacy timing)'}
+        </span>
+        <span className={`font-bold ${passed === entries.length ? 'text-green-400' : 'text-yellow-300'}`}>
+          {entries.length > 0 ? `${passed} / ${entries.length} on beat (±${BEAT_PASS_MS}ms)` : isRunning ? 'waiting for first switch…' : 'start a session'}
+        </span>
+      </div>
+      {entries.length > 0 && (
+        <div className="max-h-[240px] overflow-y-auto">
+          <table className="w-full text-left">
+            <thead className="sticky top-0 bg-black/80 text-[var(--ink-med)]">
+              <tr>
+                <th className="py-1 pr-2 font-medium">Grp</th>
+                <th className="py-1 pr-2 font-medium">Move</th>
+                <th className="py-1 pr-2 font-medium">Expected</th>
+                <th className="py-1 pr-2 font-medium">Actual</th>
+                <th className="py-1 pr-2 font-medium">Latency</th>
+                <th className="py-1 pr-2 font-medium">Speed</th>
+                <th className="py-1 font-medium">OK</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e) => {
+                const pass = Math.abs(e.latencyMs) <= BEAT_PASS_MS;
+                return (
+                  <tr key={`${e.group}-${e.expectedMs}`} className="border-t border-white/10">
+                    <td className="py-1 pr-2">{e.group}</td>
+                    <td className="py-1 pr-2 font-semibold text-white">{e.move}</td>
+                    <td className="py-1 pr-2">{formatMs(e.expectedMs)}</td>
+                    <td className="py-1 pr-2">{formatMs(e.actualMs)}</td>
+                    <td className={`py-1 pr-2 font-semibold ${pass ? 'text-green-400' : 'text-red-300'}`}>
+                      {e.latencyMs >= 0 ? '+' : ''}{e.latencyMs}ms
+                    </td>
+                    <td className="py-1 pr-2">{e.speedScale != null ? `${e.speedScale.toFixed(3)}×${e.plannedLoops != null ? ` (${e.plannedLoops} loops)` : ''}` : '--'}</td>
+                    <td className={`py-1 font-bold ${pass ? 'text-green-400' : 'text-red-300'}`}>{pass ? 'PASS' : 'FAIL'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 

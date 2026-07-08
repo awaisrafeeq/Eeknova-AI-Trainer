@@ -906,12 +906,18 @@ class ZumbaAnalysisResult(BaseModel):
 class ZumbaSessionSummary(BaseModel):
     session_id: str
     target_move: str
-    duration_seconds: int
+    duration_seconds: float
     frames_processed: int
     average_accuracy: float
     feedback_count: int
     created_at: str
     status: str
+    # Timeline session context + full post-session score object
+    # (AITrainer Zumba Post-Session Stats Guide). None for legacy sessions.
+    song_title: Optional[str] = None
+    mode: Optional[str] = None
+    username: Optional[str] = None
+    scores: Optional[Dict[str, Any]] = None
 
 @app.get("/api/zumba/moves", response_model=List[str])
 async def get_zumba_moves():
@@ -973,10 +979,29 @@ async def end_zumba_session(session_id: str):
     try:
         summary = zumba_session_manager.end_session(session_id)
         logger.info(f"Ended Zumba session: {session_id}")
+
+        # Persist the post-session analytics (aggregates only) for history.
+        try:
+            from database import save_zumba_session
+            save_zumba_session(summary)
+        except Exception as persist_error:
+            logger.error(f"Failed to persist Zumba session {session_id}: {persist_error}")
+
         return ZumbaSessionSummary(**summary)
-        
+
     except Exception as e:
         logger.error(f"Error ending Zumba session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/zumba/sessions/{username}")
+async def get_zumba_session_history(username: str, limit: int = 20):
+    """Recent Zumba session summaries for a user (progress over time)."""
+    try:
+        from database import list_zumba_sessions
+        return list_zumba_sessions(username, limit=limit)
+    except Exception as e:
+        logger.error(f"Error listing Zumba sessions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1042,21 +1067,38 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
                 
                 if session_type == 'zumba':
-                    # Handle Zumba frame processing
+                    # Handle Zumba frame processing. Run the synchronous YOLO
+                    # inference in a worker thread: doing it inline blocks the
+                    # asyncio event loop, the server misses websocket ping/pongs
+                    # and closes the connection with 1011 "keepalive ping timeout".
                     try:
-                        result = zumba_session_manager.process_frame(
-                            session_id=session_id,
-                            frame_data=frame_data,
-                            target_move=target_move,
-                            target_move_name=target_move_name,
-                            timeline_ms=timeline_ms
+                        result = await asyncio.wait_for(
+                            asyncio.to_thread(
+                                zumba_session_manager.process_frame,
+                                session_id=session_id,
+                                frame_data=frame_data,
+                                target_move=target_move,
+                                target_move_name=target_move_name,
+                                timeline_ms=timeline_ms,
+                            ),
+                            timeout=10.0,
                         )
                         result['type'] = 'zumba_analysis'
                         result['timestamp'] = datetime.now().isoformat()
-                        
+
                         # Send result back to client
                         await websocket.send_json(result)
-                        
+
+                    except asyncio.TimeoutError:
+                        logger.error(f"Zumba frame processing timeout for session {session_id}")
+                        try:
+                            await websocket.send_json({
+                                'type': 'error',
+                                'message': 'Zumba frame processing timeout'
+                            })
+                        except Exception as send_error:
+                            logger.error(f"Failed to send Zumba timeout message: {send_error}")
+                            break
                     except Exception as e:
                         logger.error(f"Zumba frame processing error for session {session_id}: {e}")
                         try:

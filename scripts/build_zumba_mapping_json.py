@@ -27,7 +27,7 @@ WORKBOOK_PATH = PUBLIC_DIR / "Zumba_Mappings_AllSongs_Adaptive_5Modes_18Steps.xl
 OUTPUT_PATH = PUBLIC_DIR / "zumba-mappings-18steps.json"
 ASSET_ROOT = PUBLIC_DIR / "zumba pose"
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 MODES = ["Beginner", "Easy", "Moderate", "High", "HIIT"]
 
 # Master move table. Keyed by the exact "Move Name" used in the workbook.
@@ -145,6 +145,32 @@ MOVE_TABLE = {
         "out": "Idle out Zumba turn (pivot)_compressed.glb",
     },
 }
+
+# Client-corrected choreography sheets (beat-aligned pilot format).
+# Key: (song, mode) -> corrected workbook + sheet. As the client delivers more
+# corrected sheets, add entries here — no other converter change needed.
+CORRECTED_SHEETS = {
+    ("All Night", "High"): {
+        "file": REPO_ROOT / "docs" / "Zumba_AllNight_High_Pilot_Corrected.xlsx",
+        "sheet": "Pilot Corrected",
+    },
+}
+
+# Extra columns present only in the corrected-sheet format.
+CORRECTED_EXTRA_COLUMNS = [
+    "Beat Phase Offset (s)",
+    "GLB Main Duration (s)",
+    "Planned Loops in Group",
+    "Animation Speed Scale",
+]
+
+# Safety band for playback speed adjustment; outside this the animation looks
+# visibly wrong, so the converter refuses the sheet.
+SPEED_SCALE_HARD_MIN = 0.80
+SPEED_SCALE_HARD_MAX = 1.25
+# Beyond this we only warn (sheet value kept, but flagged for the client).
+SPEED_SCALE_WARN_DELTA = 0.02
+GLB_DURATION_WARN_DELTA_S = 0.05
 
 # Song audio (the Zumba session clock + the music the user dances to).
 SONG_AUDIO = {
@@ -330,6 +356,195 @@ def build_timeline_sheet(wb, sheet: str, id_to_name: dict) -> list:
     return blocks
 
 
+def read_glb_animation_duration(path: Path) -> float:
+    """Read the longest animation duration (seconds) straight from a GLB file.
+
+    GLB layout: 12-byte header, then chunks. Chunk 0 is the JSON scene
+    description; each animation sampler's *input* accessor holds keyframe
+    times, and its `max[0]` is the clip end time. This lets the converter
+    validate the client's hand-filled 'GLB Main Duration (s)' column against
+    the real asset without any GLTF library.
+    """
+    import struct
+
+    with open(path, "rb") as fh:
+        header = fh.read(12)
+        if len(header) < 12 or header[:4] != b"glTF":
+            raise fail(f"Not a GLB file: {path}")
+        chunk_len, chunk_type = struct.unpack("<II", fh.read(8))
+        if chunk_type != 0x4E4F534A:  # 'JSON'
+            raise fail(f"GLB missing JSON chunk: {path}")
+        doc = json.loads(fh.read(chunk_len).decode("utf-8"))
+
+    accessors = doc.get("accessors", [])
+    duration = 0.0
+    for anim in doc.get("animations", []):
+        for sampler in anim.get("samplers", []):
+            idx = sampler.get("input")
+            if idx is None or idx >= len(accessors):
+                continue
+            acc_max = accessors[idx].get("max")
+            if acc_max:
+                duration = max(duration, float(acc_max[0]))
+    return duration
+
+
+def build_corrected_timeline(song: str, mode: str, spec: dict, id_to_name: dict):
+    """Parse a client-corrected sheet into (blocks, meta, warnings).
+
+    Corrected sheets add: per-row beat phase offset, GLB main duration,
+    planned loops, animation speed scale, plus two special non-move rows —
+    a lead-in hold at the start and an end hold for the audio tail.
+    """
+    path = spec["file"]
+    if not path.is_file():
+        raise fail(f"Corrected sheet for {song} - {mode} not found: {path}")
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    sheet = spec["sheet"]
+    if sheet not in wb.sheetnames:
+        raise fail(f"Corrected workbook {path.name} has no sheet '{sheet}'")
+    ws = wb[sheet]
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        raise fail(f"{path.name}/{sheet}: empty sheet")
+
+    header = [str(c).strip() if c is not None else "" for c in rows[0]]
+    required = [c for c in EXPECTED_COLUMNS if c != "Block Size (counts)"] + CORRECTED_EXTRA_COLUMNS
+    for col_name in required + ["Block Size (counts)"]:
+        if col_name not in header:
+            raise fail(f"{path.name}/{sheet}: missing required column '{col_name}'")
+    col = {name: header.index(name) for name in header if name}
+
+    blocks = []
+    warnings: list = []
+    meta = {
+        "corrected": True,
+        "beatPhaseOffsetMs": 0,
+        "leadInEndMs": None,
+        "outroStartMs": None,
+        "outroEndMs": None,
+    }
+    prev_end = None
+
+    for idx, raw in enumerate(rows[1:], start=2):
+        if not raw or raw[col["Song Title"]] is None:
+            continue
+
+        start_ms = parse_time_ms(raw[col["Start Time (mm:ss.ms)"]], sheet, idx, "Start Time")
+        end_ms = parse_time_ms(raw[col["End Time (mm:ss.ms)"]], sheet, idx, "End Time")
+        if end_ms <= start_ms:
+            raise fail(f"{sheet} row {idx}: End ({end_ms}) <= Start ({start_ms})")
+        if prev_end is not None and start_ms < prev_end:
+            raise fail(f"{sheet} row {idx}: time overlap start={start_ms} < prev_end={prev_end}")
+        prev_end = end_ms
+
+        offset_raw = raw[col["Beat Phase Offset (s)"]]
+        if offset_raw is not None:
+            meta["beatPhaseOffsetMs"] = int(round(float(offset_raw) * 1000))
+
+        move_id = int(raw[col["Move ID"]] or 0)
+        group_index = int(raw[col["Move Group Index"]] if raw[col["Move Group Index"]] is not None else 0)
+        row_name = str(raw[col["Move Name"]] or "").strip()
+
+        # Special hold rows: lead-in before the first beat, end hold on the tail.
+        if move_id == 0 or move_id not in id_to_name:
+            lowered = row_name.lower()
+            if group_index == -1 or "lead-in" in lowered or "lead in" in lowered:
+                meta["leadInEndMs"] = end_ms
+                continue
+            if "idle out" in lowered or "end hold" in lowered or "outro" in lowered:
+                meta["outroStartMs"] = start_ms
+                meta["outroEndMs"] = end_ms
+                continue
+            raise fail(f"{sheet} row {idx}: unknown special row '{row_name}' (Move ID {move_id})")
+
+        move_name = id_to_name[move_id]
+        if row_name and row_name != move_name:
+            raise fail(f"{sheet} row {idx}: Move ID {move_id} maps to '{move_name}' but row says '{row_name}'")
+        info = MOVE_TABLE[move_name]
+
+        side_raw = raw[col["Side (L/R)"]]
+        side = None
+        if side_raw is not None:
+            s = str(side_raw).strip().upper()
+            if s in ("L", "R"):
+                side = s
+            elif s:
+                raise fail(f"{sheet} row {idx}: invalid Side '{side_raw}'")
+
+        glb_duration = float(raw[col["GLB Main Duration (s)"]] or 0)
+        planned_loops = int(raw[col["Planned Loops in Group"]] or 0)
+        speed_scale = float(raw[col["Animation Speed Scale"]] or 1.0)
+        if not (SPEED_SCALE_HARD_MIN <= speed_scale <= SPEED_SCALE_HARD_MAX):
+            raise fail(
+                f"{sheet} row {idx}: Animation Speed Scale {speed_scale} outside safe band "
+                f"[{SPEED_SCALE_HARD_MIN}, {SPEED_SCALE_HARD_MAX}]"
+            )
+
+        blocks.append({
+            "songTitle": str(raw[col["Song Title"]]).strip(),
+            "artist": str(raw[col["Artist"]]).strip() if raw[col["Artist"]] else "",
+            "mode": parse_mode(raw[col["Mode"]], sheet),
+            "bpm": float(raw[col["BPM (est)"]]) if raw[col["BPM (est)"]] is not None else 0.0,
+            "blockSizeCounts": int(raw[col["Block Size (counts)"]] or 8),
+            "startMs": start_ms,
+            "endMs": end_ms,
+            "durationMs": end_ms - start_ms,
+            "moveGroupIndex": group_index,
+            "moveGroupLengthBlocks": int(raw[col["Move Group Length (blocks)"]] or 0),
+            "moveId": move_id,
+            "moveKey": info["key"],
+            "moveName": move_name,
+            "side": side,
+            "coachCue": clean_cue(raw[col["Coach Cue"]]),
+            "glbMainDurationSec": glb_duration,
+            "plannedLoops": planned_loops,
+            "animationSpeedScale": speed_scale,
+        })
+
+    if not blocks:
+        raise fail(f"{path.name}/{sheet}: no move rows")
+
+    # --- Cross-check the client's numbers against the math and the real GLBs ---
+    groups: dict = {}
+    for b in blocks:
+        groups.setdefault(b["moveGroupIndex"], []).append(b)
+    for gid, gblocks in sorted(groups.items()):
+        first = gblocks[0]
+        group_sec = (gblocks[-1]["endMs"] - gblocks[0]["startMs"]) / 1000.0
+        sheet_glb = first["glbMainDurationSec"]
+        sheet_loops = first["plannedLoops"]
+        sheet_scale = first["animationSpeedScale"]
+
+        # 1) Sheet's GLB duration vs the actual asset file.
+        glb_path = ASSET_ROOT / MOVE_TABLE[first["moveName"]]["folder"] / MOVE_TABLE[first["moveName"]]["main"]
+        measured = read_glb_animation_duration(glb_path)
+        if measured > 0 and abs(measured - sheet_glb) > GLB_DURATION_WARN_DELTA_S:
+            warnings.append(
+                f"group {gid} ({first['moveName']}): sheet GLB duration {sheet_glb:.3f}s "
+                f"!= measured {measured:.3f}s ({glb_path.name})"
+            )
+
+        # 2) Loop math: loops*glb/scale should fill the group window.
+        if sheet_glb > 0 and group_sec > 0:
+            expected_loops = max(1, round(group_sec / sheet_glb))
+            expected_scale = (expected_loops * sheet_glb) / group_sec
+            if sheet_loops and sheet_loops != expected_loops:
+                warnings.append(
+                    f"group {gid} ({first['moveName']}): sheet loops {sheet_loops} "
+                    f"!= recomputed {expected_loops} (group {group_sec:.3f}s / glb {sheet_glb:.3f}s)"
+                )
+            if abs(sheet_scale - expected_scale) > SPEED_SCALE_WARN_DELTA:
+                warnings.append(
+                    f"group {gid} ({first['moveName']}): sheet speed scale {sheet_scale:.3f} "
+                    f"!= recomputed {expected_scale:.3f}"
+                )
+
+    if meta["leadInEndMs"] is None and meta["beatPhaseOffsetMs"]:
+        meta["leadInEndMs"] = meta["beatPhaseOffsetMs"]
+    return blocks, meta, warnings
+
+
 def main() -> int:
     if not WORKBOOK_PATH.is_file():
         print(f"ERROR: workbook not found at {WORKBOOK_PATH}", file=sys.stderr)
@@ -359,6 +574,32 @@ def main() -> int:
             songs.setdefault(song_title, {})[mode] = blocks
             timeline_sheets += 1
             total_rows += len(blocks)
+
+        # Apply client-corrected sheets on top of the base workbook. Corrected
+        # timelines replace the base blocks and gain beat-alignment metadata.
+        timeline_meta: dict = {}
+        corrected_count = 0
+        all_warnings: list = []
+        for (c_song, c_mode), spec in CORRECTED_SHEETS.items():
+            if c_song not in songs or c_mode not in songs[c_song]:
+                raise fail(f"Corrected sheet targets unknown timeline: {c_song} - {c_mode}")
+            c_blocks, c_meta, c_warnings = build_corrected_timeline(c_song, c_mode, spec, id_to_name)
+            songs[c_song][c_mode] = c_blocks
+            timeline_meta.setdefault(c_song, {})[c_mode] = c_meta
+            corrected_count += 1
+            all_warnings.extend(f"[{c_song} - {c_mode}] {w}" for w in c_warnings)
+        # Non-corrected timelines get explicit default meta so the frontend
+        # can branch without guessing.
+        for song, modes_map in songs.items():
+            for mode in modes_map:
+                if mode not in timeline_meta.get(song, {}):
+                    timeline_meta.setdefault(song, {})[mode] = {
+                        "corrected": False,
+                        "beatPhaseOffsetMs": 0,
+                        "leadInEndMs": None,
+                        "outroStartMs": None,
+                        "outroEndMs": None,
+                    }
 
         # Structural validation.
         if len(songs) != 6:
@@ -393,6 +634,7 @@ def main() -> int:
         "modes": MODES,
         "moves": moves,
         "audio": audio,
+        "timelineMeta": timeline_meta,
         "songs": songs,
     }
     OUTPUT_PATH.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -401,6 +643,13 @@ def main() -> int:
     print(f"Modes: {len(MODES)}")
     print(f"Timeline sheets: {timeline_sheets}")
     print(f"Timeline rows: {total_rows}")
+    print(f"Corrected timelines: {corrected_count}")
+    if all_warnings:
+        print(f"Sheet cross-check warnings: {len(all_warnings)}")
+        for w in all_warnings:
+            print(f"  WARN: {w}")
+    else:
+        print("Sheet cross-check: clean")
     print(f"Moves: {len(moves)}")
     print("Asset validation: passed")
     print(f"Wrote: {OUTPUT_PATH}")

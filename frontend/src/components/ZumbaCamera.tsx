@@ -20,6 +20,19 @@ interface ZumbaCameraProps {
   currentMoveName?: string;
   /** Current timeline position in ms; sent with each frame. */
   currentTimelineMs?: number;
+  /**
+   * Session context for post-session analytics: song/mode, user info for
+   * calories, and the key-beat grid for Beat Sync scoring. Captured once at
+   * session start.
+   */
+  sessionInfo?: {
+    mode?: string;
+    songTitle?: string;
+    username?: string;
+    weightKg?: number | null;
+    keyBeatsMs?: number[];
+    keyBeatMoves?: string[];
+  };
   isStarted: boolean;
   onSessionEnd: (summary: ZumbaSessionSummary | null) => void;
   onAccuracyUpdate: (accuracy: number) => void;
@@ -36,6 +49,7 @@ export default function ZumbaCamera({
   currentMoveKey,
   currentMoveName,
   currentTimelineMs,
+  sessionInfo,
   isStarted,
   onSessionEnd,
   onAccuracyUpdate,
@@ -60,6 +74,10 @@ export default function ZumbaCamera({
   targetMoveRef.current = currentMoveKey || selectedMove;
   targetMoveNameRef.current = currentMoveName;
   timelineMsRef.current = currentTimelineMs;
+
+  // Session analytics context, read once when the backend session is created.
+  const sessionInfoRef = useRef<ZumbaCameraProps['sessionInfo']>(sessionInfo);
+  sessionInfoRef.current = sessionInfo;
 
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -177,12 +195,20 @@ export default function ZumbaCamera({
       // Start session
       const startSession = async () => {
         try {
+          const info = sessionInfoRef.current;
           const sessionRequest: ZumbaSessionStartRequest = {
             target_move: selectedMove,
             settings: {
               tolerance,
               feedback_interval: 3.0,
               min_feedback_gap: 2.0,
+              // Post-session analytics context (beat sync grid, calories, history).
+              mode: info?.mode,
+              song_title: info?.songTitle,
+              username: info?.username,
+              weight_kg: info?.weightKg ?? null,
+              key_beats_ms: info?.keyBeatsMs,
+              key_beat_moves: info?.keyBeatMoves,
             },
           };
 

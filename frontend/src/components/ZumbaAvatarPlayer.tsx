@@ -32,16 +32,36 @@ export type ZumbaPlayMoveOptions = {
   side?: 'L' | 'R' | null;
   crossfadeMs?: number;
   startAtSeconds?: number;
+  /**
+   * Playback speed multiplier from the client's corrected sheet so the Main
+   * loop fits the beat window exactly (e.g. 0.992 = 0.8% slower).
+   */
+  timeScale?: number;
+};
+
+export type ZumbaPreloadOptions = {
+  /**
+   * Beat-corrected timelines switch straight to Main at group boundaries, so
+   * only the first move's Idle-In and the last move's Idle-Out are needed.
+   * This loads ~1/3 of the models — critical on low-VRAM GPUs.
+   */
+  corrected?: boolean;
 };
 
 export type ZumbaAvatarPlayerHandle = {
-  preloadTimeline(blocks: ZumbaTimelineBlock[]): Promise<void>;
+  preloadTimeline(blocks: ZumbaTimelineBlock[], opts?: ZumbaPreloadOptions): Promise<void>;
   playMove(moveKey: string, options?: ZumbaPlayMoveOptions): void;
   playIntro(moveKey: string): void;
+  /** Beat lead-in: hold on the move's Idle In until the song's count 1. */
+  playLeadIn(moveKey: string): void;
   playOutro(moveKey: string, onFinished?: () => void): boolean;
   stop(): void;
   getPreloadStatus(): ZumbaPreloadStatus;
 };
+
+// Safety band for sheet-driven speed adjustment; matches the converter.
+const TIME_SCALE_MIN = 0.8;
+const TIME_SCALE_MAX = 1.25;
 
 type ZumbaAvatarPlayerProps = {
   mapping: ZumbaMappingsJson;
@@ -66,6 +86,19 @@ function clearInstanceFinished(inst: MoveInstance) {
     inst.clearFinished();
     inst.clearFinished = undefined;
   }
+}
+
+// Attach a one-shot 'finished' callback to an instance, replacing any pending one.
+function attachFinished(inst: MoveInstance, onFinished: () => void) {
+  clearInstanceFinished(inst);
+  const handle = (e: { action?: THREE.AnimationAction }) => {
+    if (!e.action || !inst.actions.includes(e.action)) return;
+    inst.mixer.removeEventListener('finished', handle as never);
+    inst.clearFinished = undefined;
+    onFinished();
+  };
+  inst.mixer.addEventListener('finished', handle as never);
+  inst.clearFinished = () => inst.mixer.removeEventListener('finished', handle as never);
 }
 
 function instanceId(moveKey: string, phase: Phase): string {
@@ -139,6 +172,14 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
     const sceneGenRef = useRef(0);
     // The last requested preload set, replayed automatically if the scene is rebuilt.
     const pendingBlocksRef = useRef<ZumbaTimelineBlock[] | null>(null);
+    const pendingOptsRef = useRef<ZumbaPreloadOptions | undefined>(undefined);
+    // Serializes overlapping preloads (rapid song/mode switching): only the
+    // newest run may evict/load; older runs abort at their next checkpoint.
+    const preloadRunIdRef = useRef(0);
+    // While the GL context is lost, every GPU handle we own is already dead.
+    // Calling dispose()/delete on them poisons the restored context
+    // ("object does not belong to this context"), so disposal is skipped.
+    const contextLostRef = useRef(false);
     const statusRef = useRef<ZumbaPreloadStatus>({ state: 'idle', total: 0, loaded: 0, failed: [] });
     const onPreloadStatusRef = useRef(onPreloadStatus);
     useEffect(() => {
@@ -164,6 +205,28 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         }
       });
       sceneRef.current?.remove(container);
+    }
+
+    // Remove one move instance from the scene and release ONLY its cloned
+    // materials. Geometries and textures are shared with the asset cache, so
+    // they are released separately via cache.evict() once no clone uses them.
+    function evictInstance(id: string, inst: MoveInstance) {
+      clearInstanceFinished(inst);
+      try { inst.mixer.stopAllAction(); } catch { /* noop */ }
+      if (activeRef.current === inst) activeRef.current = null;
+      sceneRef.current?.remove(inst.container);
+      // Skip GL deletes while the context is lost — those handles are dead and
+      // deleting them poisons a subsequently restored context.
+      if (!contextLostRef.current) {
+        inst.container.traverse((child) => {
+          if (!(child instanceof THREE.Mesh)) return;
+          const mats = Array.isArray(child.material) ? child.material : child.material ? [child.material] : [];
+          for (const m of mats) {
+            try { m?.dispose(); } catch { /* noop */ }
+          }
+        });
+      }
+      instancesRef.current.delete(id);
     }
 
     // --- Scene / renderer setup (persistent for the component lifetime) ---
@@ -235,9 +298,35 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       resizeObserver.observe(mount);
 
       // Prevent a transient GPU context loss (driver hiccup, GPU switch) from
-      // permanently killing the canvas; three.js re-uploads resources on restore.
-      const onContextLost = (e: Event) => e.preventDefault();
+      // permanently killing the canvas.
+      const onContextLost = (e: Event) => {
+        e.preventDefault();
+        contextLostRef.current = true;
+        console.warn('[ZumbaAvatarPlayer] WebGL context lost — waiting for restore');
+      };
+      const onContextRestored = () => {
+        console.info('[ZumbaAvatarPlayer] WebGL context restored — rebuilding world');
+        // Full clean rebuild. Every GPU handle from the old context is dead;
+        // re-using or disposing them corrupts the restored context. Drop all
+        // instances + the asset cache WITHOUT any GL deletes, then replay the
+        // last preload so the current song/mode reloads fresh.
+        sceneGenRef.current += 1;
+        for (const inst of instancesRef.current.values()) {
+          clearInstanceFinished(inst);
+          try { inst.mixer.stopAllAction(); } catch { /* noop */ }
+          scene.remove(inst.container);
+        }
+        instancesRef.current.clear();
+        activeRef.current = null;
+        cacheRef.current = new ZumbaAssetCache();
+        cacheRef.current.attachRenderer(renderer);
+        contextLostRef.current = false;
+        if (pendingBlocksRef.current && pendingBlocksRef.current.length > 0) {
+          void runPreload(pendingBlocksRef.current, pendingOptsRef.current);
+        }
+      };
       renderer.domElement.addEventListener('webglcontextlost', onContextLost, false);
+      renderer.domElement.addEventListener('webglcontextrestored', onContextRestored, false);
 
       clockRef.current.start();
       const instances = instancesRef.current;
@@ -255,17 +344,24 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         sceneGenRef.current += 1;
         window.removeEventListener('resize', handleResize);
         renderer.domElement.removeEventListener('webglcontextlost', onContextLost, false);
+        renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored, false);
         resizeObserver.disconnect();
         if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
         for (const inst of instances.values()) {
           clearInstanceFinished(inst);
           try { inst.mixer.stopAllAction(); } catch { /* noop */ }
-          disposeContainer(inst.container);
+          if (contextLostRef.current) {
+            // GPU handles are already dead — GL deletes here would poison a
+            // later restored context. Just detach from the scene graph.
+            scene.remove(inst.container);
+          } else {
+            disposeContainer(inst.container);
+          }
         }
         instances.clear();
         activeRef.current = null;
-        try { cache.dispose(); } catch { /* noop */ }
+        try { cacheRef.current?.dispose(); } catch { /* noop */ }
         try { renderer.dispose(); } catch { /* noop */ }
         if (renderer.domElement.parentNode === mount) {
           mount.removeChild(renderer.domElement);
@@ -376,13 +472,25 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
 
     function showInstance(
       inst: MoveInstance,
-      opts?: { startAtSeconds?: number; onFinished?: () => void },
+      opts?: { startAtSeconds?: number; timeScale?: number; onFinished?: () => void },
     ) {
       const startAtSeconds = opts?.startAtSeconds ?? 0;
+      const timeScale = THREE.MathUtils.clamp(opts?.timeScale ?? 1, TIME_SCALE_MIN, TIME_SCALE_MAX);
       const previous = activeRef.current;
       if (previous === inst) {
         // Same instance already on screen (e.g. repeated block of one move):
         // let it keep looping instead of restarting — avoids a visible hitch.
+        // Still honour a new beat speed scale (same move, new group) and a
+        // requested completion callback.
+        for (const action of inst.actions) action.timeScale = timeScale;
+        if (opts?.onFinished) {
+          const running = inst.actions.some((a) => a.isRunning());
+          if (!running) {
+            opts.onFinished();
+          } else {
+            attachFinished(inst, opts.onFinished);
+          }
+        }
         return;
       }
 
@@ -392,6 +500,7 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       // Start the new instance first so there is never a blank frame.
       for (const action of inst.actions) {
         action.reset();
+        action.timeScale = timeScale;
         if (startAtSeconds > 0) action.time = startAtSeconds;
         action.play();
       }
@@ -399,15 +508,7 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       // The following visible render therefore starts at a fully valid frame.
       inst.mixer.update(0);
       if (opts?.onFinished && inst.actions.length > 0) {
-        const onFinished = opts.onFinished;
-        const handle = (e: { action?: THREE.AnimationAction }) => {
-          if (!e.action || !inst.actions.includes(e.action)) return;
-          inst.mixer.removeEventListener('finished', handle as never);
-          inst.clearFinished = undefined;
-          onFinished();
-        };
-        inst.mixer.addEventListener('finished', handle as never);
-        inst.clearFinished = () => inst.mixer.removeEventListener('finished', handle as never);
+        attachFinished(inst, opts.onFinished);
       }
 
       // Atomic scene-graph swap. A full-model opacity crossfade is unsafe here:
@@ -424,8 +525,12 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
 
     // Load + GPU-warm everything the selected song/mode needs. Tagged with the
     // current scene generation so a Strict Mode rebuild can safely replay it.
-    async function runPreload(blocks: ZumbaTimelineBlock[]) {
+    async function runPreload(blocks: ZumbaTimelineBlock[], opts?: ZumbaPreloadOptions) {
       const gen = sceneGenRef.current;
+      const runId = ++preloadRunIdRef.current;
+      const isStale = () =>
+        gen !== sceneGenRef.current || runId !== preloadRunIdRef.current || contextLostRef.current;
+
       const uniqueKeys: string[] = [];
       const seen = new Set<string>();
       for (const b of blocks) {
@@ -439,11 +544,52 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         return;
       }
 
-      // Full set: every selected move's in/main/out. We only load the missing
-      // instances so switching back to an already-prepared mode feels instant.
+      // The minimum phase set per move keeps VRAM small (vital on low-VRAM /
+      // integrated GPUs). Corrected timelines switch straight to Main at group
+      // boundaries, so mid-song Idle-Ins are never played:
+      //   corrected: Main for all + Idle-In for first + Idle-Out for last
+      //   legacy:    Idle-In + Main for all + Idle-Out for last
+      const firstKey = uniqueKeys[0];
+      const lastKey = blocks[blocks.length - 1].moveKey;
+      const phasesFor = (key: string): Phase[] => {
+        const phases: Phase[] = ['main'];
+        if (opts?.corrected ? key === firstKey : true) phases.push('in');
+        if (key === lastKey) phases.push('out');
+        return phases;
+      };
+      const wanted = new Set<string>();
+      for (const key of uniqueKeys) {
+        for (const phase of phasesFor(key)) wanted.add(instanceId(key, phase));
+      }
+
+      // Evict everything the new timeline does NOT need. Without this, every
+      // song/mode change stacked more skinned models + textures into VRAM
+      // until the browser killed the WebGL context (white avatar screen).
+      const keepMoves = new Set<string>(uniqueKeys);
+      for (const [id, inst] of Array.from(instancesRef.current)) {
+        if (!wanted.has(id)) evictInstance(id, inst);
+      }
+      const cache = cacheRef.current;
+      if (cache && !contextLostRef.current) {
+        for (const [key, asset] of Object.entries(mapping.moves)) {
+          if (!keepMoves.has(key)) {
+            cache.evict(asset.in);
+            cache.evict(asset.main);
+            cache.evict(asset.out);
+          } else {
+            // Kept move: release the phases this timeline doesn't use.
+            const phases = new Set(phasesFor(key));
+            if (!phases.has('in')) cache.evict(asset.in);
+            if (!phases.has('out')) cache.evict(asset.out);
+          }
+        }
+      }
+
+      // We only load the missing instances so switching back to an
+      // already-prepared mode feels instant.
       const missing: Array<{ key: string; phase: Phase }> = [];
       for (const key of uniqueKeys) {
-        for (const phase of ['in', 'main', 'out'] as Phase[]) {
+        for (const phase of phasesFor(key)) {
           if (!instancesRef.current.has(instanceId(key, phase))) {
             missing.push({ key, phase });
           }
@@ -462,7 +608,7 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       let loaded = 0;
 
       for (const item of missing) {
-        if (gen !== sceneGenRef.current) return; // superseded by a scene rebuild
+        if (isStale()) return; // superseded by a newer preload / scene rebuild
         const asset = mapping.moves[item.key];
         if (!asset) {
           failed.push(`${item.key} (missing manifest entry)`);
@@ -479,7 +625,7 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         }
       }
 
-      if (gen !== sceneGenRef.current) return;
+      if (isStale()) return;
       emitStatus({ state: failed.length > 0 ? 'error' : 'ready' });
 
       // Show the first move as a preview if nothing is playing yet. This keeps
@@ -491,9 +637,10 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
     }
 
     useImperativeHandle(ref, (): ZumbaAvatarPlayerHandle => ({
-      async preloadTimeline(blocks: ZumbaTimelineBlock[]) {
+      async preloadTimeline(blocks: ZumbaTimelineBlock[], opts?: ZumbaPreloadOptions) {
         pendingBlocksRef.current = blocks;
-        await runPreload(blocks);
+        pendingOptsRef.current = opts;
+        await runPreload(blocks, opts);
       },
 
       playMove(moveKey: string, options?: ZumbaPlayMoveOptions) {
@@ -505,7 +652,18 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         }
         showInstance(inst, {
           startAtSeconds: options?.startAtSeconds ?? 0,
+          timeScale: options?.timeScale,
         });
+      },
+
+      // Beat lead-in: the song's count 1 is not at 0:00, so hold on the first
+      // move's Idle In until the timeline reaches the beat phase offset. The
+      // clip plays once and clamps on its final "ready" frame.
+      playLeadIn(moveKey: string) {
+        const inst =
+          instancesRef.current.get(instanceId(moveKey, 'in')) ??
+          instancesRef.current.get(instanceId(moveKey, 'main'));
+        if (inst) showInstance(inst, {});
       },
 
       // Smooth "enter the move" flow: Idle In once, then auto-blend into the

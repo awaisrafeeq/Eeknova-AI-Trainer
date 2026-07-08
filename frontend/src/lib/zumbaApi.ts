@@ -10,6 +10,16 @@ export interface ZumbaSessionStartRequest {
     tolerance?: number;
     feedback_interval?: number;
     min_feedback_gap?: number;
+    // Timeline session context for post-session analytics (beat sync,
+    // calories, per-move breakdown). All optional for backward compatibility.
+    mode?: string;
+    song_title?: string;
+    username?: string;
+    weight_kg?: number | null;
+    /** 8-count block start times (ms) — the "key beats" for Beat Sync. */
+    key_beats_ms?: number[];
+    /** Backend move key expected at each key beat (parallel array). */
+    key_beat_moves?: string[];
   };
 }
 
@@ -44,6 +54,44 @@ export interface ZumbaAnalysisResult {
   message?: string;
 }
 
+// ---- Post-session analytics (AITrainer Zumba Post-Session Stats Guide) ----
+
+export interface ZumbaMoveScore {
+  key: string;
+  name: string;
+  frames: number;
+  accuracy: number | null;
+  rhythm: number | null;
+  energy: number;
+  completion: number;
+  body_parts: Record<string, number | null>;
+}
+
+export interface ZumbaScores {
+  overall: number;
+  pose_accuracy: number;
+  beat_sync: number;
+  completion: number;
+  energy: number;
+  consistency: number;
+  beat_sync_detail: {
+    matched: number;
+    total: number;
+    avg_delay_ms: number | null;
+    bands: { excellent: number; good: number; average: number; off: number };
+  };
+  body_parts: { arms: number | null; legs: number | null; core: number | null; balance: number | null; rhythm: number };
+  calories: { value?: number; range?: [number, number] };
+  met: number;
+  active_time_seconds: number;
+  best_move: { key: string; name: string; accuracy: number } | null;
+  needs_practice: { key: string; name: string; accuracy: number } | null;
+  moves: ZumbaMoveScore[];
+  tip: string;
+  mode: string;
+  song_title: string;
+}
+
 export interface ZumbaSessionSummary {
   session_id: string;
   target_move: string;
@@ -53,6 +101,11 @@ export interface ZumbaSessionSummary {
   feedback_count: number;
   created_at: string;
   status: string;
+  song_title?: string | null;
+  mode?: string | null;
+  username?: string | null;
+  /** Full post-session score object; null for legacy single-move sessions. */
+  scores?: ZumbaScores | null;
 }
 
 // Get auth token from localStorage

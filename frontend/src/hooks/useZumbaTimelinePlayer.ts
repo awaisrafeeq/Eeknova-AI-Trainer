@@ -11,13 +11,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import type { ZumbaAvatarPlayerHandle } from '@/components/ZumbaAvatarPlayer';
-import type { ZumbaTimelineBlock } from '@/lib/zumbaTimelineTypes';
+import type { ZumbaTimelineBlock, ZumbaTimelineMeta } from '@/lib/zumbaTimelineTypes';
 
 type UseZumbaTimelinePlayerParams = {
   timeline: ZumbaTimelineBlock[];
+  /** Beat-alignment meta from the client's corrected sheet (null = legacy timing). */
+  meta?: ZumbaTimelineMeta | null;
   playerRef: RefObject<ZumbaAvatarPlayerHandle | null>;
   audioRef: RefObject<HTMLAudioElement | null>;
   onComplete?: () => void;
+};
+
+/** One avatar switch, recorded for on-screen beat verification. */
+export type ZumbaSwitchLogEntry = {
+  group: number;
+  move: string;
+  /** Sheet time the move should start (ms). */
+  expectedMs: number;
+  /** Timeline time the switch actually fired (ms). */
+  actualMs: number;
+  latencyMs: number;
+  speedScale: number | null;
+  plannedLoops: number | null;
 };
 
 type UseZumbaTimelinePlayerResult = {
@@ -25,6 +40,8 @@ type UseZumbaTimelinePlayerResult = {
   currentBlock: ZumbaTimelineBlock | null;
   nextBlock: ZumbaTimelineBlock | null;
   timelineMs: number;
+  /** Every move switch of the current/last run — drives the Beat Test panel. */
+  switchLog: ZumbaSwitchLogEntry[];
   start: () => Promise<boolean>;
   stop: () => void;
 };
@@ -41,6 +58,7 @@ function findBlockIndexAtTime(timeline: ZumbaTimelineBlock[], ms: number, fromIn
 
 export function useZumbaTimelinePlayer({
   timeline,
+  meta = null,
   playerRef,
   audioRef,
   onComplete,
@@ -49,11 +67,13 @@ export function useZumbaTimelinePlayer({
   const [currentBlock, setCurrentBlock] = useState<ZumbaTimelineBlock | null>(null);
   const [nextBlock, setNextBlock] = useState<ZumbaTimelineBlock | null>(null);
   const [timelineMs, setTimelineMs] = useState(0);
+  const [switchLog, setSwitchLog] = useState<ZumbaSwitchLogEntry[]>([]);
 
   const rafRef = useRef<number | null>(null);
   const startPerfRef = useRef(0);
   const currentIndexRef = useRef(-1);
   const currentGroupRef = useRef<number | null>(null);
+  const outroTriggeredRef = useRef(false);
   const endedHandlerRef = useRef<(() => void) | null>(null);
   const onCompleteRef = useRef(onComplete);
   useEffect(() => {
@@ -89,16 +109,29 @@ export function useZumbaTimelinePlayer({
     const audio = audioRef.current;
     currentIndexRef.current = -1;
     currentGroupRef.current = null;
+    outroTriggeredRef.current = false;
     setCurrentBlock(null);
     setNextBlock(null);
     setTimelineMs(0);
+    setSwitchLog([]);
 
-    const lastEndMs = timeline[timeline.length - 1].endMs;
+    const corrected = Boolean(meta?.corrected);
+    const lastBlock = timeline[timeline.length - 1];
+    // Corrected sheets add an "Idle Out / End Hold" tail after the last block;
+    // the session runs until the tail finishes so the music isn't cut short.
+    const sessionEndMs = corrected && meta?.outroEndMs ? meta.outroEndMs : lastBlock.endMs;
+    const outroStartMs = corrected && meta?.outroStartMs ? meta.outroStartMs : null;
 
     const finish = () => {
       stop();
       onCompleteRef.current?.();
     };
+
+    // Beat lead-in ("Idle In / Beat Lead-In" row): hold ready until the song's
+    // count 1 (beatPhaseOffsetMs); the first group then starts on the beat.
+    if (corrected && timeline[0]) {
+      playerRef.current?.playLeadIn(timeline[0].moveKey);
+    }
 
     if (audio) {
       try {
@@ -123,9 +156,16 @@ export function useZumbaTimelinePlayer({
       const currentMs = getTimelineMs();
       setTimelineMs(currentMs);
 
-      if (currentMs >= lastEndMs) {
+      if (currentMs >= sessionEndMs) {
         finish();
         return;
+      }
+
+      // Audio tail after the final full 8-count block: the avatar exits with
+      // Idle Out while the music finishes (corrected sheets only).
+      if (outroStartMs != null && !outroTriggeredRef.current && currentMs >= outroStartMs) {
+        outroTriggeredRef.current = true;
+        playerRef.current?.playOutro(lastBlock.moveKey);
       }
 
       const idx = findBlockIndexAtTime(timeline, currentMs, currentIndexRef.current);
@@ -139,16 +179,33 @@ export function useZumbaTimelinePlayer({
         // group are the same step, so Main keeps looping (no abrupt restart).
         if (block.moveGroupIndex !== currentGroupRef.current) {
           currentGroupRef.current = block.moveGroupIndex;
-          playerRef.current?.playIntro(block.moveKey);
 
-          if (process.env.NODE_ENV !== 'production') {
-            console.debug('[zumba-timeline]', {
-              expectedMoveAtMs: block.startMs,
-              actualSwitchAtMs: Math.round(currentMs),
-              switchLatencyMs: Math.round(currentMs - block.startMs),
-              move: block.moveName,
-              group: block.moveGroupIndex,
+          if (corrected) {
+            // Beat-aligned playback: the corrected sheet's loop math assumes
+            // Main starts exactly at the group boundary, so switch straight to
+            // Main with the sheet's speed scale (no mid-song Idle In).
+            playerRef.current?.playMove(block.moveKey, {
+              side: block.side,
+              timeScale: block.animationSpeedScale ?? 1,
             });
+          } else {
+            // Legacy timing (song not yet corrected by the client).
+            playerRef.current?.playIntro(block.moveKey);
+          }
+
+          const entry: ZumbaSwitchLogEntry = {
+            group: block.moveGroupIndex,
+            move: block.moveName,
+            expectedMs: block.startMs,
+            actualMs: Math.round(currentMs),
+            latencyMs: Math.round(currentMs - block.startMs),
+            speedScale: corrected ? block.animationSpeedScale ?? 1 : null,
+            plannedLoops: corrected ? block.plannedLoops ?? null : null,
+          };
+          setSwitchLog((log) => [...log, entry]);
+          if (process.env.NODE_ENV !== 'production') {
+            // info (not debug) so it is visible without the Verbose filter.
+            console.info('[zumba-timeline]', entry);
           }
         }
       }
@@ -158,7 +215,7 @@ export function useZumbaTimelinePlayer({
 
     rafRef.current = requestAnimationFrame(tick);
     return true;
-  }, [timeline, playerRef, audioRef, detachEnded, stop]);
+  }, [timeline, meta, playerRef, audioRef, detachEnded, stop]);
 
   // Clean up on unmount.
   useEffect(() => () => {
@@ -166,5 +223,5 @@ export function useZumbaTimelinePlayer({
     detachEnded();
   }, [detachEnded]);
 
-  return { isRunning, currentBlock, nextBlock, timelineMs, start, stop };
+  return { isRunning, currentBlock, nextBlock, timelineMs, switchLog, start, stop };
 }
