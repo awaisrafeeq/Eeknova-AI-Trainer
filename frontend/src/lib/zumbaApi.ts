@@ -267,7 +267,8 @@ export class ZumbaWebSocket {
           } else if (data.type === 'error') {
             this.onError(data.message || 'Unknown error occurred');
           } else if (data.type === 'connected') {
-            console.log('WebSocket connection confirmed');
+            // Includes the backend version tag so it's visible which build is live.
+            console.log('WebSocket connection confirmed:', data.message || '');
           } else {
             console.warn('Unknown message type:', data.type);
           }

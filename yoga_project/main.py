@@ -1033,13 +1033,20 @@ async def websocket_endpoint(websocket: WebSocket):
     active_connections[client_id] = websocket
     
     logger.info(f"WebSocket client connected: {client_id}")
-    
+
+    # Backpressure guard: on machines where YOLO inference is slower than the
+    # camera feed, queued frames pile up until every frame times out and the
+    # keepalive dies. While one frame is being analysed, newer ones are dropped.
+    zumba_frame_lock = asyncio.Lock()
+
     try:
-        # Send connection confirmation
+        # Send connection confirmation. The version tag shows up in the browser
+        # console so it is obvious whether the running backend has the latest
+        # Zumba fixes (frame-drop guard + nano pose model).
         await websocket.send_json({
             'type': 'connected',
             'client_id': client_id,
-            'message': 'Connected to pose analysis server'
+            'message': 'Connected to pose analysis server [zumba-rt v2: nano-model + frame-drop]'
         })
         
         while True:
@@ -1071,18 +1078,24 @@ async def websocket_endpoint(websocket: WebSocket):
                     # inference in a worker thread: doing it inline blocks the
                     # asyncio event loop, the server misses websocket ping/pongs
                     # and closes the connection with 1011 "keepalive ping timeout".
+                    if zumba_frame_lock.locked():
+                        # Previous frame still analysing — drop this one instead
+                        # of queueing (a queue only grows until every frame is
+                        # stale and times out).
+                        continue
                     try:
-                        result = await asyncio.wait_for(
-                            asyncio.to_thread(
-                                zumba_session_manager.process_frame,
-                                session_id=session_id,
-                                frame_data=frame_data,
-                                target_move=target_move,
-                                target_move_name=target_move_name,
-                                timeline_ms=timeline_ms,
-                            ),
-                            timeout=10.0,
-                        )
+                        async with zumba_frame_lock:
+                            result = await asyncio.wait_for(
+                                asyncio.to_thread(
+                                    zumba_session_manager.process_frame,
+                                    session_id=session_id,
+                                    frame_data=frame_data,
+                                    target_move=target_move,
+                                    target_move_name=target_move_name,
+                                    timeline_ms=timeline_ms,
+                                ),
+                                timeout=10.0,
+                            )
                         result['type'] = 'zumba_analysis'
                         result['timestamp'] = datetime.now().isoformat()
 

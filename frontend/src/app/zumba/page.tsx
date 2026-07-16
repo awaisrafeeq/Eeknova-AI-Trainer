@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import ZumbaAvatarPlayer, { ZumbaAvatarPlayerHandle } from '@/components/ZumbaAvatarPlayer';
+import ZumbaAvatarPlayer, { ZumbaAvatarPlayerHandle, ZUMBA_TEMPO_STORAGE_KEY } from '@/components/ZumbaAvatarPlayer';
 import ZumbaCamera from '@/components/ZumbaCamera';
 import ZumbaSummary from '@/components/ZumbaSummary';
 import { ZumbaAnalysisResult, ZumbaSessionSummary } from '@/lib/zumbaApi';
@@ -676,6 +676,8 @@ function formatMs(ms: number): string {
   return `${minutes}:${seconds.toFixed(3).padStart(6, '0')}`;
 }
 
+const TEMPO_CHOICES = [0.8, 0.85, 0.9, 1.0];
+
 function BeatTestPanel({
   entries,
   isRunning,
@@ -686,6 +688,16 @@ function BeatTestPanel({
   corrected: boolean;
 }) {
   const passed = entries.filter((e) => Math.abs(e.latencyMs) <= BEAT_PASS_MS).length;
+  const [tempo, setTempo] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0.85;
+    const raw = window.localStorage.getItem(ZUMBA_TEMPO_STORAGE_KEY);
+    const v = raw ? Number.parseFloat(raw) : NaN;
+    return Number.isFinite(v) ? v : 0.85;
+  });
+  const pickTempo = (value: number) => {
+    window.localStorage.setItem(ZUMBA_TEMPO_STORAGE_KEY, String(value));
+    setTempo(value);
+  };
 
   return (
     <div className="fixed bottom-16 left-4 z-50 w-[min(520px,92vw)] rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-black/75 p-3 text-[12px] backdrop-blur-md">
@@ -696,6 +708,26 @@ function BeatTestPanel({
         <span className={`font-bold ${passed === entries.length ? 'text-green-400' : 'text-yellow-300'}`}>
           {entries.length > 0 ? `${passed} / ${entries.length} on beat (±${BEAT_PASS_MS}ms)` : isRunning ? 'waiting for first switch…' : 'start a session'}
         </span>
+      </div>
+
+      {/* Live tempo A/B: lets a tester compare animation speeds without a
+          rebuild. Takes effect at the NEXT move switch. */}
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-[var(--ink-med)]">Speed tempo:</span>
+        {TEMPO_CHOICES.map((value) => (
+          <button
+            key={value}
+            onClick={() => pickTempo(value)}
+            className={`rounded px-2 py-0.5 font-semibold transition-all ${
+              tempo === value
+                ? 'bg-[var(--brand-neo)] text-black'
+                : 'border border-[var(--glass-stroke)] text-[var(--brand-neo)] hover:bg-white/10'
+            }`}
+          >
+            {value.toFixed(2)}×
+          </button>
+        ))}
+        <span className="text-[var(--ink-med)]">(applies from the next move)</span>
       </div>
       {entries.length > 0 && (
         <div className="max-h-[240px] overflow-y-auto">

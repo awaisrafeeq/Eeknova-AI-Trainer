@@ -60,8 +60,26 @@ export type ZumbaAvatarPlayerHandle = {
 };
 
 // Safety band for sheet-driven speed adjustment; matches the converter.
-const TIME_SCALE_MIN = 0.8;
-const TIME_SCALE_MAX = 1.25;
+const TIME_SCALE_MIN = 0.45;
+const TIME_SCALE_MAX = 1.15;
+
+// Global visual tempo multiplier applied on top of the sheet's speed scale.
+// < 1 slows every animation for a calmer look. NOTE: values other than 1.0
+// trade away exact loop-fit at group boundaries (the sheet's loop math
+// assumes its speed scale is applied unmodified) — move switches stay
+// beat-aligned either way because they are driven by the audio clock.
+const ZUMBA_MOTION_TEMPO = 0.85;
+
+// Runtime override so testers can A/B tempo live from the Beat Test panel
+// (no rebuild needed). Applies from the next move switch.
+export const ZUMBA_TEMPO_STORAGE_KEY = 'zumba.motionTempo';
+
+function currentMotionTempo(): number {
+  if (typeof window === 'undefined') return ZUMBA_MOTION_TEMPO;
+  const raw = window.localStorage.getItem(ZUMBA_TEMPO_STORAGE_KEY);
+  const value = raw ? Number.parseFloat(raw) : Number.NaN;
+  return Number.isFinite(value) && value >= 0.5 && value <= 1.2 ? value : ZUMBA_MOTION_TEMPO;
+}
 
 type ZumbaAvatarPlayerProps = {
   mapping: ZumbaMappingsJson;
@@ -475,7 +493,8 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       opts?: { startAtSeconds?: number; timeScale?: number; onFinished?: () => void },
     ) {
       const startAtSeconds = opts?.startAtSeconds ?? 0;
-      const timeScale = THREE.MathUtils.clamp(opts?.timeScale ?? 1, TIME_SCALE_MIN, TIME_SCALE_MAX);
+      const rawTimeScale = (opts?.timeScale ?? 1) * currentMotionTempo();
+      const timeScale = THREE.MathUtils.clamp(rawTimeScale, TIME_SCALE_MIN, TIME_SCALE_MAX);
       const previous = activeRef.current;
       if (previous === inst) {
         // Same instance already on screen (e.g. repeated block of one move):

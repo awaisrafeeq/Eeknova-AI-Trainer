@@ -23,6 +23,13 @@ import time
 
 import zumba_scoring
 
+# Real-time Zumba needs fast inference. The default yolo11x-pose runs ~600ms
+# per frame on typical laptop hardware — slower than the 300ms camera feed —
+# which stalls the websocket until it dies with keepalive timeouts. The nano
+# pose model runs ~55ms/frame (10x faster) with adequate accuracy at the 160px
+# analysis resolution.
+ZUMBA_POSE_MODEL = str(Path(__file__).parent / "yolo11n-pose.pt")
+
 class ZumbaSessionManager:
     """Manages Zumba analysis sessions"""
     
@@ -37,6 +44,7 @@ class ZumbaSessionManager:
             
         try:
             analyzer = GuidedZumbaAnalyzer(
+                model_path=ZUMBA_POSE_MODEL,
                 feedback_interval=settings.get('feedback_interval', 3.0) if settings else 3.0,
                 min_feedback_gap=settings.get('min_feedback_gap', 2.0) if settings else 2.0
             )
@@ -412,7 +420,7 @@ class ZumbaSessionManager:
             return []
         
         try:
-            temp_analyzer = GuidedZumbaAnalyzer()
+            temp_analyzer = GuidedZumbaAnalyzer(model_path=ZUMBA_POSE_MODEL)
             references_path = zumba_path / "improved_automatic_references.json"
             
             if references_path.exists():

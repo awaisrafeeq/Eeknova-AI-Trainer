@@ -166,8 +166,8 @@ CORRECTED_EXTRA_COLUMNS = [
 
 # Safety band for playback speed adjustment; outside this the animation looks
 # visibly wrong, so the converter refuses the sheet.
-SPEED_SCALE_HARD_MIN = 0.80
-SPEED_SCALE_HARD_MAX = 1.25
+SPEED_SCALE_HARD_MIN = 0.45
+SPEED_SCALE_HARD_MAX = 1.15
 # Beyond this we only warn (sheet value kept, but flagged for the client).
 SPEED_SCALE_WARN_DELTA = 0.02
 GLB_DURATION_WARN_DELTA_S = 0.05
