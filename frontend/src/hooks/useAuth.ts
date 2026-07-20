@@ -32,22 +32,24 @@ export function useAuth() {
 
   const router = useRouter();
 
-  // Check authentication status
-  const checkAuth = useCallback(async () => {
+  // Check authentication status.
+  //
+  // `silent` mode is used by the periodic background refresh: it re-validates
+  // the session WITHOUT flipping `isLoading` back to `true`. Without this, the
+  // 5-minute refresh made every page briefly render its loading state, which
+  // unmounted and rebuilt heavy children (e.g. the Zumba avatar's WebGL canvas)
+  // on every tick. Initial mount still uses the non-silent path so the first
+  // load shows a spinner.
+  const checkAuth = useCallback(async (silent = false) => {
     try {
-      setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
-
-      // Debug: Log current auth state
-      console.log('🔍 Checking auth status...');
-      console.log('🍪 Cookies:', document.cookie);
+      if (!silent) {
+        setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
+      }
 
       const response = await fetch('/api/auth/me', {
         method: 'GET',
         credentials: 'include', // Include cookies
       });
-
-      console.log('📡 Auth response status:', response.status);
-      console.log('📡 Auth response headers:', response.headers);
 
       if (response.status === 401 || response.status === 404) {
         // Token expired or API not found - redirect to login
@@ -70,8 +72,7 @@ export function useAuth() {
 
       const userData = await response.json();
       const resolvedUser = userData.user || userData;
-      console.log('✅ Auth success - user data:', userData);
-      
+
       setAuthState({
         user: resolvedUser,
         isLoading: false,
@@ -113,15 +114,16 @@ export function useAuth() {
     }
   }, [router]);
 
-  // Check auth on mount and when dependencies change
+  // Check auth on initial mount (shows the loading state).
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
 
-  // Auto-check auth every 5 minutes to catch expired sessions
+  // Auto-check auth every 5 minutes to catch expired sessions. Silent so the
+  // background refresh never flips the page back into its loading state.
   useEffect(() => {
     if (authState.isAuthenticated) {
-      const interval = setInterval(checkAuth, 5 * 60 * 1000); // 5 minutes
+      const interval = setInterval(() => checkAuth(true), 5 * 60 * 1000); // 5 minutes
       return () => clearInterval(interval);
     }
   }, [authState.isAuthenticated, checkAuth]);
