@@ -63,22 +63,42 @@ export type ZumbaAvatarPlayerHandle = {
 const TIME_SCALE_MIN = 0.45;
 const TIME_SCALE_MAX = 1.15;
 
-// Global visual tempo multiplier applied on top of the sheet's speed scale.
-// < 1 slows every animation for a calmer look. NOTE: values other than 1.0
-// trade away exact loop-fit at group boundaries (the sheet's loop math
-// assumes its speed scale is applied unmodified) — move switches stay
-// beat-aligned either way because they are driven by the audio clock.
-const ZUMBA_MOTION_TEMPO = 0.85;
+// Visual tempo multiplier applied on top of the sheet's speed scale. < 1 slows
+// every animation for a calmer look. NOTE: values other than 1.0 trade away
+// exact loop-fit at group boundaries (the sheet's loop math assumes its speed
+// scale is applied unmodified) — move switches stay beat-aligned either way
+// because they are driven by the audio clock.
+const ZUMBA_DEFAULT_TEMPO = 0.85;
 
-// Runtime override so testers can A/B tempo live from the Beat Test panel
-// (no rebuild needed). Applies from the next move switch.
+// Per-mode tempo defaults (client recommendation): lower intensities feel more
+// natural slightly slower, HIIT a touch faster.
+export const ZUMBA_MODE_TEMPO: Record<string, number> = {
+  Beginner: 0.8,
+  Easy: 0.8,
+  Moderate: 0.85,
+  High: 0.85,
+  HIIT: 0.9,
+};
+
+// The active session mode, set by the page. Drives the default tempo when no
+// manual override is set.
+let activeZumbaMode = '';
+export function setZumbaActiveMode(mode: string): void {
+  activeZumbaMode = mode;
+}
+
+// Manual override so testers can A/B tempo live from the Beat Test panel
+// (no rebuild needed). Applies from the next move switch. When unset, the
+// per-mode default is used.
 export const ZUMBA_TEMPO_STORAGE_KEY = 'zumba.motionTempo';
 
 function currentMotionTempo(): number {
-  if (typeof window === 'undefined') return ZUMBA_MOTION_TEMPO;
-  const raw = window.localStorage.getItem(ZUMBA_TEMPO_STORAGE_KEY);
-  const value = raw ? Number.parseFloat(raw) : Number.NaN;
-  return Number.isFinite(value) && value >= 0.5 && value <= 1.2 ? value : ZUMBA_MOTION_TEMPO;
+  if (typeof window !== 'undefined') {
+    const raw = window.localStorage.getItem(ZUMBA_TEMPO_STORAGE_KEY);
+    const value = raw ? Number.parseFloat(raw) : Number.NaN;
+    if (Number.isFinite(value) && value >= 0.5 && value <= 1.2) return value; // manual override wins
+  }
+  return ZUMBA_MODE_TEMPO[activeZumbaMode] ?? ZUMBA_DEFAULT_TEMPO;
 }
 
 type ZumbaAvatarPlayerProps = {

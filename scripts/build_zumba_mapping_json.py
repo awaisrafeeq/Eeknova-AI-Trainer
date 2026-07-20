@@ -146,15 +146,13 @@ MOVE_TABLE = {
     },
 }
 
-# Client-corrected choreography sheets (beat-aligned pilot format).
-# Key: (song, mode) -> corrected workbook + sheet. As the client delivers more
-# corrected sheets, add entries here — no other converter change needed.
-CORRECTED_SHEETS = {
-    ("All Night", "High"): {
-        "file": REPO_ROOT / "docs" / "Zumba_AllNight_High_Pilot_Corrected.xlsx",
-        "sheet": "Pilot Corrected",
-    },
-}
+# Client-corrected choreography workbook (beat-aligned, all songs + modes).
+# Every timeline sheet ("<Song> - <Mode>") uses the corrected format: per-row
+# beat phase offset, GLB main duration, planned loops, animation speed scale,
+# plus lead-in / end-hold rows. This single file is the source of truth.
+CORRECTED_WORKBOOK_PATH = (
+    REPO_ROOT / "docs" / "Zumba_Mappings_AllSongs_AllLevels_Corrected_18Steps.xlsx"
+)
 
 # Extra columns present only in the corrected-sheet format.
 CORRECTED_EXTRA_COLUMNS = [
@@ -389,30 +387,22 @@ def read_glb_animation_duration(path: Path) -> float:
     return duration
 
 
-def build_corrected_timeline(song: str, mode: str, spec: dict, id_to_name: dict):
-    """Parse a client-corrected sheet into (blocks, meta, warnings).
+def build_corrected_timeline(ws, sheet: str, id_to_name: dict):
+    """Parse one client-corrected worksheet into (blocks, meta, warnings).
 
     Corrected sheets add: per-row beat phase offset, GLB main duration,
     planned loops, animation speed scale, plus two special non-move rows —
     a lead-in hold at the start and an end hold for the audio tail.
     """
-    path = spec["file"]
-    if not path.is_file():
-        raise fail(f"Corrected sheet for {song} - {mode} not found: {path}")
-    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    sheet = spec["sheet"]
-    if sheet not in wb.sheetnames:
-        raise fail(f"Corrected workbook {path.name} has no sheet '{sheet}'")
-    ws = wb[sheet]
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
-        raise fail(f"{path.name}/{sheet}: empty sheet")
+        raise fail(f"{sheet}: empty sheet")
 
     header = [str(c).strip() if c is not None else "" for c in rows[0]]
     required = [c for c in EXPECTED_COLUMNS if c != "Block Size (counts)"] + CORRECTED_EXTRA_COLUMNS
     for col_name in required + ["Block Size (counts)"]:
         if col_name not in header:
-            raise fail(f"{path.name}/{sheet}: missing required column '{col_name}'")
+            raise fail(f"{sheet}: missing required column '{col_name}'")
     col = {name: header.index(name) for name in header if name}
 
     blocks = []
@@ -503,7 +493,7 @@ def build_corrected_timeline(song: str, mode: str, spec: dict, id_to_name: dict)
         })
 
     if not blocks:
-        raise fail(f"{path.name}/{sheet}: no move rows")
+        raise fail(f"{sheet}: no move rows")
 
     # --- Cross-check the client's numbers against the math and the real GLBs ---
     groups: dict = {}
@@ -546,20 +536,24 @@ def build_corrected_timeline(song: str, mode: str, spec: dict, id_to_name: dict)
 
 
 def main() -> int:
-    if not WORKBOOK_PATH.is_file():
-        print(f"ERROR: workbook not found at {WORKBOOK_PATH}", file=sys.stderr)
+    if not CORRECTED_WORKBOOK_PATH.is_file():
+        print(f"ERROR: corrected workbook not found at {CORRECTED_WORKBOOK_PATH}", file=sys.stderr)
         return 1
 
     try:
-        wb = openpyxl.load_workbook(WORKBOOK_PATH, read_only=True, data_only=True)
+        wb = openpyxl.load_workbook(CORRECTED_WORKBOOK_PATH, read_only=True, data_only=True)
         moves = build_moves()
         id_to_name = read_moves_sheet(wb)
         for move_id, name in id_to_name.items():
             moves[MOVE_TABLE[name]["key"]]["id"] = move_id
 
+        # Every timeline sheet is in the corrected beat-aligned format.
         songs: dict = {}
+        timeline_meta: dict = {}
         timeline_sheets = 0
         total_rows = 0
+        corrected_count = 0
+        all_warnings: list = []
         for sheet in wb.sheetnames:
             if sheet in ("Moves", "18 Step Mapping Rules"):
                 continue
@@ -570,36 +564,13 @@ def main() -> int:
             mode = mode.strip()
             if mode not in MODES:
                 raise fail(f"Sheet '{sheet}' has unknown mode '{mode}'")
-            blocks = build_timeline_sheet(wb, sheet, id_to_name)
+            blocks, meta, warnings = build_corrected_timeline(wb[sheet], sheet, id_to_name)
             songs.setdefault(song_title, {})[mode] = blocks
+            timeline_meta.setdefault(song_title, {})[mode] = meta
             timeline_sheets += 1
             total_rows += len(blocks)
-
-        # Apply client-corrected sheets on top of the base workbook. Corrected
-        # timelines replace the base blocks and gain beat-alignment metadata.
-        timeline_meta: dict = {}
-        corrected_count = 0
-        all_warnings: list = []
-        for (c_song, c_mode), spec in CORRECTED_SHEETS.items():
-            if c_song not in songs or c_mode not in songs[c_song]:
-                raise fail(f"Corrected sheet targets unknown timeline: {c_song} - {c_mode}")
-            c_blocks, c_meta, c_warnings = build_corrected_timeline(c_song, c_mode, spec, id_to_name)
-            songs[c_song][c_mode] = c_blocks
-            timeline_meta.setdefault(c_song, {})[c_mode] = c_meta
             corrected_count += 1
-            all_warnings.extend(f"[{c_song} - {c_mode}] {w}" for w in c_warnings)
-        # Non-corrected timelines get explicit default meta so the frontend
-        # can branch without guessing.
-        for song, modes_map in songs.items():
-            for mode in modes_map:
-                if mode not in timeline_meta.get(song, {}):
-                    timeline_meta.setdefault(song, {})[mode] = {
-                        "corrected": False,
-                        "beatPhaseOffsetMs": 0,
-                        "leadInEndMs": None,
-                        "outroStartMs": None,
-                        "outroEndMs": None,
-                    }
+            all_warnings.extend(f"[{sheet}] {w}" for w in warnings)
 
         # Structural validation.
         if len(songs) != 6:

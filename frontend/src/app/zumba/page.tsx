@@ -3,7 +3,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import ZumbaAvatarPlayer, { ZumbaAvatarPlayerHandle, ZUMBA_TEMPO_STORAGE_KEY } from '@/components/ZumbaAvatarPlayer';
+import ZumbaAvatarPlayer, {
+  ZumbaAvatarPlayerHandle,
+  ZUMBA_TEMPO_STORAGE_KEY,
+  ZUMBA_MODE_TEMPO,
+  setZumbaActiveMode,
+} from '@/components/ZumbaAvatarPlayer';
 import ZumbaCamera from '@/components/ZumbaCamera';
 import ZumbaSummary from '@/components/ZumbaSummary';
 import { ZumbaAnalysisResult, ZumbaSessionSummary } from '@/lib/zumbaApi';
@@ -210,6 +215,11 @@ export default function ZumbaPage() {
     if (selectedMode) window.localStorage.setItem('zumba.selectedMode', selectedMode);
   }, [selectedMode]);
 
+  // The avatar player uses the current mode to pick its default animation tempo.
+  useEffect(() => {
+    setZumbaActiveMode(selectedMode || '');
+  }, [selectedMode]);
+
   // Preload all GLBs for the selected song/mode whenever the timeline changes.
   useEffect(() => {
     if (isStarted) return; // never re-preload mid-session
@@ -385,6 +395,7 @@ export default function ZumbaPage() {
           entries={switchLog}
           isRunning={isRunning}
           corrected={Boolean(timelineMeta?.corrected)}
+          mode={selectedMode || ''}
         />
       )}
 
@@ -682,25 +693,31 @@ function BeatTestPanel({
   entries,
   isRunning,
   corrected,
+  mode,
 }: {
   entries: ZumbaSwitchLogEntry[];
   isRunning: boolean;
   corrected: boolean;
+  mode: string;
 }) {
   const passed = entries.filter((e) => Math.abs(e.latencyMs) <= BEAT_PASS_MS).length;
-  const [tempo, setTempo] = useState<number>(() => {
-    if (typeof window === 'undefined') return 0.85;
+  // null = "Auto": use the per-mode default; a number = manual A/B override.
+  const [override, setOverride] = useState<number | null>(() => {
+    if (typeof window === 'undefined') return null;
     const raw = window.localStorage.getItem(ZUMBA_TEMPO_STORAGE_KEY);
     const v = raw ? Number.parseFloat(raw) : NaN;
-    return Number.isFinite(v) ? v : 0.85;
+    return Number.isFinite(v) ? v : null;
   });
-  const pickTempo = (value: number) => {
-    window.localStorage.setItem(ZUMBA_TEMPO_STORAGE_KEY, String(value));
-    setTempo(value);
+  const modeDefault = ZUMBA_MODE_TEMPO[mode] ?? 0.85;
+  const effective = override ?? modeDefault;
+  const pickTempo = (value: number | null) => {
+    if (value == null) window.localStorage.removeItem(ZUMBA_TEMPO_STORAGE_KEY);
+    else window.localStorage.setItem(ZUMBA_TEMPO_STORAGE_KEY, String(value));
+    setOverride(value);
   };
 
   return (
-    <div className="fixed bottom-16 left-4 z-50 w-[min(520px,92vw)] rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-black/75 p-3 text-[12px] backdrop-blur-md">
+    <div className="fixed bottom-16 left-4 z-50 w-[min(560px,92vw)] rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-black/75 p-3 text-[12px] backdrop-blur-md">
       <div className="mb-2 flex items-center justify-between">
         <span className="font-semibold text-[var(--brand-neo)]">
           Beat Test {corrected ? '(beat-corrected sheet)' : '(legacy timing)'}
@@ -711,15 +728,25 @@ function BeatTestPanel({
       </div>
 
       {/* Live tempo A/B: lets a tester compare animation speeds without a
-          rebuild. Takes effect at the NEXT move switch. */}
-      <div className="mb-2 flex items-center gap-2">
+          rebuild. Takes effect at the NEXT move switch. Auto = mode default. */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
         <span className="text-[var(--ink-med)]">Speed tempo:</span>
+        <button
+          onClick={() => pickTempo(null)}
+          className={`rounded px-2 py-0.5 font-semibold transition-all ${
+            override == null
+              ? 'bg-[var(--brand-neo)] text-black'
+              : 'border border-[var(--glass-stroke)] text-[var(--brand-neo)] hover:bg-white/10'
+          }`}
+        >
+          Auto ({modeDefault.toFixed(2)}×{mode ? ` · ${mode}` : ''})
+        </button>
         {TEMPO_CHOICES.map((value) => (
           <button
             key={value}
             onClick={() => pickTempo(value)}
             className={`rounded px-2 py-0.5 font-semibold transition-all ${
-              tempo === value
+              override === value
                 ? 'bg-[var(--brand-neo)] text-black'
                 : 'border border-[var(--glass-stroke)] text-[var(--brand-neo)] hover:bg-white/10'
             }`}
@@ -727,7 +754,7 @@ function BeatTestPanel({
             {value.toFixed(2)}×
           </button>
         ))}
-        <span className="text-[var(--ink-med)]">(applies from the next move)</span>
+        <span className="text-[var(--ink-med)]">now: {effective.toFixed(2)}× (from next move)</span>
       </div>
       {entries.length > 0 && (
         <div className="max-h-[240px] overflow-y-auto">
