@@ -63,6 +63,11 @@ export type ZumbaAvatarPlayerHandle = {
 const TIME_SCALE_MIN = 0.45;
 const TIME_SCALE_MAX = 1.15;
 
+// Horizontal room reserved for wide poses, as a fraction of the avatar's
+// height (a full arm span is roughly one body height). Keeps moves like
+// Jumping Jacks in frame on narrow/portrait screens when zoomed in.
+const WIDE_POSE_REACH_RATIO = 0.75;
+
 // Visual tempo multiplier applied on top of the sheet's speed scale. < 1 slows
 // every animation for a calmer look. NOTE: values other than 1.0 trade away
 // exact loop-fit at group boundaries (the sheet's loop math assumes its speed
@@ -115,9 +120,52 @@ type MoveInstance = {
   mixer: THREE.AnimationMixer;
   actions: THREE.AnimationAction[];
   loop: boolean;
+  /** Facial morph weights to clamp after each mixer update. */
+  morphCaps: MorphCap[];
   /** Removes a pending 'finished' listener (e.g. intro -> main handoff). */
   clearFinished?: () => void;
 };
+
+type MorphCap = { mesh: THREE.Mesh; index: number; max: number };
+
+/**
+ * Upper limits for facial morph weights baked into the dance clips.
+ *
+ * Several clips drive `Mouth_Smile_Closed` to a full 1.0 while ALSO pulling the
+ * mouth corners with `mouthSmileLeft/Right`. Lips pressed shut and stretched
+ * wide at the same time reads as a grimace rather than a smile (most visible on
+ * Merengue March). Capping the closed-smile morph relaxes it into a natural
+ * expression. Clips that smile with the corners alone leave this morph at 0, so
+ * they are unaffected by this cap.
+ */
+const MORPH_WEIGHT_CAPS: Record<string, number> = {
+  mouth_smile_closed: 0.45,
+};
+
+/** Clamp capped morph weights. Runs every frame, so it stays index-based. */
+function applyMorphCaps(inst: MoveInstance) {
+  for (const cap of inst.morphCaps) {
+    const influences = cap.mesh.morphTargetInfluences;
+    if (influences && influences[cap.index] > cap.max) {
+      influences[cap.index] = cap.max;
+    }
+  }
+}
+
+/** Resolve which morph targets on this model need clamping (done once). */
+function collectMorphCaps(root: THREE.Object3D): MorphCap[] {
+  const caps: MorphCap[] = [];
+  root.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+    const dictionary = child.morphTargetDictionary;
+    if (!dictionary) return;
+    for (const [name, index] of Object.entries(dictionary)) {
+      const max = MORPH_WEIGHT_CAPS[name.toLowerCase()];
+      if (max !== undefined) caps.push({ mesh: child, index, max });
+    }
+  });
+  return caps;
+}
 
 function clearInstanceFinished(inst: MoveInstance) {
   if (inst.clearFinished) {
@@ -164,6 +212,10 @@ function applyDefaultSkinTone(root: THREE.Object3D, color: THREE.Color, strength
   });
 }
 
+// World height every avatar's feet are normalized to. The ground shadow plane
+// sits at this height, so the two must stay in sync.
+const AVATAR_FLOOR_Y = 0.5;
+
 // Match Avatar3D's normalizeYogaModelRoot so framing stays consistent with yoga.
 function normalizeRoot(root: THREE.Object3D): THREE.Group {
   root.scale.setScalar(1.2);
@@ -177,7 +229,7 @@ function normalizeRoot(root: THREE.Object3D): THREE.Group {
 
   const center = new THREE.Vector3();
   box.getCenter(center);
-  container.position.set(-center.x, -box.min.y + 0.5, 0);
+  container.position.set(-center.x, -box.min.y + AVATAR_FLOOR_Y, 0);
   return container;
 }
 
@@ -204,6 +256,14 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
     const instancesRef = useRef<Map<string, MoveInstance>>(new Map());
     const activeRef = useRef<MoveInstance | null>(null);
     const cameraFittedRef = useRef(false);
+    // The container the camera was last fitted to, so framing can be recomputed
+    // when the view switches between preview and session.
+    const fittedContainerRef = useRef<THREE.Group | null>(null);
+    // Framing inputs live in refs because the mount-once setup effect (resize
+    // handler) and the imperative handle capture their closures on first render
+    // and would otherwise keep applying the initial preview framing forever.
+    const cameraDistanceFactorRef = useRef(cameraDistanceFactor);
+    const cameraTargetYOffsetFactorRef = useRef(cameraTargetYOffsetFactor);
     // Bumped every time the scene/renderer is (re)created. React Strict Mode in
     // dev mounts -> unmounts -> mounts, tearing down the first scene; async loads
     // tagged with an old generation are discarded so they don't target a dead scene.
@@ -293,6 +353,10 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1;
+      // Soft ground shadow (see the shadow plane below). Kept at a modest map
+      // size because this also runs on low-end integrated GPUs.
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       mount.appendChild(renderer.domElement);
       renderer.domElement.style.width = '100%';
       renderer.domElement.style.height = '100%';
@@ -314,6 +378,31 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       scene.add(point);
       scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 0.55));
 
+      // Grounding shadow: the key light casts onto a shadow-only plane at the
+      // avatar's feet. ShadowMaterial draws nothing but the shadow itself, so
+      // the holobox background stays fully transparent.
+      dir1.castShadow = true;
+      dir1.shadow.mapSize.set(1024, 1024);
+      dir1.shadow.camera.near = 0.5;
+      dir1.shadow.camera.far = 20;
+      dir1.shadow.camera.left = -2.5;
+      dir1.shadow.camera.right = 2.5;
+      dir1.shadow.camera.top = 2.5;
+      dir1.shadow.camera.bottom = -2.5;
+      // Skinned meshes are prone to shadow acne; these offsets clear it.
+      dir1.shadow.bias = -0.0015;
+      dir1.shadow.normalBias = 0.02;
+      dir1.target.position.set(0, AVATAR_FLOOR_Y, 0);
+      scene.add(dir1.target);
+
+      const shadowGeometry = new THREE.PlaneGeometry(6, 6);
+      const shadowMaterial = new THREE.ShadowMaterial({ opacity: 0.34 });
+      const shadowPlane = new THREE.Mesh(shadowGeometry, shadowMaterial);
+      shadowPlane.rotation.x = -Math.PI / 2;
+      shadowPlane.position.y = AVATAR_FLOOR_Y;
+      shadowPlane.receiveShadow = true;
+      scene.add(shadowPlane);
+
       const cache = new ZumbaAssetCache();
       cache.attachRenderer(renderer);
 
@@ -328,6 +417,9 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         renderer.setSize(w, h);
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
+        // The width guard in fitCameraTo depends on aspect, so re-fit on resize.
+        const fitted = fittedContainerRef.current ?? activeRef.current?.container ?? null;
+        if (fitted) fitCameraTo(fitted);
       };
       window.addEventListener('resize', handleResize);
       // The avatar container is resized via CSS (preview <-> session), which does
@@ -371,7 +463,12 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       const renderLoop = () => {
         const delta = clockRef.current.getDelta();
         const active = activeRef.current;
-        if (active) active.mixer.update(delta);
+        if (active) {
+          active.mixer.update(delta);
+          // The mixer just wrote this frame's morph weights; clamp the capped
+          // facial ones before they reach the GPU.
+          applyMorphCaps(active);
+        }
 
         renderer.render(scene, camera);
         rafRef.current = requestAnimationFrame(renderLoop);
@@ -399,6 +496,11 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         }
         instances.clear();
         activeRef.current = null;
+        fittedContainerRef.current = null;
+        if (!contextLostRef.current) {
+          try { shadowGeometry.dispose(); } catch { /* noop */ }
+          try { shadowMaterial.dispose(); } catch { /* noop */ }
+        }
         try { cacheRef.current?.dispose(); } catch { /* noop */ }
         try { renderer.dispose(); } catch { /* noop */ }
         if (renderer.domElement.parentNode === mount) {
@@ -422,17 +524,42 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       box.getCenter(center);
 
       const target = center.clone();
-      target.y = box.min.y + size.y * (0.5 + cameraTargetYOffsetFactor);
+      target.y = box.min.y + size.y * (0.5 + cameraTargetYOffsetFactorRef.current);
       target.x = 0;
 
-      const distance = size.y * cameraDistanceFactor;
+      // Height-driven zoom is the tuning knob (smaller factor = bigger avatar).
+      const heightDistance = size.y * cameraDistanceFactorRef.current;
+
+      // Width guard: the bounding box comes from the animation's first frame,
+      // but moves like Jumping Jacks / Side Punches reach much wider. On narrow
+      // or portrait screens a purely height-based fit would clip those poses,
+      // so back the camera off far enough to keep that reach in frame.
+      const halfTanV = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+      const aspect = Math.max(camera.aspect, 0.0001);
+      const reachWidth = Math.max(size.x, size.y * WIDE_POSE_REACH_RATIO);
+      const widthDistance = reachWidth / (2 * halfTanV * aspect);
+
+      const distance = Math.max(heightDistance, widthDistance);
       camera.position.set(target.x, target.y, target.z + distance);
       camera.lookAt(target);
       camera.near = Math.max(0.01, distance / 100);
       camera.far = Math.max(1000, distance * 100);
       camera.updateProjectionMatrix();
       cameraFittedRef.current = true;
+      fittedContainerRef.current = container;
     }
+
+    // Re-fit when the framing props change (entering/leaving the session view).
+    // Without this the camera keeps the framing it was first fitted with, so the
+    // session zoom would never take effect. The refs are updated here (rather
+    // than in a separate effect) so fitCameraTo always sees the new values.
+    useEffect(() => {
+      cameraDistanceFactorRef.current = cameraDistanceFactor;
+      cameraTargetYOffsetFactorRef.current = cameraTargetYOffsetFactor;
+      const container = fittedContainerRef.current ?? activeRef.current?.container ?? null;
+      if (container) fitCameraTo(container);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- fitCameraTo reads live refs; only the framing inputs should retrigger it.
+    }, [cameraDistanceFactor, cameraTargetYOffsetFactor]);
 
     // Build (or reuse) a runtime instance for a move phase, warm it on the GPU.
     // `gen` ties the work to a scene generation; if the scene is rebuilt mid-load
@@ -470,7 +597,13 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         actions.push(action);
       }
 
-      const inst: MoveInstance = { container, mixer, actions, loop };
+      const inst: MoveInstance = {
+        container,
+        mixer,
+        actions,
+        loop,
+        morphCaps: collectMorphCaps(clone),
+      };
       instancesRef.current.set(id, inst);
 
       // Evaluate the authored first frame before any render. Some exports drive
@@ -478,6 +611,7 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       // can expose the body for one frame.
       for (const action of actions) action.play();
       mixer.update(0);
+      applyMorphCaps(inst);
       for (const action of actions) {
         action.stop();
         action.reset();
@@ -546,6 +680,7 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       // Apply the requested animation state while the model is still hidden.
       // The following visible render therefore starts at a fully valid frame.
       inst.mixer.update(0);
+      applyMorphCaps(inst);
       if (opts?.onFinished && inst.actions.length > 0) {
         attachFinished(inst, opts.onFinished);
       }

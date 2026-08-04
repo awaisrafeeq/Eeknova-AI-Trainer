@@ -26,6 +26,7 @@ import type {
   ZumbaMappingsJson,
   ZumbaMode,
   ZumbaPreloadStatus,
+  ZumbaTimelineBlock,
 } from '@/lib/zumbaTimelineTypes';
 import { useZumbaTimelinePlayer, type ZumbaSwitchLogEntry } from '@/hooks/useZumbaTimelinePlayer';
 import { useAuth } from '@/hooks/useAuth';
@@ -127,7 +128,7 @@ export default function ZumbaPage() {
     playOutroThenClose(timeline[timeline.length - 1]?.moveKey);
   }, [playOutroThenClose, timeline]);
 
-  const { isRunning, currentBlock, nextBlock, timelineMs, switchLog, start, stop } = useZumbaTimelinePlayer({
+  const { isRunning, currentBlock, timelineMs, switchLog, start, stop } = useZumbaTimelinePlayer({
     timeline,
     meta: timelineMeta,
     playerRef,
@@ -350,9 +351,22 @@ export default function ZumbaPage() {
     router.push('/dashboard');
   };
 
-  // Seconds until the next move switch, for the live "Next" label.
-  const nextInSeconds = nextBlock && isRunning
-    ? Math.max(0, (nextBlock.startMs - timelineMs) / 1000)
+  // The next block whose step actually differs from the current one. Blocks
+  // inside a move group repeat the same step, so counting down to the next
+  // *block* would run a countdown for a step that is not changing at all.
+  const upcomingChangeBlock = useMemo(() => {
+    if (!currentBlock) return null;
+    const currentIndex = timeline.indexOf(currentBlock);
+    if (currentIndex === -1) return null;
+    for (let i = currentIndex + 1; i < timeline.length; i += 1) {
+      if (timeline[i].moveKey !== currentBlock.moveKey) return timeline[i];
+    }
+    return null; // current step runs to the end of the song
+  }, [timeline, currentBlock]);
+
+  // Seconds until the step actually changes.
+  const changeInSeconds = upcomingChangeBlock && isRunning
+    ? Math.max(0, (upcomingChangeBlock.startMs - timelineMs) / 1000)
     : null;
 
   if (authLoading || isLoading) {
@@ -381,6 +395,21 @@ export default function ZumbaPage() {
       }}
     >
       {!isSessionViewActive && <Particles />}
+
+      {/* Current move + upcoming step preview. Fixed to the viewport (rather
+          than the avatar container, which is bottom-aligned) so they sit at
+          the true top of the screen. */}
+      {isSessionViewActive && currentBlock && (
+        <div className="pointer-events-none fixed left-1/2 top-4 z-40 -translate-x-1/2 rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-black/40 px-6 py-3 text-center backdrop-blur-md">
+          <div className="text-[13px] uppercase tracking-wide text-[var(--ink-med)]">Current</div>
+          <div className="text-[24px] font-bold text-[var(--brand-neo)]">
+            {currentBlock.moveName}{currentBlock.side ? ` (${currentBlock.side})` : ''}
+          </div>
+        </div>
+      )}
+      {isSessionViewActive && (
+        <NextStepCountdown block={upcomingChangeBlock} secondsLeft={changeInSeconds} />
+      )}
 
       {/* Beat verification: on-screen proof that switches land on the sheet's
           times — no console needed. Toggle stays available in every state. */}
@@ -428,8 +457,8 @@ export default function ZumbaPage() {
                         ref={playerRef}
                         mapping={mapping}
                         onPreloadStatus={setPreloadStatus}
-                        cameraDistanceFactor={isSessionViewActive ? 1.65 : 1.75}
-                        cameraTargetYOffsetFactor={isSessionViewActive ? 0.04 : 0.02}
+                        cameraDistanceFactor={isSessionViewActive ? 1.3 : 1.75}
+                        cameraTargetYOffsetFactor={isSessionViewActive ? 0.0 : 0.02}
                       />
                       {!isSessionViewActive && preloadStatus.state !== 'ready' && (
                         <ZumbaAvatarLoading status={preloadStatus} />
@@ -449,21 +478,6 @@ export default function ZumbaPage() {
                     </div>
                   )}
 
-                  {/* Live current / next move overlay during a session */}
-                  {isSessionViewActive && currentBlock && (
-                    <div className="pointer-events-none absolute left-1/2 top-6 z-20 -translate-x-1/2 rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-black/40 px-6 py-3 text-center backdrop-blur-md">
-                      <div className="text-[13px] uppercase tracking-wide text-[var(--ink-med)]">Current</div>
-                      <div className="text-[24px] font-bold text-[var(--brand-neo)]">
-                        {currentBlock.moveName}{currentBlock.side ? ` (${currentBlock.side})` : ''}
-                      </div>
-                      {nextBlock && (
-                        <div className="mt-1 text-[14px] text-white">
-                          Next: {nextBlock.moveName}
-                          {nextInSeconds != null ? ` in ${nextInSeconds.toFixed(1)}s` : ''}
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -677,6 +691,78 @@ export default function ZumbaPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+/**
+ * Top-right "coming up" preview for the next dance step.
+ *
+ * `block` is the next block whose step actually CHANGES, so a step repeating
+ * across several 8-count blocks never triggers a countdown. While dancing it is
+ * hard to read a move name, so the last few seconds count down as a single
+ * large digit (5, 4, 3, 2, 1), which is readable peripherally.
+ */
+function NextStepCountdown({
+  block,
+  secondsLeft,
+}: {
+  block: ZumbaTimelineBlock | null;
+  secondsLeft: number | null;
+}) {
+  if (!block || secondsLeft == null) return null;
+
+  const COUNTDOWN_FROM = 5;
+  const isCountingDown = secondsLeft <= COUNTDOWN_FROM;
+  // 5.0s -> "5", 0.4s -> "1": the digit shown is the second being counted.
+  const digit = Math.max(1, Math.min(COUNTDOWN_FROM, Math.ceil(secondsLeft)));
+  // Fills up as the switch approaches.
+  const progress = Math.max(0, Math.min(100, (1 - secondsLeft / COUNTDOWN_FROM) * 100));
+
+  return (
+    <div
+      className={`pointer-events-none fixed right-4 top-4 z-40 w-[min(260px,42vw)] rounded-[var(--radius-md)] border bg-black/45 px-5 py-4 text-right backdrop-blur-md transition-all duration-300 ${
+        isCountingDown
+          ? 'border-[var(--brand-neo)] shadow-[0_0_28px_rgba(25,227,255,.35)]'
+          : 'border-[var(--glass-stroke)]'
+      }`}
+    >
+      <div className="text-[12px] uppercase tracking-[0.18em] text-[var(--ink-med)]">Coming up</div>
+      <div className="mt-1 text-[22px] font-bold leading-tight text-white">
+        {block.moveName}
+        {block.side ? <span className="text-[var(--ink-med)]"> ({block.side})</span> : null}
+      </div>
+
+      {isCountingDown ? (
+        <div className="mt-2 flex items-baseline justify-end gap-2">
+          <span className="text-[13px] text-[var(--ink-med)]">in</span>
+          <span
+            key={digit}
+            className="text-[56px] font-black leading-none text-[var(--brand-neo)]"
+            style={{ fontFamily: 'var(--font-future)', animation: 'zumba-count-pop 0.45s ease-out' }}
+          >
+            {digit}
+          </span>
+        </div>
+      ) : (
+        <div className="mt-2 text-[15px] text-[var(--ink-med)]">
+          in {secondsLeft.toFixed(1)}s
+        </div>
+      )}
+
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div
+          className="h-full rounded-full bg-[var(--brand-neo)]"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      <style>{`
+        @keyframes zumba-count-pop {
+          0%   { transform: scale(1.5); opacity: 0.35; }
+          100% { transform: scale(1);   opacity: 1; }
+        }
+      `}</style>
+    </div>
   );
 }
 
