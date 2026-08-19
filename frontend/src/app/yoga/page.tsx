@@ -1018,6 +1018,7 @@ export default function YogaPage() {
                     playAnimationKey={auxAnimKey}
                     isPaused={isPaused}
                     cameraZoom={1}
+                    showGroundShadow={true}
                     onReadyChange={handleAvatarReadyChange}
                   />
                 ) : flowStage === 'setup' && !isSessionStarted ? (
@@ -1032,6 +1033,7 @@ export default function YogaPage() {
                       cameraManualDistanceFactor={1.75}
                       cameraManualTargetYOffsetFactor={0.00}
                       lockCamera={true} // LOCKUP-SETUP: Camera lock for setup stage
+                      showGroundShadow={true}
                       onReadyChange={handleAvatarReadyChange}
                     />
                   ) : (
@@ -1048,6 +1050,7 @@ export default function YogaPage() {
                     cameraManualDistanceFactor={1.6}
                     cameraManualTargetYOffsetFactor={0.0}
                     lockCamera={true}
+                    showGroundShadow={true}
                     onReadyChange={handleAvatarReadyChange}
                   />
                 ) : flowStage === 'release' && !releasePlaybackReady ? (
@@ -1067,6 +1070,7 @@ export default function YogaPage() {
                     cameraManualTargetYOffsetFactor={0.0}
                     lockCamera={true}
                     freezeCameraFit={flowStage === 'pose' || flowStage === 'release'}
+                    showGroundShadow={true}
                     onReadyChange={handleAvatarReadyChange}
                     onPhaseChange={(phase) => {
                       setCurrentPhase(phase === 'main' ? 'hold' : phase);
