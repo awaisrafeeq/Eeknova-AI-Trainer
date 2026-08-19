@@ -379,8 +379,9 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 0.55));
 
       // Grounding shadow: the key light casts onto a shadow-only plane at the
-      // avatar's feet. ShadowMaterial draws nothing but the shadow itself, so
-      // the holobox background stays fully transparent.
+      // avatar's feet. Its 45 degree angle throws the shadow out to the side,
+      // which is the look we want. ShadowMaterial draws nothing but the shadow
+      // itself, so the holobox background stays fully transparent.
       dir1.castShadow = true;
       dir1.shadow.mapSize.set(1024, 1024);
       dir1.shadow.camera.near = 0.5;
