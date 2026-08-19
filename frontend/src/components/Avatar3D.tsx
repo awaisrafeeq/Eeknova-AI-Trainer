@@ -27,6 +27,10 @@ const YOGA_REFERENCE_SIZE = new THREE.Vector3(2.0, 2.2, 1.5);
 let cachedStaticGltf: any = null;
 let cachedStaticModelPath: string | null = null;
 
+// World height every normalized model's lowest point is placed at. The ground
+// shadow plane sits here too, so the two must stay in sync.
+const AVATAR_FLOOR_Y = 0.5;
+
 function normalizeYogaModelRoot(root: THREE.Object3D): THREE.Group {
   root.scale.setScalar(1.2);
   root.position.set(0, -1, 0);
@@ -46,7 +50,7 @@ function normalizeYogaModelRoot(root: THREE.Object3D): THREE.Group {
   box.getSize(size);
   box.getCenter(center);
 
-  container.position.set(-center.x, -box.min.y + 0.5, 0);
+  container.position.set(-center.x, -box.min.y + AVATAR_FLOOR_Y, 0);
   return container;
 }
 
@@ -484,6 +488,12 @@ interface Avatar3DProps {
   cameraManualTargetXOffsetFactor?: number;
   lockCamera?: boolean;
   freezeCameraFit?: boolean;
+  /**
+   * Render a soft contact shadow under the avatar. Opt-in because it assumes
+   * the model was normalized by normalizeYogaModelRoot (feet at AVATAR_FLOOR_Y);
+   * the chess "Encouraging Gesture" avatar skips that normalization.
+   */
+  showGroundShadow?: boolean;
   skinToneColor?: string;
   skinToneStrength?: number;
   onTTSSpeaking?: (speaking: boolean) => void;
@@ -2285,7 +2295,7 @@ interface Avatar3DProps {
 
 
 
-export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, ttsText = '', isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, loopCustomAnimation = false, inAnimationTargetDurationSec, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, cameraDistanceScale = 1, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera = false, freezeCameraFit = false, skinToneColor = '#f3cdac', skinToneStrength = 0.45, onTTSSpeaking, onError, onSessionEnd, onCustomAnimationEnd, onPhaseChange, onReadyChange }: Avatar3DProps) {
+export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, ttsText = '', isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, loopCustomAnimation = false, inAnimationTargetDurationSec, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, cameraDistanceScale = 1, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera = false, freezeCameraFit = false, showGroundShadow = false, skinToneColor = '#f3cdac', skinToneStrength = 0.45, onTTSSpeaking, onError, onSessionEnd, onCustomAnimationEnd, onPhaseChange, onReadyChange }: Avatar3DProps) {
 
   const [webglSupported, setWebglSupported] = useState(true);
 
@@ -2431,6 +2441,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
           <Canvas
             camera={{ position: [0, 0, 3], fov: 50 }}
             dpr={[1, 1.5]}
+            shadows={showGroundShadow ? 'soft' : false}
             gl={{
               antialias: true,
               alpha: true,
@@ -2450,16 +2461,39 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
             }}
           >
             <ambientLight intensity={0.95} />
+            {/* Key light. Also the shadow caster; the bias values keep skinned
+                meshes free of shadow acne. */}
             <directionalLight
               position={[5, 5, 5]}
               intensity={1.35}
               castShadow
-              shadow-mapSize-width={512}
-              shadow-mapSize-height={512}
+              shadow-mapSize-width={1024}
+              shadow-mapSize-height={1024}
+              shadow-camera-near={0.5}
+              shadow-camera-far={20}
+              shadow-camera-left={-2.5}
+              shadow-camera-right={2.5}
+              shadow-camera-top={2.5}
+              shadow-camera-bottom={-2.5}
+              shadow-bias={-0.0015}
+              shadow-normalBias={0.02}
             />
             <directionalLight position={[-5, 5, 5]} intensity={1.1} />
             <pointLight position={[0, 2, 2]} intensity={0.85} />
             <hemisphereLight args={[0xffffff, 0x888888, 0.55]} />
+            {/* Grounding shadow: a shadow-only plane at the avatar's feet.
+                shadowMaterial draws nothing but the shadow itself, so the
+                transparent canvas background is preserved. */}
+            {showGroundShadow && (
+              <mesh
+                receiveShadow
+                rotation={[-Math.PI / 2, 0, 0]}
+                position={[0, AVATAR_FLOOR_Y, 0]}
+              >
+                <planeGeometry args={[6, 6]} />
+                <shadowMaterial opacity={0.34} />
+              </mesh>
+            )}
             <AutoFitCamera object={fitObject} referenceSize={referenceSizeRef.current} cameraZoom={cameraZoom} cameraTargetYOffset={cameraTargetYOffset} cameraPositionYRaise={cameraPositionYRaise} cameraDistanceScale={cameraDistanceScale} cameraManualDistanceFactor={cameraManualDistanceFactor} cameraManualTargetYOffsetFactor={cameraManualTargetYOffsetFactor} cameraManualTargetXOffsetFactor={cameraManualTargetXOffsetFactor} lockCamera={lockCamera} freezeCameraFit={freezeCameraFit} onTargetChange={setCameraTarget} onCameraFitted={handleCameraFitted} />
             <CameraControls target={cameraTarget} />
             <Suspense fallback={null}>
