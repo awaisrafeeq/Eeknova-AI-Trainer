@@ -36,6 +36,15 @@ function normalizeYogaModelRoot(root: THREE.Object3D): THREE.Group {
   root.position.set(0, -1, 0);
   root.updateMatrixWorld(true);
 
+  // Make every normalized model a shadow caster here rather than in each
+  // loader: the model is loaded through several different code paths and some
+  // of them never set this, which left the avatar casting no ground shadow.
+  root.traverse((child: THREE.Object3D) => {
+    if (child instanceof THREE.Mesh) {
+      child.castShadow = true;
+    }
+  });
+
   const box = new THREE.Box3().setFromObject(root);
   const container = new THREE.Group();
   container.name = 'NormalizedYogaModelContainer';
@@ -2461,8 +2470,9 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
             }}
           >
             <ambientLight intensity={0.95} />
-            {/* Key light. Also the shadow caster; the bias values keep skinned
-                meshes free of shadow acne. */}
+            {/* Key light, and the shadow caster. Its 45 degree angle is what
+                throws the shadow out to the side, which is the look we want.
+                The bias values keep skinned meshes free of shadow acne. */}
             <directionalLight
               position={[5, 5, 5]}
               intensity={1.35}
