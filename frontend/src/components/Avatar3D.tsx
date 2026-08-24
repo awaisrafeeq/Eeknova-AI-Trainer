@@ -27,6 +27,78 @@ const YOGA_REFERENCE_SIZE = new THREE.Vector3(2.0, 2.2, 1.5);
 let cachedStaticGltf: any = null;
 let cachedStaticModelPath: string | null = null;
 
+// Module-level cache for the selected pose's IN/MAIN/OUT GLBs.
+//
+// Each yoga phase file is ~39 MB and THREE's own cache is disabled, so fetching
+// one at a phase transition stalls the avatar for seconds. This cache must live
+// at module level rather than in a ref: the setup preview and the running
+// session are two different Avatar3D instances, so anything warmed during setup
+// would be thrown away on remount otherwise.
+//
+// Only one pose is held at a time. Displayed models are SkeletonUtils clones
+// flagged __isSharedClone, so disposing them never destroys the cached source.
+type LoadedPhaseGltf = { scene: THREE.Group; animations: THREE.AnimationClip[] };
+
+let cachedPhasePose: string | null = null;
+const cachedPhaseGltfs = new Map<string, LoadedPhaseGltf>();
+
+function clearPhaseCache() {
+  for (const gltf of cachedPhaseGltfs.values()) {
+    try { disposeObject3D(gltf?.scene); } catch { }
+  }
+  cachedPhaseGltfs.clear();
+  cachedPhasePose = null;
+}
+
+/** Drop the cache when switching poses so stale ~39 MB models are not pinned. */
+function setPhaseCachePose(pose: string) {
+  if (cachedPhasePose === pose) return;
+  clearPhaseCache();
+  cachedPhasePose = pose;
+}
+
+// Module level so the setup preview and the running session (separate Avatar3D
+// instances) never start duplicate fetches of the same file.
+const phaseWarmUpsInFlight = new Set<string>();
+
+/** Fetch a phase GLB in the background into the cache. Failures are non-fatal. */
+function warmPhaseGltf(
+  loader: GLTFLoader,
+  pose: string,
+  path?: string,
+  onWarmed?: (gltf: LoadedPhaseGltf) => void,
+) {
+  if (!path) return;
+  if (cachedPhaseGltfs.has(path) || phaseWarmUpsInFlight.has(path)) return;
+  phaseWarmUpsInFlight.add(path);
+  loader.load(
+    path,
+    (gltf) => {
+      phaseWarmUpsInFlight.delete(path);
+      // The pose may have changed while this was in flight.
+      if (cachedPhasePose === pose) {
+        cachedPhaseGltfs.set(path, gltf);
+        onWarmed?.(gltf);
+      } else {
+        try { disposeObject3D(gltf?.scene); } catch { }
+      }
+    },
+    undefined,
+    () => {
+      // The phase simply falls back to loading on demand.
+      phaseWarmUpsInFlight.delete(path);
+    },
+  );
+}
+
+/**
+ * Free the cached pose phases. Call when leaving the yoga flow entirely; the
+ * cache intentionally survives the setup -> session component remount.
+ */
+export function clearYogaPhaseCache() {
+  clearPhaseCache();
+}
+
 // World height every normalized model's lowest point is placed at. The ground
 // shadow plane sits here too, so the two must stay in sync.
 const AVATAR_FLOOR_Y = 0.5;
@@ -503,6 +575,11 @@ interface Avatar3DProps {
    * the chess "Encouraging Gesture" avatar skips that normalization.
    */
   showGroundShadow?: boolean;
+  /**
+   * Warm the selected pose's IN/MAIN GLBs in the background. Set this on the
+   * setup preview so pressing Start does not stall on a ~39 MB fetch.
+   */
+  preloadPosePhases?: boolean;
   skinToneColor?: string;
   skinToneStrength?: number;
   onTTSSpeaking?: (speaking: boolean) => void;
@@ -515,7 +592,7 @@ interface Avatar3DProps {
   onReadyChange?: (ready: boolean) => void;
 }
 
-function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, ttsText = '', isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, loopCustomAnimation = false, inAnimationTargetDurationSec, skinToneColor = '#f3cdac', skinToneStrength = 0.45, onError, onTTSSpeaking, onSessionEnd, onCustomAnimationEnd, onPhaseChange, onModelLoaded, onLoadingChange }: Avatar3DProps & { onLoadingChange?: (loading: boolean) => void }) {
+function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, ttsText = '', isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, loopCustomAnimation = false, inAnimationTargetDurationSec, skinToneColor = '#f3cdac', skinToneStrength = 0.45, preloadPosePhases = false, onError, onTTSSpeaking, onSessionEnd, onCustomAnimationEnd, onPhaseChange, onModelLoaded, onLoadingChange }: Avatar3DProps & { onLoadingChange?: (loading: boolean) => void }) {
 
   const [model, setModel] = useState<THREE.Group | null>(null);
 
@@ -529,6 +606,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
   const animationFinishedCleanupRef = useRef<(() => void) | null>(null);
   const loadRequestIdRef = useRef(0);
 
+
   const currentPoseRef = useRef<string>('');
 
   const beginModelLoad = () => {
@@ -540,6 +618,37 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
   const scene = useThree((state) => state.scene); // Get scene from useThree hook
   const gl = useThree((state) => state.gl);
+  const camera = useThree((state) => state.camera);
+
+  /**
+   * Force a freshly loaded phase onto the GPU.
+   *
+   * Caching the parsed GLB removes the fetch, but a model is only uploaded
+   * (geometry buffers, textures, shader programs) the first time it is actually
+   * rendered. Without this, OUT froze the avatar for about a second at the swap
+   * because it had never been drawn, while MAIN was already warm from the setup
+   * preview. Drawing into a tiny offscreen target does the upload with nothing
+   * appearing on the visible canvas.
+   */
+  const gpuWarmPhase = useCallback((gltf: LoadedPhaseGltf) => {
+    const probe = gltf?.scene;
+    if (!gl || !scene || !camera || !probe) return;
+
+    const previousTarget = gl.getRenderTarget();
+    const warmTarget = new THREE.WebGLRenderTarget(2, 2, {
+      depthBuffer: true,
+      stencilBuffer: false,
+    });
+    scene.add(probe);
+    try {
+      gl.setRenderTarget(warmTarget);
+      gl.render(scene, camera);
+    } catch { /* warm-up is best effort */ } finally {
+      gl.setRenderTarget(previousTarget);
+      scene.remove(probe);
+      warmTarget.dispose();
+    }
+  }, [gl, scene, camera]);
 
   const dracoLoaderRef = useRef<DRACOLoader | null>(null);
   const ktx2LoaderRef = useRef<KTX2Loader | null>(null);
@@ -571,6 +680,33 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
       dracoLoaderRef.current = null;
     };
   }, [gl]);
+
+  // Warm the selected pose's phases while the user is still on the setup screen.
+  // IN is fetched first because it is needed the instant Start is pressed; MAIN
+  // follows so the IN -> MAIN transition is also an instant swap.
+  //
+  // Note: warmed phases are deliberately NOT dropped on unmount. This component
+  // unmounts when the setup preview hands over to the running session, and
+  // clearing the cache there would discard exactly the phases warmed up for that
+  // session. The yoga page calls clearYogaPhaseCache() when it leaves the flow.
+  useEffect(() => {
+    if (!preloadPosePhases || !selectedPose) return;
+    const pose = YOGA_POSE_ANIMATIONS[selectedPose];
+    if (!pose) return;
+
+    setPhaseCachePose(selectedPose);
+
+    const warmLoader = new GLTFLoader();
+    if (dracoLoaderRef.current) warmLoader.setDRACOLoader(dracoLoaderRef.current);
+    if (ktx2LoaderRef.current) warmLoader.setKTX2Loader(ktx2LoaderRef.current);
+
+    warmPhaseGltf(warmLoader, selectedPose, pose.inPath, gpuWarmPhase);
+    warmPhaseGltf(warmLoader, selectedPose, pose.mainPath, gpuWarmPhase);
+    // OUT is warmed here too. It is the phase that used to stall the hardest:
+    // it is never shown before the session ends, so it had no chance to be
+    // uploaded to the GPU beforehand.
+    warmPhaseGltf(warmLoader, selectedPose, pose.outPath, gpuWarmPhase);
+  }, [preloadPosePhases, selectedPose, gpuWarmPhase]);
 
   // Dispose previous model's GPU resources when a new one replaces it.
   // This prevents textures/geometries/materials from accumulating across
@@ -955,6 +1091,14 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
     if (dracoLoaderRef.current) loader.setDRACOLoader(dracoLoaderRef.current);
     if (ktx2LoaderRef.current) loader.setKTX2Loader(ktx2LoaderRef.current);
 
+    // Switching poses invalidates any phase warmed for the previous one.
+    setPhaseCachePose(selectedPose);
+
+    // Fetch a phase GLB in the background AND push it to the GPU, so its
+    // transition is an instant swap instead of a multi-second stall.
+    const preloadPhase = (path?: string) =>
+      warmPhaseGltf(loader, selectedPose, path, gpuWarmPhase);
+
 
 
     // Start animation sequence only if not in onlyInAnimation mode and not staticMode
@@ -1151,9 +1295,19 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
         }
 
         const loadPath = type === 'in' ? pose.inPath : type === 'main' ? pose.mainPath : pose.outPath;
-        const gltf = await new Promise<any>((resolve, reject) => {
-          loader.load(loadPath, resolve, undefined, reject);
-        });
+
+        // Use the phase warmed up earlier (during setup, or while the previous
+        // phase played); only fall back to a blocking fetch if it is missing.
+        let gltf: LoadedPhaseGltf;
+        const warmed = cachedPhaseGltfs.get(loadPath);
+        if (warmed) {
+          gltf = warmed;
+        } else {
+          gltf = await new Promise<LoadedPhaseGltf>((resolve, reject) => {
+            loader.load(loadPath, resolve, undefined, reject);
+          });
+          if (cachedPhasePose === selectedPose) cachedPhaseGltfs.set(loadPath, gltf);
+        }
         if (!isCurrentModelLoad(requestId)) return;
 
         // Capture the previous phase's model so we can dispose it AFTER the new one
@@ -1161,7 +1315,11 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
         // renderer briefly drawing with freed textures.
         const previousModel = meshRef.current;
 
-        const loadedModel = gltf.scene;
+        // Display a clone so the cached source survives this model's disposal.
+        // __isSharedClone makes disposeObject3D skip it (geometries, materials
+        // and textures are shared with the cached GLTF).
+        const loadedModel = SkeletonUtils.clone(gltf.scene) as THREE.Group;
+        (loadedModel as any).__isSharedClone = true;
 
         applySkinTone(loadedModel, new THREE.Color(skinToneColor), skinToneStrength);
 
@@ -1455,6 +1613,14 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
         // Notify parent of phase change
         onPhaseChange?.(type);
+
+        // Warm the next phase now, while this one plays, so its transition is
+        // an instant swap. IN and MAIN both run long enough to hide the fetch.
+        if (type === 'in') {
+          preloadPhase(pose.mainPath);
+        } else if (type === 'main') {
+          preloadPhase(pose.outPath);
+        }
 
         console.log(`Successfully loaded ${type} animation for ${selectedPose}`);
 
@@ -2304,7 +2470,7 @@ interface Avatar3DProps {
 
 
 
-export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, ttsText = '', isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, loopCustomAnimation = false, inAnimationTargetDurationSec, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, cameraDistanceScale = 1, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera = false, freezeCameraFit = false, showGroundShadow = false, skinToneColor = '#f3cdac', skinToneStrength = 0.45, onTTSSpeaking, onError, onSessionEnd, onCustomAnimationEnd, onPhaseChange, onReadyChange }: Avatar3DProps) {
+export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimation = false, onlyOutAnimation = false, disablePoseMotion = false, isTTSSpeaking = false, ttsText = '', isPaused = false, staticMode = false, staticModelPath, playAnimationPath, playAnimationKey, loopCustomAnimation = false, inAnimationTargetDurationSec, cameraZoom = 1, cameraTargetYOffset = 0, cameraPositionYRaise = 0, cameraDistanceScale = 1, cameraManualDistanceFactor, cameraManualTargetYOffsetFactor, cameraManualTargetXOffsetFactor, lockCamera = false, freezeCameraFit = false, showGroundShadow = false, preloadPosePhases = false, skinToneColor = '#f3cdac', skinToneStrength = 0.45, onTTSSpeaking, onError, onSessionEnd, onCustomAnimationEnd, onPhaseChange, onReadyChange }: Avatar3DProps) {
 
   const [webglSupported, setWebglSupported] = useState(true);
 
@@ -2324,9 +2490,9 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
   );
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
 
-  // Hide the canvas immediately when any avatar source changes. The actual model
-  // load happens inside YogaModel effects, which run after paint; doing this at
-  // the parent layout phase prevents a one-frame flash at the default camera.
+  // Hide the canvas immediately when the actual avatar source changes. Phase
+  // flags are intentionally excluded: IN/MAIN/OUT are cached swaps for the same
+  // pose, so the current frame must remain visible until the replacement is ready.
   React.useLayoutEffect(() => {
     setModelLoading(true);
     setFitObject(null);
@@ -2343,8 +2509,6 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
     playAnimationPath,
     playAnimationKey,
     loopCustomAnimation,
-    onlyInAnimation,
-    onlyOutAnimation,
   ]);
 
   const avatarReady = !modelLoading && !!fitObject && cameraFitted;
@@ -2523,6 +2687,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
                 inAnimationTargetDurationSec={inAnimationTargetDurationSec}
                 skinToneColor={skinToneColor}
                 skinToneStrength={skinToneStrength}
+                preloadPosePhases={preloadPosePhases}
                 onError={setError}
                 onTTSSpeaking={onTTSSpeaking}
                 onModelLoaded={setFitObject}
