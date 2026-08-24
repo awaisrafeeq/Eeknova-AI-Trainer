@@ -6,7 +6,7 @@ import { authRedirect } from '@/lib/auth';
 
 import { useRouter } from 'next/navigation';
 
-import Avatar3D from '@/components/Avatar3D';
+import Avatar3D, { clearYogaPhaseCache } from '@/components/Avatar3D';
 import YogaCamera from '@/components/YogaCamera';
 import { SessionSummary, TTSFeedback } from '@/lib/yogaApi';
 import { YOGA_POSE_ANIMATIONS } from '@/lib/yogaPoseAnimations';
@@ -282,10 +282,20 @@ export default function YogaPage() {
 
   useEffect(() => {
     setAvatarSpeechReady(false);
-  }, [flowStage, selectedPose, poseRestartKey, releasePlaybackReady]);
+  // A pose selection or a deliberate restart mounts a fresh avatar and must wait
+  // for its ready signal. Moving from MAIN to release reuses the same Avatar3D
+  // instance, so resetting here would suppress the release TTS indefinitely.
+  }, [selectedPose, poseRestartKey]);
+
+  // The pose phase GLBs (~39 MB each) are cached at module level so they survive
+  // the setup-preview -> session remount. Release them when leaving yoga.
+  useEffect(() => {
+    return () => {
+      clearYogaPhaseCache();
+    };
+  }, []);
 
   const transitionToRelease = useCallback(() => {
-    setAvatarSpeechReady(false);
     // Abort any ongoing TTS feedback before exit instructions start
     try {
       if (ttsRef.current) {
@@ -632,6 +642,24 @@ export default function YogaPage() {
       finalizeSessionEnd();
     }
   }, [flowStage, releaseInstructionsDone, releaseAnimationDone, sessionSummary]);
+
+  // Browser speech and mixer completion events can occasionally be lost. Do not
+  // leave the session trapped on the release screen if either signal never arrives.
+  useEffect(() => {
+    if (flowStage !== 'release') return;
+
+    const releaseTimeoutMs = Math.max(
+      15_000,
+      ((POSE_SPEC[selectedPose]?.out ?? 10) + 5) * 1000,
+    );
+    const releaseWatchdog = window.setTimeout(() => {
+      console.warn('[Yoga] Release completion timed out; finalizing session safely');
+      setReleaseInstructionsDone(true);
+      setReleaseAnimationDone(true);
+    }, releaseTimeoutMs);
+
+    return () => window.clearTimeout(releaseWatchdog);
+  }, [flowStage, selectedPose]);
 
   // Effect to handle session end and ensure proper UI state
   useEffect(() => {
@@ -1034,6 +1062,9 @@ export default function YogaPage() {
                       cameraManualTargetYOffsetFactor={0.00}
                       lockCamera={true} // LOCKUP-SETUP: Camera lock for setup stage
                       showGroundShadow={true}
+                      // Warm the pose's IN/MAIN GLBs while the user is on the
+                      // setup screen so Start does not stall on a ~39 MB fetch.
+                      preloadPosePhases={true}
                       onReadyChange={handleAvatarReadyChange}
                     />
                   ) : (
