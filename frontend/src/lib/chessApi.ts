@@ -82,6 +82,15 @@ export interface ChessExerciseState {
     correct: boolean;
   }>;
   current_piece_type?: string | null;
+  // Gameplay only. The AI replies inside the same request as the player's move,
+  // so the board that comes back already holds both. This is the position right
+  // after the player's own move, letting the UI show the two in turn instead of
+  // snapping straight to the AI's answer.
+  pre_ai_board_position?: ChessExerciseState['board_position'] | null;
+  pre_ai_feedback_message?: string | null;
+  ai_move_san?: string | null;
+  /** The AI's reply in UCI form ("b8c6"), used to animate the piece. */
+  ai_move_uci?: string | null;
 }
 
 export interface ChessSessionSummary {

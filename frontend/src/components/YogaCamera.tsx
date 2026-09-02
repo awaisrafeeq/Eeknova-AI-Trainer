@@ -10,6 +10,15 @@ import {
 } from '@/lib/yogaApi';
 import { getYogaPhaseInstruction } from '@/lib/yogaPhaseInstructions';
 
+/** Backend correction strings carry angle noise that should not be read aloud. */
+function toVoiceCorrection(correction: string): string {
+  return correction
+    .replace(/Adjust your/i, '')
+    .replace(/:\s*/g, ': ')
+    .replace(/\(by [\d\.]+°\)/g, '')
+    .trim();
+}
+
 let globalTTS: TTSFeedback | null = null;
 let globalLastSpoken: { text: string; atMs: number } | null = null;
 let globalTTSHandlersInstalled = false;
@@ -47,6 +56,11 @@ interface YogaCameraProps {
   // When true, suppress correction feedback (UI + TTS). Used for the last few
   // seconds of the hold phase so the pose ends quietly.
   suppressFeedback?: boolean;
+  // Set when the user ends the session themselves. The wrap-up line is spoken
+  // on a delay after the summary arrives, which lands well after the UI has
+  // already returned to the yoga dashboard and sounds like it came out of
+  // nowhere, so it is skipped for a manual stop.
+  suppressEndAnnouncement?: boolean;
 }
 
 export default function YogaCamera({
@@ -68,6 +82,7 @@ export default function YogaCamera({
   tolerance = 10.0,
   mirrorMode = true,
   suppressFeedback = false,
+  suppressEndAnnouncement = false,
 }: YogaCameraProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -105,6 +120,7 @@ export default function YogaCamera({
   const prevPhaseRef = useRef<'in' | 'hold' | 'out' | 'idle' | null>(null);
   const correctionsGivenRef = useRef(0);
   const lastCorrectionSpokenRef = useRef<{ text: string; atMs: number } | null>(null);
+  const lastCorrectionPrefetchAtRef = useRef(0);
   const prevPlayGuidedRef = useRef(false);
   const prevPlayReleaseRef = useRef(false);
   const mainInstructionPlayedRef = useRef<string | null>(null);
@@ -120,7 +136,12 @@ export default function YogaCamera({
   const playGuidedInstructionsRef = useRef(playGuidedInstructions);
   const playReleaseInstructionsRef = useRef(playReleaseInstructions);
   const suppressFeedbackRef = useRef(suppressFeedback);
+  const suppressEndAnnouncementRef = useRef(suppressEndAnnouncement);
   const isPausedRef = useRef(isPaused);
+
+  useEffect(() => {
+    suppressEndAnnouncementRef.current = suppressEndAnnouncement;
+  }, [suppressEndAnnouncement]);
 
   useEffect(() => {
     playGuidedInstructionsRef.current = playGuidedInstructions;
@@ -478,7 +499,10 @@ export default function YogaCamera({
 
         console.log('Session ended from WebSocket:', summary);
         onSessionEnd(summary);
-        if (!(playGuidedInstructionsRef.current || playReleaseInstructionsRef.current)) {
+        if (
+          !suppressEndAnnouncementRef.current &&
+          !(playGuidedInstructionsRef.current || playReleaseInstructionsRef.current)
+        ) {
           ttsRef.current?.speak('Session ended. Great workout!', true);
         }
 
@@ -510,6 +534,19 @@ export default function YogaCamera({
 
         const phaseInstructionActive = Date.now() < phaseInstructionSuppressUntilRef.current;
 
+        // Corrections are generated text, so the very first time one comes up it
+        // has to be synthesised before it can be heard. Start that as soon as the
+        // correction appears - even while feedback is suppressed - so the line is
+        // already rendered when it is actually its turn to be spoken. Throttled
+        // because corrections stream in on every analysed frame.
+        if (ttsEnabled && result.corrections && result.corrections.length > 0) {
+          const now = Date.now();
+          if (now - lastCorrectionPrefetchAtRef.current > 1200) {
+            lastCorrectionPrefetchAtRef.current = now;
+            ttsRef.current?.prefetch(toVoiceCorrection(result.corrections[0]));
+          }
+        }
+
         if (result.corrections && result.corrections.length > 0 && !suppressFeedbackRef.current && !phaseInstructionActive && !isPausedRef.current) {
           onCorrectionsUpdate(result.corrections);
 
@@ -518,12 +555,7 @@ export default function YogaCamera({
           if (ttsEnabled && !(playGuidedInstructionsRef.current || playReleaseInstructionsRef.current) && !isPausedRef.current) {
             if (result.accuracy !== null && result.accuracy !== undefined && result.accuracy < 80) {
               // Only speak the first correction to avoid overwhelming
-              const correctionText = result.corrections[0];
-              const voiceCorrection = correctionText
-                .replace(/Adjust your/i, '')
-                .replace(/:\s*/g, ': ')
-                .replace(/\(by [\d\.]+°\)/g, '')
-                .trim();
+              const voiceCorrection = toVoiceCorrection(result.corrections[0]);
 
               // Count corrections based on what we actually speak (de-dupe repeated spam)
               const now = Date.now();
@@ -793,7 +825,10 @@ export default function YogaCamera({
 
             console.log('Final session summary (local):', summary);
             onSessionEnd(summary);
-            if (!(playGuidedInstructionsRef.current || playReleaseInstructionsRef.current)) {
+            if (
+              !suppressEndAnnouncementRef.current &&
+              !(playGuidedInstructionsRef.current || playReleaseInstructionsRef.current)
+            ) {
               ttsRef.current?.speak('Session ended. Great workout!', true);
             }
           }

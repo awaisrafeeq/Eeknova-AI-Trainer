@@ -30,9 +30,50 @@ import type {
 } from '@/lib/zumbaTimelineTypes';
 import { useZumbaTimelinePlayer, type ZumbaSwitchLogEntry } from '@/hooks/useZumbaTimelinePlayer';
 import { useAuth } from '@/hooks/useAuth';
+import { TTSFeedback } from '@/lib/yogaApi';
 
 // A switch within this window of the sheet's time counts as on-beat.
 const BEAT_PASS_MS = 120;
+
+// How long before a step change the "coming up" clip and countdown appear.
+const NEXT_STEP_COUNTDOWN_SECONDS = 5;
+
+// Coaching pace, set against the choreography: moves run about 15 seconds each.
+// Analysis returns several messages ~3 times a second, so it is thinned to at
+// most one spoken line per move, placed in the middle of it - after the dancer
+// has settled into the step, and before the countdown to the next one starts.
+const ZUMBA_FEEDBACK_GAP_MS = 6000;
+const ZUMBA_FEEDBACK_REPEAT_MS = 15000;
+
+// The song IS the session clock (the timeline reads audio.currentTime), so it
+// can never be paused for a line - it is dipped instead, and ramped rather than
+// stepped so the change is not audible as a click mid-track.
+const ZUMBA_MUSIC_DUCK_RATIO = 0.18;
+const ZUMBA_MUSIC_FADE_MS = 220;
+
+/**
+ * Turns a raw analysis message into something worth saying out loud.
+ *
+ * The analyser emits lines like
+ *   "!!!CRITICAL Raise your left arm higher from the shoulder (too low by 2 value)"
+ * where the severity marker and the trailing measurement are internal detail.
+ * Generic filler ("Keep moving with the selected dance step.") is dropped so the
+ * corrections get the airtime.
+ */
+function tidyZumbaFeedback(message: string): string {
+  return String(message || '')
+    .replace(/^!+\s*(critical|warning|info)\s*/i, '')
+    .replace(/\s*\((?:too (?:low|high|far|close)|off) by [\d.]+\s*\w*\)\s*/gi, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function cleanZumbaFeedback(message: string): string {
+  const text = tidyZumbaFeedback(message);
+  if (!text) return '';
+  if (/^keep moving with the selected dance step/i.test(text)) return '';
+  return text;
+}
 
 /**
  * Zumba module UI aligned with the Yoga page. The avatar canvas stays mounted
@@ -136,6 +177,95 @@ export default function ZumbaPage() {
     onComplete: handleComplete,
   });
   const [showBeatTest, setShowBeatTest] = useState(false);
+  // Where the player drew the "coming up" clip, so the label lines up with it.
+  const [previewRect, setPreviewRect] = useState<
+    { left: number; top: number; width: number; height: number } | null
+  >(null);
+
+  // Spoken coaching. The analysis was already coming back correctly, but during
+  // a session nothing rendered it (the camera lives off-screen and the feedback
+  // card only shows outside the session) and nothing spoke it.
+  const ttsRef = useRef<TTSFeedback | null>(null);
+  const [coachLine, setCoachLine] = useState('');
+  const lastSpokenFeedbackRef = useRef<{ text: string; atMs: number }>({ text: '', atMs: 0 });
+  // Seconds until the step changes, mirrored into a ref because the feedback
+  // handler must keep a stable identity (ZumbaCamera reconnects its WebSocket
+  // whenever that callback changes).
+  const secondsToStepChangeRef = useRef<number | null>(null);
+  // Music level around a spoken line.
+  const musicFadeRef = useRef<number | null>(null);
+  const musicBaseVolumeRef = useRef(1);
+  const musicDuckedRef = useRef(false);
+
+  const fadeMusicTo = useCallback((target: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (musicFadeRef.current != null) {
+      cancelAnimationFrame(musicFadeRef.current);
+      musicFadeRef.current = null;
+    }
+    const from = audio.volume;
+    if (Math.abs(from - target) < 0.01) {
+      audio.volume = target;
+      return;
+    }
+    const startedAt = performance.now();
+    const step = () => {
+      const t = Math.min(1, (performance.now() - startedAt) / ZUMBA_MUSIC_FADE_MS);
+      audio.volume = Math.max(0, Math.min(1, from + (target - from) * t));
+      musicFadeRef.current = t < 1 ? requestAnimationFrame(step) : null;
+    };
+    step();
+  }, []);
+
+  useEffect(() => {
+    const tts = new TTSFeedback(
+      (speaking) => {
+        if (speaking) {
+          // Remember the level to come back to, but only on the way down -
+          // re-reading it mid-duck would latch the ducked value as the base.
+          if (!musicDuckedRef.current) {
+            musicDuckedRef.current = true;
+            const audio = audioRef.current;
+            if (audio) musicBaseVolumeRef.current = audio.volume;
+          }
+          fadeMusicTo(musicBaseVolumeRef.current * ZUMBA_MUSIC_DUCK_RATIO);
+        } else {
+          musicDuckedRef.current = false;
+          fadeMusicTo(musicBaseVolumeRef.current);
+        }
+      },
+      (text) => setCoachLine(text),
+    );
+    ttsRef.current = tts;
+    return () => {
+      tts.stop();
+      ttsRef.current = null;
+      if (musicFadeRef.current != null) {
+        cancelAnimationFrame(musicFadeRef.current);
+        musicFadeRef.current = null;
+      }
+      musicDuckedRef.current = false;
+      const audio = audioRef.current;
+      if (audio) audio.volume = musicBaseVolumeRef.current;
+    };
+  }, [fadeMusicTo]);
+
+  // A line about the step that just ended is no longer useful, so it is cut off
+  // at the switch and the pacing clock restarts for the new move.
+  useEffect(() => {
+    if (!isSessionViewActive) return;
+    ttsRef.current?.stop();
+    lastSpokenFeedbackRef.current = { text: '', atMs: Date.now() };
+  }, [currentBlock?.moveKey, isSessionViewActive]);
+
+  // Nothing to coach once the session is over.
+  useEffect(() => {
+    if (isSessionViewActive) return;
+    ttsRef.current?.stop();
+    lastSpokenFeedbackRef.current = { text: '', atMs: 0 };
+    setCoachLine('');
+  }, [isSessionViewActive]);
 
   // Stable backend move key used to create the camera session.
   const sessionTargetMove = useMemo(
@@ -270,7 +400,29 @@ export default function ZumbaPage() {
   }, []);
 
   const handleAccuracyUpdate = useCallback((accuracy: number) => setCurrentAccuracy(accuracy), []);
-  const handleFeedbackUpdate = useCallback((feedback: string[]) => setCurrentFeedback(feedback), []);
+  const handleFeedbackUpdate = useCallback((feedback: string[]) => {
+    setCurrentFeedback(feedback);
+
+    // Analysis runs at ~3 fps and returns several messages per frame, so this
+    // has to be thinned right down: one coached line at a time, and only after
+    // the previous one has had room to be heard.
+    const coachable = feedback.map(cleanZumbaFeedback).find(Boolean);
+    if (!coachable) return;
+
+    // Hold off once the countdown is on screen: those last seconds belong to the
+    // "coming up" clip and the 5-4-3-2-1, and a correction about the step being
+    // left behind would only pull attention away from the switch.
+    const toChange = secondsToStepChangeRef.current;
+    if (toChange != null && toChange <= NEXT_STEP_COUNTDOWN_SECONDS) return;
+
+    const now = Date.now();
+    const last = lastSpokenFeedbackRef.current;
+    if (now - last.atMs < ZUMBA_FEEDBACK_GAP_MS) return;
+    if (last.text === coachable && now - last.atMs < ZUMBA_FEEDBACK_REPEAT_MS) return;
+
+    lastSpokenFeedbackRef.current = { text: coachable, atMs: now };
+    ttsRef.current?.speak(coachable, true);
+  }, []);
   const handleFrameProcessed = useCallback((result: ZumbaAnalysisResult) => {
     const metrics = result.performance_metrics;
     setFramesProcessed(metrics?.total_frames || 0);
@@ -369,6 +521,21 @@ export default function ZumbaPage() {
     ? Math.max(0, (upcomingChangeBlock.startMs - timelineMs) / 1000)
     : null;
 
+  useEffect(() => {
+    secondsToStepChangeRef.current = changeInSeconds;
+  }, [changeInSeconds]);
+
+  // The corner clip runs only inside the countdown window, so it draws attention
+  // exactly when the switch is imminent rather than competing with the dancing
+  // for the whole song.
+  const previewMoveKey =
+    isSessionViewActive &&
+    upcomingChangeBlock &&
+    changeInSeconds != null &&
+    changeInSeconds <= NEXT_STEP_COUNTDOWN_SECONDS
+      ? upcomingChangeBlock.moveKey
+      : null;
+
   if (authLoading || isLoading) {
     return (
       <main
@@ -408,7 +575,20 @@ export default function ZumbaPage() {
         </div>
       )}
       {isSessionViewActive && (
-        <NextStepCountdown block={upcomingChangeBlock} secondsLeft={changeInSeconds} />
+        <NextStepCountdown
+          block={upcomingChangeBlock}
+          secondsLeft={changeInSeconds}
+          previewRect={previewRect}
+        />
+      )}
+
+      {/* Live coaching, as a subtitle. Sits above the End Session button. */}
+      {isSessionViewActive && coachLine && (
+        <div className="pointer-events-none fixed bottom-28 left-1/2 z-40 w-[min(860px,92vw)] -translate-x-1/2 px-4">
+          <p className="rounded-2xl border border-[var(--glass-stroke)] bg-black/60 px-7 py-4 text-center text-[26px] font-semibold leading-snug text-white shadow-[0_10px_40px_rgba(0,0,0,.35)] backdrop-blur-md">
+            {coachLine}
+          </p>
+        </div>
       )}
 
       {/* Beat verification: on-screen proof that switches land on the sheet's
@@ -457,6 +637,8 @@ export default function ZumbaPage() {
                         ref={playerRef}
                         mapping={mapping}
                         onPreloadStatus={setPreloadStatus}
+                        previewMoveKey={previewMoveKey}
+                        onPreviewRectChange={setPreviewRect}
                         cameraDistanceFactor={isSessionViewActive ? 1.3 : 1.75}
                         cameraTargetYOffsetFactor={isSessionViewActive ? 0.0 : 0.02}
                       />
@@ -659,7 +841,9 @@ export default function ZumbaPage() {
                   <div className="space-y-2 text-[14px] text-yellow-300">
                     {currentFeedback.slice(0, 5).map((feedback, index) => (
                       <div key={`${feedback}-${index}`} className="rounded-lg border border-yellow-300/20 bg-yellow-300/5 px-3 py-2">
-                        {feedback}
+                        {/* The analyser's severity marker and measurement are
+                            internal detail, not something to show a dancer. */}
+                        {tidyZumbaFeedback(feedback)}
                       </div>
                     ))}
                   </div>
@@ -705,55 +889,93 @@ export default function ZumbaPage() {
 function NextStepCountdown({
   block,
   secondsLeft,
+  previewRect,
 }: {
   block: ZumbaTimelineBlock | null;
   secondsLeft: number | null;
+  previewRect: { left: number; top: number; width: number; height: number } | null;
 }) {
   if (!block || secondsLeft == null) return null;
 
-  const COUNTDOWN_FROM = 5;
+  const COUNTDOWN_FROM = NEXT_STEP_COUNTDOWN_SECONDS;
   const isCountingDown = secondsLeft <= COUNTDOWN_FROM;
   // 5.0s -> "5", 0.4s -> "1": the digit shown is the second being counted.
   const digit = Math.max(1, Math.min(COUNTDOWN_FROM, Math.ceil(secondsLeft)));
   // Fills up as the switch approaches.
   const progress = Math.max(0, Math.min(100, (1 - secondsLeft / COUNTDOWN_FROM) * 100));
 
+  // The clip itself is drawn by the 3D canvas underneath, so this card sits on
+  // top of it: a transparent framed window over the clip, with the label below.
+  // Without a rect (clip not being drawn yet) it falls back to the old corner.
+  const anchored = previewRect
+    ? { left: previewRect.left, top: previewRect.top, width: previewRect.width }
+    : null;
+
   return (
     <div
-      className={`pointer-events-none fixed right-4 top-4 z-40 w-[min(260px,42vw)] rounded-[var(--radius-md)] border bg-black/45 px-5 py-4 text-right backdrop-blur-md transition-all duration-300 ${
-        isCountingDown
-          ? 'border-[var(--brand-neo)] shadow-[0_0_28px_rgba(25,227,255,.35)]'
-          : 'border-[var(--glass-stroke)]'
-      }`}
+      className="pointer-events-none fixed z-40 transition-all duration-300"
+      style={
+        anchored
+          ? { left: anchored.left, top: anchored.top, width: anchored.width }
+          : { right: 16, top: 16, width: 'min(240px, 42vw)' }
+      }
     >
-      <div className="text-[12px] uppercase tracking-[0.18em] text-[var(--ink-med)]">Coming up</div>
-      <div className="mt-1 text-[22px] font-bold leading-tight text-white">
-        {block.moveName}
-        {block.side ? <span className="text-[var(--ink-med)]"> ({block.side})</span> : null}
-      </div>
-
-      {isCountingDown ? (
-        <div className="mt-2 flex items-baseline justify-end gap-2">
-          <span className="text-[13px] text-[var(--ink-med)]">in</span>
-          <span
-            key={digit}
-            className="text-[56px] font-black leading-none text-[var(--brand-neo)]"
-            style={{ fontFamily: 'var(--font-future)', animation: 'zumba-count-pop 0.45s ease-out' }}
-          >
-            {digit}
-          </span>
-        </div>
-      ) : (
-        <div className="mt-2 text-[15px] text-[var(--ink-med)]">
-          in {secondsLeft.toFixed(1)}s
+      {previewRect && (
+        <div
+          className={`rounded-[var(--radius-md)] border ${
+            isCountingDown
+              ? 'border-[var(--brand-neo)] shadow-[0_0_28px_rgba(25,227,255,.35)]'
+              : 'border-[var(--glass-stroke)]'
+          }`}
+          // Transparent on purpose - the live clip is rendered behind it.
+          style={{ height: previewRect.height }}
+        >
+          <div className="m-2 w-fit rounded-full bg-black/55 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-[var(--ink-med)] backdrop-blur-sm">
+            Coming up
+          </div>
         </div>
       )}
 
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-        <div
-          className="h-full rounded-full bg-[var(--brand-neo)]"
-          style={{ width: `${progress}%` }}
-        />
+      <div
+        className={`rounded-[var(--radius-md)] border bg-black/55 px-4 py-3 text-right backdrop-blur-md ${
+          previewRect ? 'mt-2' : ''
+        } ${
+          isCountingDown
+            ? 'border-[var(--brand-neo)] shadow-[0_0_28px_rgba(25,227,255,.35)]'
+            : 'border-[var(--glass-stroke)]'
+        }`}
+      >
+        {!previewRect && (
+          <div className="text-[12px] uppercase tracking-[0.18em] text-[var(--ink-med)]">Coming up</div>
+        )}
+        <div className="text-[20px] font-bold leading-tight text-white">
+          {block.moveName}
+          {block.side ? <span className="text-[var(--ink-med)]"> ({block.side})</span> : null}
+        </div>
+
+        {isCountingDown ? (
+          <div className="mt-1 flex items-baseline justify-end gap-2">
+            <span className="text-[13px] text-[var(--ink-med)]">in</span>
+            <span
+              key={digit}
+              className="text-[48px] font-black leading-none text-[var(--brand-neo)]"
+              style={{ fontFamily: 'var(--font-future)', animation: 'zumba-count-pop 0.45s ease-out' }}
+            >
+              {digit}
+            </span>
+          </div>
+        ) : (
+          <div className="mt-2 text-[15px] text-[var(--ink-med)]">
+            in {secondsLeft.toFixed(1)}s
+          </div>
+        )}
+
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+          <div
+            className="h-full rounded-full bg-[var(--brand-neo)]"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
       </div>
 
       <style>{`

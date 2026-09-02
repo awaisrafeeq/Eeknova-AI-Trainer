@@ -28,6 +28,28 @@ interface SessionSummary {
   corrections_given: number;
 }
 
+/**
+ * Pause between the player's move appearing on the board and the AI's reply.
+ * The backend plays both inside one request, so without this the answer lands
+ * in the same frame and the player never sees their own move.
+ */
+const AI_MOVE_REVEAL_MS = 1200;
+
+/** How long the AI's origin and destination squares stay marked afterwards. */
+const AI_MOVE_HIGHLIGHT_MS = 2600;
+
+const GAME_MODES = [
+  { id: 'human_vs_ai', icon: '🧑 vs 🤖', label: 'Human vs AI' },
+  { id: 'ai_vs_ai', icon: '🤖 vs 🤖', label: 'AI vs AI' },
+  { id: 'human_vs_human', icon: '🧑 vs 🧑', label: 'Human vs Human' },
+] as const;
+
+/**
+ * Difficulty only means something when an AI is playing, so picking a level
+ * while in two-player mode implies a game against the computer.
+ */
+const aiGameMode = (mode: string): string => (mode === 'human_vs_human' ? 'human_vs_ai' : mode);
+
 function Particles() {
   return (
     <div aria-hidden className="particles pointer-events-none fixed inset-0 -z-10">
@@ -66,16 +88,29 @@ export default function ChessPage() {
   const [phaseTimeLeft, setPhaseTimeLeft] = useState(0);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isTTSSpeaking, setIsTTSSpeaking] = useState(false);
+  // What the avatar is saying right now. Hints in particular were spoken but
+  // never shown, so a learner who missed the audio had nothing to fall back on.
+  const [avatarSpeech, setAvatarSpeech] = useState('');
   const [lastYogaDate, setLastYogaDate] = useState<string | null>(null);
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('beginner'); // Default to beginner
   const [view, setView] = useState<'list' | 'lesson'>('list');
   const [moduleProgress, setModuleProgress] = useState<Record<string, number>>({});
+  // Lesson gating keys off saved progress, so a failed or still-pending load
+  // must not lock every lesson. Locks only apply once progress really arrived.
+  const [progressLoaded, setProgressLoaded] = useState(false);
   const [progressUpdateKey, setProgressUpdateKey] = useState(0); // Force re-render
   const [chessAnimKey, setChessAnimKey] = useState(0);
   const lastCorrectRef = useRef(false);
   const hasPlayedInitialRef = useRef(false); // Prevent initial animation on load
   const openingSpokenRef = useRef(false);
   const lastSpokenMessageRef = useRef<string>('');
+  const aiRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aiMoveClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const completionSpokenRef = useRef<string | null>(null);
+  // Squares the AI just moved between, so the board can show the piece travel.
+  const [aiMove, setAiMove] = useState<{ from: string; to: string } | null>(null);
+  // Which game mode the gameplay module is currently set to run.
+  const [selectedGameMode, setSelectedGameMode] = useState<string>('human_vs_ai');
 
   const sanitizeTtsText = (text: string): string => {
     let t = String(text || '').trim();
@@ -134,12 +169,30 @@ export default function ChessPage() {
       console.log('🎤 TTS speaking state changed:', speaking);
       setIsTTSSpeaking(speaking);
     }, (text) => {
-      console.log('TTS speaking:', text);
+      setAvatarSpeech(text);
     });
+
+    // These lines are spoken constantly during a lesson and are always the same,
+    // so render them up front instead of paying a synthesis round-trip the first
+    // time each one comes up.
+    ttsRef.current.prefetchMany([
+      'Would you like to practice today?',
+      'Perfect!',
+      'Good move!',
+      'Wrong position.',
+    ]);
 
     return () => {
       if (ttsRef.current) {
         ttsRef.current.stop();
+      }
+      if (aiRevealTimerRef.current) {
+        clearTimeout(aiRevealTimerRef.current);
+        aiRevealTimerRef.current = null;
+      }
+      if (aiMoveClearTimerRef.current) {
+        clearTimeout(aiMoveClearTimerRef.current);
+        aiMoveClearTimerRef.current = null;
       }
     };
   }, []);
@@ -186,6 +239,30 @@ export default function ChessPage() {
     lastSpokenMessageRef.current = speakText;
     ttsRef.current.speak(speakText, true);
   }, [view, exercise?.feedback_message, exercise?.current_piece_type]);
+
+  // Congratulate the learner by name when a lesson is finished, and point at
+  // what that just opened up - lessons unlock in order, so the next one is the
+  // most useful thing to tell them.
+  useEffect(() => {
+    if (view !== 'lesson' || !exercise?.module_completed || !ttsRef.current) return;
+    if (completionSpokenRef.current === exercise.module_id) return;
+    completionSpokenRef.current = exercise.module_id;
+
+    const finishedIndex = modules.findIndex((m) => m.id === exercise.module_id);
+    const finishedName = finishedIndex >= 0 ? modules[finishedIndex].name : null;
+    if (!finishedName) return;
+
+    const nextModule = modules[finishedIndex + 1];
+
+    const line = nextModule
+      ? `Well done! You have completed the ${finishedName} lesson. ${nextModule.name} is now unlocked, whenever you are ready.`
+      : `Well done! You have completed the ${finishedName} lesson. That was the last one, you have finished every chess lesson.`;
+
+    // Queued rather than priority so it follows the move feedback that is
+    // usually still being spoken, instead of cutting it off.
+    ttsRef.current.speak(line);
+    setChessAnimKey((prev) => prev + 1);
+  }, [view, exercise?.module_completed, exercise?.module_id, modules]);
 
   useEffect(() => {
     const loadModules = async () => {
@@ -331,6 +408,7 @@ export default function ChessPage() {
           }
           
           setModuleProgress(progressData);
+          setProgressLoaded(true);
         } else {
           const moduleData = await progressResponse.json();
           
@@ -363,9 +441,10 @@ export default function ChessPage() {
           }
           
           setModuleProgress(progressData);
+          setProgressLoaded(true);
         }
-        
-        
+
+
       } catch (error) {
         setModuleProgress({});
       }
@@ -570,12 +649,78 @@ export default function ChessPage() {
     }
   };
 
+  /**
+   * How long a finished exercise stays on screen before the next one loads.
+   * Castling, en passant and promotion rearrange several pieces at once, so a
+   * flat 1.5s moved the board on before the learner had seen what happened.
+   */
+  const autoAdvanceDelayMs = (state: ChessExerciseState): number => {
+    if (state.module_id === 'special_moves') return 4500;
+    if (state.exercise_type === 'identify_pieces') return 5000;
+    return 1500;
+  };
+
+  /**
+   * Commits a state from the backend. For gameplay the AI answers inside the
+   * same request, so the response already carries both moves. When that happens
+   * the player's own move is shown first and the AI's reply follows a beat
+   * later, instead of the board jumping straight to the answer.
+   */
+  const applyExerciseState = (state: ChessExerciseState) => {
+    if (aiRevealTimerRef.current) {
+      clearTimeout(aiRevealTimerRef.current);
+      aiRevealTimerRef.current = null;
+    }
+    if (aiMoveClearTimerRef.current) {
+      clearTimeout(aiMoveClearTimerRef.current);
+      aiMoveClearTimerRef.current = null;
+    }
+    setAiMove(null);
+
+    const preAiPosition = state.pre_ai_board_position;
+    if (!preAiPosition) {
+      setExercise(state);
+      updateModuleProgressForExercise(state);
+      return;
+    }
+
+    setExercise({
+      ...state,
+      board_position: preAiPosition,
+      feedback_message: state.pre_ai_feedback_message ?? null,
+      selected_square: null,
+      // The AI's reply is not on the board yet, so nothing about it should be
+      // announced or highlighted during this beat.
+      pre_ai_board_position: null,
+      ai_move_san: null,
+    });
+
+    aiRevealTimerRef.current = setTimeout(() => {
+      aiRevealTimerRef.current = null;
+      setExercise(state);
+      updateModuleProgressForExercise(state);
+
+      // Hand the board the squares the AI moved between so it can slide the
+      // piece across and mark where it came from.
+      const uci = state.ai_move_uci;
+      if (uci && uci.length >= 4) {
+        setAiMove({ from: uci.slice(0, 2), to: uci.slice(2, 4) });
+        if (aiMoveClearTimerRef.current) clearTimeout(aiMoveClearTimerRef.current);
+        aiMoveClearTimerRef.current = setTimeout(() => {
+          aiMoveClearTimerRef.current = null;
+          setAiMove(null);
+        }, AI_MOVE_HIGHLIGHT_MS);
+      }
+    }, AI_MOVE_REVEAL_MS);
+  };
+
   const handleStartLesson = async (moduleId: string) => {
     setLoading(true);
     setError(null);
     setExercise(null);
     lastSpokenMessageRef.current = '';
-    
+    completionSpokenRef.current = null;
+
     console.log('🔍 DEBUG: Starting lesson for module:', moduleId);
     
     try {
@@ -626,9 +771,8 @@ export default function ChessPage() {
         placed_pieces: state.placed_pieces
       });
       
-      setExercise(state);
-      updateModuleProgressForExercise(state);
-      
+      applyExerciseState(state);
+
       // Trigger TTS for bad move if incorrect
       if (state.is_correct === false && ttsRef.current) {
         const msg = String(state.feedback_message || '').trim();
@@ -636,14 +780,13 @@ export default function ChessPage() {
           ttsRef.current.speak('Wrong position.', true); // Priority speak
         }
       }
-      
+
       // Auto-progress if exercise is completed BUT module is not completed
       if (state.exercise_completed && !state.module_completed && state.exercise_type !== 'identify_pieces') {
-        const delay = state.exercise_type === 'identify_pieces' ? 5000 : 1500;
         setTimeout(() => {
           console.log('🔍 DEBUG: Auto-progressing to next exercise from select_square');
           handleAction('next');
-        }, delay); // Longer delay for identify_pieces to show feedback
+        }, autoAdvanceDelayMs(state));
       }
     } catch (e: any) {
       setError(e.message || 'Failed to apply move');
@@ -658,12 +801,28 @@ export default function ChessPage() {
     
     console.log('🔍 DEBUG: handleAction called with type:', type, 'payload:', payload);
     
-    // Don't allow skip/next actions if module is already completed
+    // A finished module has no next exercise. "Next" at that point means the
+    // next lesson - which is exactly the one this completion just unlocked.
     if (exercise?.module_completed && (type === 'skip' || type === 'next')) {
-      console.log('Module already completed, ignoring skip/next action');
+      if (type === 'next') {
+        const finishedIndex = modules.findIndex((m) => m.id === exercise.module_id);
+        const nextModule = finishedIndex >= 0 ? modules[finishedIndex + 1] : undefined;
+        if (nextModule) {
+          handleStartLesson(nextModule.id);
+          return;
+        }
+        // Nothing left to move on to; return to the lesson list.
+        ttsRef.current?.stop();
+        setView('list');
+        setSessionId(null);
+        setExercise(null);
+        return;
+      }
+      console.log('Module already completed, ignoring skip action');
       return;
     }
-    
+
+
     try {
       const state = await sendChessAction(sessionId, type, payload);
       console.log('🔍 DEBUG: Backend response:', {
@@ -678,15 +837,14 @@ export default function ChessPage() {
         pieces_inventory: state.pieces_inventory
       });
       
-      setExercise(state);
-      updateModuleProgressForExercise(state);
-      
+      applyExerciseState(state);
+
       // Auto-progress if exercise is completed BUT module is not completed
       if (state.exercise_completed && !state.module_completed && state.exercise_type !== 'identify_pieces') {
         setTimeout(() => {
           console.log('🔍 DEBUG: Auto-progressing to next exercise from handleAction');
           handleAction('next');
-        }, 1500); // Small delay before next exercise
+        }, autoAdvanceDelayMs(state));
       }
     } catch (e: any) {
       setError(e.message || 'Failed to apply action');
@@ -730,10 +888,30 @@ export default function ChessPage() {
                 playAnimationPath="/Encouraging Gesture_compressed.glb"
                 playAnimationKey={chessAnimKey}
                 isTTSSpeaking={isTTSSpeaking}
-                cameraZoom={3.15}
-                cameraTargetYOffset={1.85}
+                // Without the spoken text the lip-sync falls back to one fixed
+                // mouth shape; with it the visemes follow the actual words.
+                ttsText={avatarSpeech}
+                // Frame the avatar from mid-belly up to just above the head.
+                // The manual camera path is floor-anchored: the target sits at
+                // 80% of the model's height and the distance sets how much of
+                // the body fits around it. Only the distance is tuned here -
+                // moving the target as well pulls the head out of frame, so
+                // widening symmetrically is what keeps the head safe.
+                cameraManualDistanceFactor={0.64}
+                cameraManualTargetYOffsetFactor={0.3}
               />
               {/* Fake shadow removed to stop float illusion */}
+
+              {/* What the avatar is saying, mirrored on screen. */}
+              {avatarSpeech && (
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 pb-3">
+                  <p
+                    className="mx-auto w-fit max-w-[92%] rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-black/55 px-4 py-2 text-center text-[15px] font-medium leading-snug text-[var(--ink-hi)] backdrop-blur-sm"
+                  >
+                    {avatarSpeech}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -750,6 +928,11 @@ export default function ChessPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    if (aiRevealTimerRef.current) {
+                      clearTimeout(aiRevealTimerRef.current);
+                      aiRevealTimerRef.current = null;
+                    }
+                    ttsRef.current?.stop();
                     setView('list');
                     setSessionId(null);
                     setExercise(null);
@@ -784,18 +967,33 @@ export default function ChessPage() {
                   {(() => {
                     return null;
                   })()}
-                  {modules.map((m) => {
+                  {modules.map((m, index) => {
                     const progress = moduleProgress[m.id] || 0;
+                    // Lessons run in order: everything after the first stays
+                    // locked until the one before it is finished.
+                    const previousModule = index > 0 ? modules[index - 1] : null;
+                    const locked = progressLoaded && previousModule
+                      ? (moduleProgress[previousModule.id] || 0) < 100
+                      : false;
                     return (
                       <button
                         key={`${m.id}-${progressUpdateKey}`} // Force re-render on progress update
                         type="button"
-                        onClick={() => handleStartLesson(m.id)}
-                        className="w-full rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-[var(--glass)] px-3 py-3 text-left transition hover:border-[var(--brand-neo)] hover:shadow-[var(--glow-neo)]"
+                        disabled={locked}
+                        aria-disabled={locked}
+                        onClick={() => {
+                          if (locked) return;
+                          handleStartLesson(m.id);
+                        }}
+                        className={`w-full rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-[var(--glass)] px-3 py-3 text-left transition ${
+                          locked
+                            ? 'cursor-not-allowed opacity-45'
+                            : 'hover:border-[var(--brand-neo)] hover:shadow-[var(--glow-neo)]'
+                        }`}
                       >
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-[14px] font-semibold text-[var(--ink-hi)]">
-                            {m.name}
+                            {locked ? '🔒 ' : ''}{m.name}
                           </span>
                           <span className="text-[11px] text-[var(--ink-med)]">{progress}%</span>
                         </div>
@@ -803,7 +1001,7 @@ export default function ChessPage() {
                         <div className="mt-2 h-1.5 w-full rounded-full bg-[var(--glass-stroke)]/40 overflow-hidden">
                           <div
                             className="h-full rounded-full bg-[var(--brand-neo)] transition-all duration-300"
-                            style={{ 
+                            style={{
                               width: `${progress}%`,
                               minWidth: progress > 0 ? '2px' : '0px'
                             }}
@@ -811,9 +1009,11 @@ export default function ChessPage() {
                             <span className="text-xs text-white">{progress > 0 ? progress : ''}</span>
                           </div>
                         </div>
-                        {(() => {
-                          return null;
-                        })()}
+                        {locked && previousModule && (
+                          <p className="mt-2 text-[11px] text-[var(--ink-med)]">
+                            Complete “{previousModule.name}” to unlock this lesson.
+                          </p>
+                        )}
                       </button>
                     );
                   })}
@@ -865,7 +1065,9 @@ export default function ChessPage() {
                           type="button"
                           onClick={() => {
                             setSelectedDifficulty('beginner');
-                            startGameplayWithDifficulty('human_vs_ai', 'beginner');
+                            const mode = aiGameMode(selectedGameMode);
+                            setSelectedGameMode(mode);
+                            startGameplayWithDifficulty(mode, 'beginner');
                           }}
                           className={`relative px-3 py-3 rounded-[var(--radius-md)] border text-[12px] transition-all ${
                             selectedDifficulty === 'beginner'
@@ -883,7 +1085,9 @@ export default function ChessPage() {
                           type="button"
                           onClick={() => {
                             setSelectedDifficulty('intermediate');
-                            startGameplayWithDifficulty('human_vs_ai', 'intermediate');
+                            const mode = aiGameMode(selectedGameMode);
+                            setSelectedGameMode(mode);
+                            startGameplayWithDifficulty(mode, 'intermediate');
                           }}
                           className={`relative px-3 py-3 rounded-[var(--radius-md)] border text-[12px] transition-all ${
                             selectedDifficulty === 'intermediate'
@@ -901,7 +1105,9 @@ export default function ChessPage() {
                           type="button"
                           onClick={() => {
                             setSelectedDifficulty('advanced');
-                            startGameplayWithDifficulty('human_vs_ai', 'advanced');
+                            const mode = aiGameMode(selectedGameMode);
+                            setSelectedGameMode(mode);
+                            startGameplayWithDifficulty(mode, 'advanced');
                           }}
                           className={`relative px-3 py-3 rounded-[var(--radius-md)] border text-[12px] transition-all ${
                             selectedDifficulty === 'advanced'
@@ -922,31 +1128,52 @@ export default function ChessPage() {
                     <div>
                       <p className="text-[13px] text-[var(--ink-med)] mb-2">Game Mode:</p>
                       <div className="grid grid-cols-3 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => startGameplayWithDifficulty('human_vs_ai', selectedDifficulty)}
-                          className="px-3 py-2 rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-[var(--glass)] text-[12px] text-[var(--ink-hi)] hover:border-[var(--brand-neo)] hover:bg-[var(--glass-stroke)]/20 transition-all"
-                        >
-                          <div className="font-semibold">🧑 vs 🤖</div>
-                          <div className="text-[10px] opacity-80 ">Human vs AI</div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => startGameplayWithDifficulty('ai_vs_ai', selectedDifficulty)}
-                          className="px-3 py-2 rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-[var(--glass)] text-[12px] text-[var(--ink-hi)] hover:border-[var(--brand-neo)] hover:bg-[var(--glass-stroke)]/20 transition-all"
-                        >
-                          <div className="font-semibold">🤖 vs 🤖</div>
-                          <div className="text-[10px] opacity-80">AI vs AI</div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => startGameplayMode('human_vs_human')}
-                          className="px-3 py-2 rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-[var(--glass)] text-[12px] text-[var(--ink-hi)] hover:border-[var(--brand-neo)] hover:bg-[var(--glass-stroke)]/20 transition-all"
-                        >
-                          <div className="font-semibold">🧑 vs 🧑</div>
-                          <div className="text-[10px] opacity-80">Human vs Human</div>
-                        </button>
+                        {GAME_MODES.map((mode) => {
+                          const active = selectedGameMode === mode.id;
+                          return (
+                            <button
+                              key={mode.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedGameMode(mode.id);
+                                if (mode.id === 'human_vs_human') {
+                                  startGameplayMode(mode.id);
+                                } else {
+                                  startGameplayWithDifficulty(mode.id, selectedDifficulty);
+                                }
+                              }}
+                              className={`relative px-3 py-2 rounded-[var(--radius-md)] border text-[12px] transition-all ${
+                                active
+                                  ? 'border-[var(--brand-neo)] bg-[var(--brand-neo)]/20 text-[var(--brand-neo)] shadow-[0_0_12px_rgba(25,227,255,.3)]'
+                                  : 'border-[var(--glass-stroke)] bg-[var(--glass)] text-[var(--ink-hi)] hover:border-[var(--brand-neo)]/50 hover:bg-[var(--glass-stroke)]/20'
+                              }`}
+                            >
+                              <div className="font-semibold">{mode.icon}</div>
+                              <div className="text-[10px] opacity-80">{mode.label}</div>
+                              {active && (
+                                <div className="absolute -top-1 -right-1 w-2 h-2 bg-[var(--brand-neo)] rounded-full"></div>
+                              )}
+                            </button>
+                          );
+                        })}
                       </div>
+                    </div>
+
+                    {/* Spelled out, so there is never any doubt about which
+                        game the buttons above just started. */}
+                    <div className="rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-[var(--glass)] px-3 py-2 text-center text-[12px] text-[var(--ink-med)]">
+                      Now playing:{' '}
+                      <span className="font-semibold text-[var(--brand-neo)]">
+                        {GAME_MODES.find((m) => m.id === selectedGameMode)?.label || 'Human vs AI'}
+                      </span>
+                      {selectedGameMode !== 'human_vs_human' && (
+                        <>
+                          {' · '}
+                          <span className="font-semibold text-[var(--brand-neo)] capitalize">
+                            {selectedDifficulty}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
@@ -958,22 +1185,11 @@ export default function ChessPage() {
                         exercise={exercise}
                         onSquareClick={handleSquareClick}
                         onAction={handleAction}
+                        aiMove={aiMove}
                       />
                     </div>
-
-                    {/* Feedback message */}
-                    {exercise.feedback_message && !String(exercise.feedback_message).trim().toLowerCase().startsWith('hint:') && (
-                      <div
-                        className={`text-[14px] mt-2 ${exercise.is_correct === true
-                          ? 'text-green-400'
-                          : exercise.is_correct === false
-                            ? 'text-red-400'
-                            : 'text-[var(--ink-med)]'
-                          }`}
-                      >
-                        {exercise.feedback_message}
-                      </div>
-                    )}
+                    {/* Feedback is shown once, as the avatar's caption. It used
+                        to be repeated here and inside the board as well. */}
                   </div>
                 ) : (
                   <div className="mt-3">

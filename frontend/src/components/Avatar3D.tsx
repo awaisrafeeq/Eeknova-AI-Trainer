@@ -13,7 +13,8 @@ import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
-import { YOGA_POSE_ANIMATIONS, type YogaPoseAnimation } from "@/lib/yogaPoseAnimations";
+import { YOGA_POSE_ANIMATIONS, shouldFreezeMainPose, type YogaPoseAnimation } from "@/lib/yogaPoseAnimations";
+import { IDLE_VISEME, getTextViseme, followFactor, LIP_SYNC_RATES } from "@/lib/lipSync";
 
 // Disable THREE's global loader cache so GLB ArrayBuffers don't pile up in JS heap
 // across yoga pose swaps. Browser HTTP cache still handles re-fetches.
@@ -222,69 +223,23 @@ function applySkinTone(root: THREE.Object3D, tone: THREE.Color, strength: number
   });
 }
 
-type TextViseme = {
-  open: number;
-  wide: number;
-  round: number;
-  close: number;
-  lowerLip: number;
-  energy: number;
-};
-
-const IDLE_VISEME: TextViseme = {
-  open: 0.26,
-  wide: 0.08,
-  round: 0.05,
-  close: 0.08,
-  lowerLip: 0,
-  energy: 0.48,
-};
-
-function getTextViseme(text: string | undefined, elapsedSeconds: number): TextViseme {
-  const normalized = (text || '').toLowerCase();
-  if (!normalized.trim()) return IDLE_VISEME;
-
-  const charsPerSecond = 13.5;
-  const index = Math.min(normalized.length - 1, Math.max(0, Math.floor(elapsedSeconds * charsPerSecond)));
-  const current = normalized[index] || '';
-  const previous = normalized[index - 1] || '';
-  const next = normalized[index + 1] || '';
-  const localT = (elapsedSeconds * charsPerSecond) % 1;
-  const pulse = Math.sin(localT * Math.PI);
-
-  if (/[\s,.;:!?]/.test(current)) {
-    return { open: 0.02, wide: 0.01, round: 0.01, close: 0.68, lowerLip: 0, energy: 0.22 };
-  }
-
-  if ('mbp'.includes(current)) {
-    return { open: 0.02, wide: 0.02, round: 0.02, close: 0.95, lowerLip: 0, energy: 0.35 };
-  }
-
-  if ('fv'.includes(current)) {
-    return { open: 0.2 + 0.1 * pulse, wide: 0.12, round: 0.02, close: 0.26, lowerLip: 0.72, energy: 0.62 };
-  }
-
-  if ('ouqw'.includes(current) || (current === 'o' && next === 'o')) {
-    return { open: 0.34 + 0.24 * pulse, wide: 0.02, round: 0.95, close: 0.02, lowerLip: 0.12, energy: 0.82 };
-  }
-
-  if ('ae'.includes(current)) {
-    return { open: 0.78 + 0.18 * pulse, wide: current === 'e' ? 0.48 : 0.28, round: 0.03, close: 0.01, lowerLip: 0.14, energy: 0.95 };
-  }
-
-  if ('iy'.includes(current)) {
-    return { open: 0.34 + 0.12 * pulse, wide: 0.92, round: 0.02, close: 0.02, lowerLip: 0.08, energy: 0.78 };
-  }
-
-  if ('lr'.includes(current)) {
-    return { open: 0.4 + 0.15 * pulse, wide: 0.22, round: previous === 'o' ? 0.42 : 0.12, close: 0.05, lowerLip: 0.08, energy: 0.72 };
-  }
-
-  if ('tdnszkgchj'.includes(current)) {
-    return { open: 0.28 + 0.14 * pulse, wide: 0.18, round: 0.03, close: 0.34, lowerLip: 0.03, energy: 0.62 };
-  }
-
-  return { open: 0.34 + 0.18 * pulse, wide: 0.16, round: 0.08, close: 0.14, lowerLip: 0.05, energy: 0.66 };
+/**
+ * Drops the face tracks from a gesture clip.
+ *
+ * The chess "Encouraging Gesture" clip animates morph-target weights on the very
+ * mesh the lip-sync writes to (body_1, plus teeth and tongue), and a jaw bone.
+ * Because the mixer runs first each frame, the clip kept re-imposing its baked
+ * expression and the lip-sync could only lerp part of the way back - so the
+ * mouth sat frozen whenever the gesture and speech overlapped. The body motion
+ * is what the gesture is actually for, so the face is left to the lip-sync.
+ */
+function stripFaceTracks(clip: THREE.AnimationClip): THREE.AnimationClip {
+  const kept = clip.tracks.filter((track) => {
+    if (track.name.endsWith('.morphTargetInfluences')) return false;
+    return !/jaw/i.test(track.name.split('.')[0] || '');
+  });
+  if (kept.length === clip.tracks.length) return clip;
+  return new THREE.AnimationClip(clip.name, clip.duration, kept, clip.blendMode);
 }
 
 function CameraControls({ target }: { target?: [number, number, number] }) {
@@ -749,6 +704,12 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
         ttsAudioLevelRef.current = Math.max(0, Math.min(1, lvl));
         ttsAudioSpeakingRef.current = !!detail.isSpeaking;
         ttsAudioTimeRef.current = Math.max(0, typeof detail.currentTime === 'number' ? detail.currentTime : 0);
+        // Needed to place the mouth by real audio position instead of a guessed
+        // speaking rate. Zero means "unknown" (the offline browser voice).
+        ttsAudioDurationRef.current =
+          typeof detail.duration === 'number' && Number.isFinite(detail.duration) && detail.duration > 0
+            ? detail.duration
+            : 0;
       } catch { }
     };
 
@@ -769,6 +730,9 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
   const blendshapeNamesRef = useRef<string[]>([]);
 
   const cachedChessClipsRef = useRef<THREE.AnimationClip[] | null>(null);
+  // Seeded with the key this component mounted on, so the very first render is
+  // treated as "already played" for gestures layered on the static model.
+  const lastPlayedAnimationKeyRef = useRef<number>(playAnimationKey ?? 0);
 
   const originalBlendshapesRef = useRef<number[]>([]);
 
@@ -777,6 +741,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
   const ttsAudioLevelRef = useRef<number>(0);
   const ttsAudioSpeakingRef = useRef<boolean>(false);
   const ttsAudioTimeRef = useRef<number>(0);
+  const ttsAudioDurationRef = useRef<number>(0);
   const blinkPhaseRef = useRef<number>(0);
   const speechEnvelopeRef = useRef<number>(0);
   const speechSeedRef = useRef<number>(Math.random() * 1000);
@@ -969,7 +934,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
         const isChessAvatar = staticModelPath && staticModelPath.includes('Encouraging Gesture');
 
         if (isChessAvatar) {
-          cachedChessClipsRef.current = gltf.animations;
+          cachedChessClipsRef.current = gltf.animations.map(stripFaceTracks);
         }
 
         if (!isChessAvatar) {
@@ -1331,7 +1296,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
           gltf.animations &&
           gltf.animations.length > 0
         ) {
-          cachedChessClipsRef.current = gltf.animations;
+          cachedChessClipsRef.current = gltf.animations.map(stripFaceTracks);
         }
 
         // Set up animation mixer
@@ -1417,9 +1382,16 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
             // Set loop and clamp settings
             if (onlyInAnimation) {
               if (type === 'main') {
-                // Yoga main poses: loop during hold time
-                action.setLoop(THREE.LoopRepeat, Infinity);
-                action.clampWhenFinished = false;
+                if (shouldFreezeMainPose(selectedPose)) {
+                  // Static hold: run the clip once and stay on its last frame.
+                  // Looping it kept the body drifting for the whole hold.
+                  action.setLoop(THREE.LoopOnce, 1);
+                  action.clampWhenFinished = true;
+                } else {
+                  // Poses that keep moving (Cat and Camel) loop through the hold.
+                  action.setLoop(THREE.LoopRepeat, Infinity);
+                  action.clampWhenFinished = false;
+                }
               } else {
                 // Yoga in/out: play once
                 action.setLoop(THREE.LoopOnce, 1);
@@ -1648,7 +1620,11 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
     };
 
-  }, [selectedPose, staticMode, staticModelPath, playAnimationPath, playAnimationKey, inAnimationTargetDurationSec, onlyInAnimation, onlyOutAnimation]);
+    // playAnimationKey is deliberately NOT a dependency. It is a one-shot
+    // trigger owned by the animation effect below; including it here reloaded
+    // the whole model on every trigger, which flipped the avatar back into its
+    // loading state and made it vanish mid-session.
+  }, [selectedPose, staticMode, staticModelPath, playAnimationPath, inAnimationTargetDurationSec, onlyInAnimation, onlyOutAnimation]);
 
 
 
@@ -1660,7 +1636,17 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
     }
 
-
+    // When the animation file IS the static model (the chess avatar's gesture),
+    // the figure is already standing there and the clip is a one-shot reaction
+    // the page triggers by bumping playAnimationKey. Playing it on mount made
+    // the avatar celebrate the moment a lesson opened, before anything had
+    // happened, so only run once the key actually changes.
+    const isGestureOnStaticModel = !!staticModelPath && playAnimationPath === staticModelPath;
+    const currentAnimationKey = playAnimationKey ?? 0;
+    if (isGestureOnStaticModel && lastPlayedAnimationKeyRef.current === currentAnimationKey) {
+      return;
+    }
+    lastPlayedAnimationKeyRef.current = currentAnimationKey;
 
     let isCancelled = false;
 
@@ -1776,7 +1762,10 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
           console.log(' Found animations:', gltf.animations.map(a => a.name));
 
-          gltf.animations.forEach((clip: THREE.AnimationClip) => {
+          gltf.animations.forEach((sourceClip: THREE.AnimationClip) => {
+            // A gesture layered on the static model shares its mesh with the
+            // lip-sync, so its face tracks have to go.
+            const clip = shouldReuseLoadedModelAsAnimationRoot ? stripFaceTracks(sourceClip) : sourceClip;
             const action = animationMixer.clipAction(clip);
 
             // TODO: Re-enable warm-up/cooldown logic later
@@ -1970,8 +1959,23 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
         activeSpeechTextRef.current = '';
       }
       const textViseme = isTTSSpeaking
-        ? getTextViseme(activeSpeechTextRef.current, ttsAudioTimeRef.current || Math.max(0, time - speechStartTimeRef.current))
+        ? getTextViseme(
+            activeSpeechTextRef.current,
+            ttsAudioTimeRef.current || Math.max(0, time - speechStartTimeRef.current),
+            ttsAudioDurationRef.current,
+          )
         : IDLE_VISEME;
+
+      // Frame-rate independent smoothing. A fixed per-frame lerp responds twice
+      // as fast at 120fps as at 60, so the same face read differently on
+      // different machines. The rates also differ per articulator, which is what
+      // stops the whole mouth moving as one rigid piece: the jaw is heavy and
+      // trails, the lips are quicker, and a p/b/m closure has to snap shut.
+      const follow = (rate: number) => followFactor(rate, delta);
+      const jawFollow = follow(LIP_SYNC_RATES.jaw);
+      const lipFollow = follow(LIP_SYNC_RATES.lips);
+      const closeFollow = follow(LIP_SYNC_RATES.close);
+      const slowFollow = follow(LIP_SYNC_RATES.expression);
 
       // Smooth speech envelope (attack/release) so lip motion feels less robotic.
       // We use assistant audio level when available; otherwise fall back to a gentle baseline while TTS is active.
@@ -1979,9 +1983,9 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
         ? (assistantSpeaking ? assistantAudioLevelRef.current : Math.max(ttsAudioLevelRef.current * 1.35, textViseme.energy * 0.55))
         : 0;
       const env = speechEnvelopeRef.current;
-      const attack = 0.22;
-      const release = 0.12;
-      const k = rawSpeechLevel > env ? attack : release;
+      // A voice rises onto a syllable faster than it falls away from one, so
+      // attack outruns release. Both are per-second rates, not per-frame steps.
+      const k = rawSpeechLevel > env ? follow(LIP_SYNC_RATES.envelopeAttack) : follow(LIP_SYNC_RATES.envelopeRelease);
       speechEnvelopeRef.current = THREE.MathUtils.lerp(env, rawSpeechLevel, k);
 
       if (!didLogAssistantDriverRef.current && (assistantAudioLevelRef.current > 0.02 || assistantSpeaking)) {
@@ -1996,11 +2000,13 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
       if (effectiveSpeaking && jawBoneRef.current) {
         const target = Math.max(0, Math.min(0.42, speechEnvelopeRef.current * 0.65));
         const targetRot = -target * 0.16;
-        jawBoneRef.current.rotation.x = THREE.MathUtils.lerp(jawBoneRef.current.rotation.x, targetRot, 0.18);
+        jawBoneRef.current.rotation.x = THREE.MathUtils.lerp(jawBoneRef.current.rotation.x, targetRot, jawFollow);
       }
 
       if (!effectiveSpeaking && jawBoneRef.current) {
-        jawBoneRef.current.rotation.x = THREE.MathUtils.lerp(jawBoneRef.current.rotation.x, 0, 0.18);
+        // Settling back to rest is slower than opening - a jaw drops shut, it
+        // does not snap.
+        jawBoneRef.current.rotation.x = THREE.MathUtils.lerp(jawBoneRef.current.rotation.x, 0, slowFollow);
       }
 
       if (effectiveSpeaking && blendshapeMeshRef.current && blendshapeMeshRef.current.morphTargetInfluences) {
@@ -2059,7 +2065,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
           const jawIdx = (dict as any).jawOpen;
           if (typeof jawIdx === 'number') {
             didDriveArkitMouth = true;
-            influences[jawIdx] = THREE.MathUtils.lerp(influences[jawIdx] || 0, jawAmount, 0.3);
+            influences[jawIdx] = THREE.MathUtils.lerp(influences[jawIdx] || 0, jawAmount, jawFollow);
           }
 
           // Mouth close - counteract jawOpen *only when needed*.
@@ -2069,7 +2075,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
             const closeAmount = isTTSSpeaking
               ? THREE.MathUtils.clamp(textViseme.close * 0.45 * audioDrive, 0, 0.42)
               : THREE.MathUtils.clamp(jawAmount * (0.65 - 0.55 * gate), 0, 0.55);
-            influences[closeIdx] = THREE.MathUtils.lerp(influences[closeIdx] || 0, closeAmount, 0.22);
+            influences[closeIdx] = THREE.MathUtils.lerp(influences[closeIdx] || 0, closeAmount, closeFollow);
           }
 
           // Upper lip movement - MINIMAL, don't add to lip opening
@@ -2080,10 +2086,10 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
 
           // Subtle upper lip movement only
           const upperLipValue = openAmount * 0.22;
-          if (typeof upperUpLIdx === 'number') influences[upperUpLIdx] = THREE.MathUtils.lerp(influences[upperUpLIdx] || 0, upperLipValue, 0.18);
-          if (typeof upperUpRIdx === 'number') influences[upperUpRIdx] = THREE.MathUtils.lerp(influences[upperUpRIdx] || 0, upperLipValue, 0.18);
-          if (typeof upperUpIdx === 'number') influences[upperUpIdx] = THREE.MathUtils.lerp(influences[upperUpIdx] || 0, upperLipValue, 0.18);
-          if (typeof lipUpperIdx === 'number') influences[lipUpperIdx] = THREE.MathUtils.lerp(influences[lipUpperIdx] || 0, upperLipValue * 0.55, 0.18);
+          if (typeof upperUpLIdx === 'number') influences[upperUpLIdx] = THREE.MathUtils.lerp(influences[upperUpLIdx] || 0, upperLipValue, lipFollow);
+          if (typeof upperUpRIdx === 'number') influences[upperUpRIdx] = THREE.MathUtils.lerp(influences[upperUpRIdx] || 0, upperLipValue, lipFollow);
+          if (typeof upperUpIdx === 'number') influences[upperUpIdx] = THREE.MathUtils.lerp(influences[upperUpIdx] || 0, upperLipValue, lipFollow);
+          if (typeof lipUpperIdx === 'number') influences[lipUpperIdx] = THREE.MathUtils.lerp(influences[lipUpperIdx] || 0, upperLipValue * 0.55, lipFollow);
 
           // Lower lip movement - MINIMAL, synced with jaw
           const lowerDownLIdx = (dict as any).mouthLowerDownLeft;
@@ -2095,14 +2101,14 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
           const lowerLipValue = isTTSSpeaking
             ? THREE.MathUtils.clamp(jawAmount * 0.08 + textViseme.lowerLip * 0.12 * audioDrive, 0, 0.18)
             : jawAmount * 0.10;
-          if (typeof lowerDownLIdx === 'number') influences[lowerDownLIdx] = THREE.MathUtils.lerp(influences[lowerDownLIdx] || 0, lowerLipValue, 0.2);
-          if (typeof lowerDownRIdx === 'number') influences[lowerDownRIdx] = THREE.MathUtils.lerp(influences[lowerDownRIdx] || 0, lowerLipValue, 0.2);
-          if (typeof lowerDownIdx === 'number') influences[lowerDownIdx] = THREE.MathUtils.lerp(influences[lowerDownIdx] || 0, lowerLipValue, 0.2);
-          if (typeof lipLowerIdx === 'number') influences[lipLowerIdx] = THREE.MathUtils.lerp(influences[lipLowerIdx] || 0, lowerLipValue * 0.55, 0.2);
+          if (typeof lowerDownLIdx === 'number') influences[lowerDownLIdx] = THREE.MathUtils.lerp(influences[lowerDownLIdx] || 0, lowerLipValue, lipFollow);
+          if (typeof lowerDownRIdx === 'number') influences[lowerDownRIdx] = THREE.MathUtils.lerp(influences[lowerDownRIdx] || 0, lowerLipValue, lipFollow);
+          if (typeof lowerDownIdx === 'number') influences[lowerDownIdx] = THREE.MathUtils.lerp(influences[lowerDownIdx] || 0, lowerLipValue, lipFollow);
+          if (typeof lipLowerIdx === 'number') influences[lipLowerIdx] = THREE.MathUtils.lerp(influences[lipLowerIdx] || 0, lowerLipValue * 0.55, lipFollow);
 
           const mouthOpenIdx = (dict as any).mouthOpen;
           if (typeof mouthOpenIdx === 'number') {
-            influences[mouthOpenIdx] = THREE.MathUtils.lerp(influences[mouthOpenIdx] || 0, openAmount, 0.26);
+            influences[mouthOpenIdx] = THREE.MathUtils.lerp(influences[mouthOpenIdx] || 0, openAmount, jawFollow);
           }
 
           // Mouth funnel and pucker for rounded sounds
@@ -2111,7 +2117,7 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
             influences[funnelIdx] = THREE.MathUtils.lerp(
               influences[funnelIdx] || 0,
               roundAmount * (0.52 + 0.12 * (0.5 + 0.5 * Math.sin((time + speechSeedRef.current) * 2.0))),
-              0.18
+              lipFollow
             );
 
           const puckerIdx = (dict as any).mouthPucker;
@@ -2119,22 +2125,23 @@ function YogaModel({ selectedPose, onlyInAnimation = false, onlyOutAnimation = f
             influences[puckerIdx] = THREE.MathUtils.lerp(
               influences[puckerIdx] || 0,
               roundAmount * (0.5 + 0.12 * (0.5 + 0.5 * Math.sin((time + speechSeedRef.current) * 1.6 + 0.6))),
-              0.18
+              lipFollow
             );
 
-          // Smile - subtle, adds life
+          // Smile - subtle, adds life. Deliberately the slowest of the group:
+          // an expression sits under the speech rather than flickering with it.
           const smileIdx = (dict as any).mouthSmileLeft || (dict as any).mouthSmile;
           const smileRIdx = (dict as any).mouthSmileRight;
           const smileValue = 0.02 + wideAmount * 0.45;
-          if (typeof smileIdx === 'number') influences[smileIdx] = THREE.MathUtils.lerp(influences[smileIdx] || 0, smileValue, 0.12);
-          if (typeof smileRIdx === 'number') influences[smileRIdx] = THREE.MathUtils.lerp(influences[smileRIdx] || 0, smileValue, 0.12);
+          if (typeof smileIdx === 'number') influences[smileIdx] = THREE.MathUtils.lerp(influences[smileIdx] || 0, smileValue, slowFollow);
+          if (typeof smileRIdx === 'number') influences[smileRIdx] = THREE.MathUtils.lerp(influences[smileRIdx] || 0, smileValue, slowFollow);
 
           // Teeth visibility - SHOW when mouth opens, HIDE when closed (natural human behavior)
           const teethIdx = (dict as any).teeth || (dict as any).Teeth;
           if (typeof teethIdx === 'number') {
             // Teeth visible when jaw opens, hidden during pauses/closed
             const teethVisible = jawAmount > 0.18 ? jawAmount * 0.35 : 0;
-            influences[teethIdx] = THREE.MathUtils.lerp(influences[teethIdx] || 0, teethVisible, 0.18);
+            influences[teethIdx] = THREE.MathUtils.lerp(influences[teethIdx] || 0, teethVisible, lipFollow);
           }
         } catch { }
 
@@ -2490,6 +2497,13 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
   );
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
 
+  // A gesture whose animation file IS the static model reuses the figure that
+  // is already on screen - only the clip restarts. Folding its trigger into the
+  // source signature blanked the canvas on every gesture, which is what made
+  // the chess avatar drop back to a loading spinner after each move.
+  const modelSourceKey =
+    !!staticModelPath && playAnimationPath === staticModelPath ? 0 : playAnimationKey ?? 0;
+
   // Hide the canvas immediately when the actual avatar source changes. Phase
   // flags are intentionally excluded: IN/MAIN/OUT are cached swaps for the same
   // pose, so the current frame must remain visible until the replacement is ready.
@@ -2507,7 +2521,7 @@ export default function Avatar3D({ selectedPose = "Mountain Pose", onlyInAnimati
     staticMode,
     staticModelPath,
     playAnimationPath,
-    playAnimationKey,
+    modelSourceKey,
     loopCustomAnimation,
   ]);
 

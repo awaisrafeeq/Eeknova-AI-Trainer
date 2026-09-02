@@ -101,8 +101,13 @@ export default function YogaPage() {
   const [setupViewportReady, setSetupViewportReady] = useState(false);
   const [avatarSpeechReady, setAvatarSpeechReady] = useState(false);
 
+  // Latch on the first ready signal and never drop back. The avatar reports
+  // "not ready" again every time it swaps in the next phase's model, and gating
+  // speech on that made every phase cue wait out a GLB load before it was even
+  // requested - which is what made the voice arrive long after the movement.
+  // Holding back the very first line until the avatar exists is still worth it.
   const handleAvatarReadyChange = useCallback((ready: boolean) => {
-    setAvatarSpeechReady(ready);
+    if (ready) setAvatarSpeechReady(true);
   }, []);
 
   useEffect(() => {
@@ -279,6 +284,8 @@ export default function YogaPage() {
   const [releaseInstructionsDone, setReleaseInstructionsDone] = useState(false);
   const [releaseAnimationDone, setReleaseAnimationDone] = useState(false);
   const [releasePlaybackReady, setReleasePlaybackReady] = useState(false);
+  // True when the user pressed End Session rather than the pose finishing.
+  const [manualSessionEnd, setManualSessionEnd] = useState(false);
 
   useEffect(() => {
     setAvatarSpeechReady(false);
@@ -575,6 +582,7 @@ export default function YogaPage() {
 
   const startPoseSession = () => {
     setAvatarSpeechReady(false);
+    setManualSessionEnd(false);
     setShowWarmupSkipWarning(false);
     setFlowStage('pose');
     setIsSessionStarted(true);
@@ -843,6 +851,10 @@ export default function YogaPage() {
   // Handle End Session button
 
   const handleEndSession = () => {
+    // Ending manually returns to the dashboard right away, so the wrap-up line
+    // that YogaCamera speaks a second later would arrive after the user has
+    // already left the session. Suppress it for a manual stop.
+    setManualSessionEnd(true);
     // TODO: Re-enable cool-down later - skip directly to session end
     // startCooldown();
     finalizeSessionEnd();
@@ -1192,32 +1204,32 @@ export default function YogaPage() {
               </div>
             )}
 
-            {/* Session Timer - Fixed above buttons during MAIN (hold) phase */}
+            {/* Hold countdown - top right, large enough to read from a distance */}
             {isSessionStarted && flowStage === 'pose' && currentPhase === 'hold' && (
-              <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-30 mb-2">
-                <div className="flex flex-col items-center space-y-2">
-                  <div className="text-3xl font-bold text-red-500" style={{ fontFamily: 'var(--font-future)' }}>
-                    {formatTime(timeLeft)}
-                  </div>
-                  <div className="flex items-center space-x-4 text-xs">
-                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-500 text-white">
-                      HOLDING POSE
-                    </span>
-                    <span className="text-[var(--ink-med)]">Total: {formatTime(totalTime)}</span>
-                  </div>
-                  {/* TTS Speaking Indicator */}
-                  {isTTSSpeaking && currentTTSFeedback && (
-                    <div className="flex flex-col items-center space-y-1 text-xs animate-pulse">
-                      <div className="flex items-center space-x-2 text-[var(--brand-neo)]">
-                        <div className="w-2 h-2 bg-[var(--brand-neo)] rounded-full animate-ping"></div>
-                        <span>Speaking...</span>
-                      </div>
-                      <div className="text-[var(--ink-med)] text-center max-w-[200px] px-2">
-                        {currentTTSFeedback}
-                      </div>
-                    </div>
-                  )}
+              <div className="pointer-events-none fixed right-6 top-6 z-40 text-right">
+                <div className="text-[13px] font-semibold uppercase tracking-[0.2em] text-black/60">
+                  Hold
                 </div>
+                <div
+                  className="text-[76px] font-black leading-none tabular-nums text-black"
+                  style={{ fontFamily: 'var(--font-future)' }}
+                >
+                  {formatTime(timeLeft)}
+                </div>
+                <div className="mt-1 text-[14px] font-medium text-black/60">
+                  Total {formatTime(totalTime)}
+                </div>
+              </div>
+            )}
+
+            {/* Spoken instructions as movie-style subtitles. Shown for every
+                stage that speaks (instructions, pose, release), not just the
+                hold phase, so guidance is never missing while a pose loads. */}
+            {flowStage !== 'setup' && currentTTSFeedback && (
+              <div className="pointer-events-none fixed bottom-28 left-1/2 z-40 w-[min(920px,92vw)] -translate-x-1/2 px-4">
+                <p className="rounded-2xl bg-white/85 px-8 py-5 text-center text-[30px] font-semibold leading-snug text-black shadow-[0_10px_40px_rgba(0,0,0,.18)] backdrop-blur-sm">
+                  {currentTTSFeedback}
+                </p>
               </div>
             )}
 
@@ -1325,6 +1337,7 @@ export default function YogaPage() {
                 playReleaseInstructions={flowStage === 'release' && playReleaseInstructions}
                 isPaused={isPaused}
                 speechReady={avatarSpeechReady}
+                suppressEndAnnouncement={manualSessionEnd}
                 onGuidedInstructionsEnd={() => {
                   // Smooth transition into detection/animation
                   setIsStageTransitioning(true);

@@ -94,6 +94,16 @@ class ExerciseState:
     pieces_inventory: Optional[Dict[str, Dict[str, Any]]] = None
     placed_pieces: Optional[Dict[str, Dict[str, Any]]] = None
     current_piece_type: Optional[str] = None
+    # In gameplay the AI replies inside the same request as the player's move,
+    # so the board that comes back already has both moves on it and the player
+    # never sees their own move land. These carry the intermediate position so
+    # the client can show the player's move first and then the AI's reply.
+    pre_ai_board_position: Optional[BoardPosition] = None
+    pre_ai_feedback_message: Optional[str] = None
+    ai_move_san: Optional[str] = None
+    # Origin/destination of the AI's reply ("b8c6"), so the board can slide the
+    # piece across instead of having it blink from one square to another.
+    ai_move_uci: Optional[str] = None
 
 class ChessEngine:
     """Complete chess engine that replicates pygame functionality"""
@@ -279,7 +289,11 @@ class LessonEngine:
     def __init__(self):
         self.engine = ChessEngine()
         self.current_exercise: Optional[ExerciseState] = None
-        
+        # Notation of the most recent AI reply, so it can be announced, and its
+        # UCI form so the board can animate the piece between squares.
+        self.last_ai_move_san: Optional[str] = None
+        self.last_ai_move_uci: Optional[str] = None
+
     # ---- Pawn Movement Lessons (Complete from pygame) ----
     
     def create_pawn_exercise(self, exercise_type: str, exercise_number: int) -> ExerciseState:
@@ -1437,6 +1451,8 @@ class LessonEngine:
 
     def make_ai_move(self) -> bool:
         """Make an AI move"""
+        self.last_ai_move_san = None
+        self.last_ai_move_uci = None
         try:
             print(f"AI attempting to move. Current turn: {'White' if self.engine.board.turn else 'Black'}")
             move_str = self.find_best_move()
@@ -1447,6 +1463,13 @@ class LessonEngine:
                 print(f"Legal moves: {list(self.engine.board.legal_moves)}")
                 if move in self.engine.board.legal_moves:
                     print(f"AI making move: {move_str}")
+                    # Read the notation before pushing - san() needs the position
+                    # the move is played from.
+                    try:
+                        self.last_ai_move_san = self.engine.board.san(move)
+                    except Exception:
+                        self.last_ai_move_san = move_str
+                    self.last_ai_move_uci = move_str
                     self.engine.board.push(move)
                     print(f"New FEN after move: {self.engine.board.fen()}")
                     return True

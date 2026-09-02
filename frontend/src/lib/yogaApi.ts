@@ -374,6 +374,11 @@ export class TTSFeedback {
   private prefetchRequests: Map<string, Promise<Blob>> = new Map();
   private ttsAudioContext: AudioContext | null = null;
   private ttsAudioFrame: number | null = null;
+  private ttsMediaSource: MediaElementAudioSourceNode | null = null;
+  private ttsAnalyser: AnalyserNode | null = null;
+  private browserUtterance: SpeechSynthesisUtterance | null = null;
+  private browserVoiceTimer: ReturnType<typeof setTimeout> | null = null;
+  private browserVoiceFinish: (() => void) | null = null;
 
   constructor(onSpeakingChange?: (isSpeaking: boolean) => void, onTextChange?: (text: string) => void) {
     this.onSpeakingChange = onSpeakingChange || null;
@@ -407,10 +412,16 @@ export class TTSFeedback {
     } else {
       if (this.queue.length < 5) {
         this.queue.push(text);
-        // NO PREFETCH - Direct processing to eliminate delay
         this.processQueue();
       }
     }
+
+    // Anything still queued behind the current line has to be downloaded at
+    // some point; starting those requests now means they are already cached by
+    // the time their turn comes instead of stalling the queue one line at a
+    // time. Harmless for the line that is playing right now - it shares the
+    // same in-flight request.
+    this.prefetchQueued();
   }
 
   prefetch(text: string | null | undefined): void {
@@ -456,12 +467,10 @@ export class TTSFeedback {
     }
   }
 
-  private async prefetchNext(): Promise<void> {
-    const next = this.queue[0];
-    if (next) {
-      this.prefetch(next);
+  private prefetchQueued(): void {
+    for (const queued of this.queue) {
+      this.prefetch(queued);
     }
-    return Promise.resolve();
   }
 
   private getCacheKey(text: string): string {
@@ -522,7 +531,10 @@ export class TTSFeedback {
     const token = ++this.playbackToken;
     this.speaking = true;
     this.currentText = text;
-    this.onTextChange?.(text);
+    // The subtitle and the avatar's mouth are deliberately NOT opened here.
+    // Rendering the line while the audio is still being fetched is what made
+    // the voice feel out of sync - the text appeared, then the speech followed
+    // a beat later. Both are switched on at the same instant playback starts.
     this.lastSpokenTime = Date.now();
 
     try {
@@ -531,7 +543,21 @@ export class TTSFeedback {
       if (!this.audioCache.has(cacheKey)) {
         console.log('⏳ Fetching TTS for:', text);
       }
-      const blob = await this.getSpeechBlob(text, this.abortController.signal);
+      let blob: Blob;
+      try {
+        blob = await this.getSpeechBlob(text, this.abortController.signal);
+      } catch (synthesisError) {
+        // Offline, or the TTS service is unreachable. Falling through here would
+        // leave the user with neither voice nor on-screen text, so hand the line
+        // to the browser's built-in speech engine instead.
+        console.warn('TTS synthesis unavailable, using the browser voice:', synthesisError);
+        if (token !== this.playbackToken || !this.speaking || this.currentText !== text) {
+          return;
+        }
+        await this.speakWithBrowserVoice(text);
+        return;
+      }
+
       if (token !== this.playbackToken || !this.speaking || this.currentText !== text) {
         return;
       }
@@ -546,11 +572,15 @@ export class TTSFeedback {
           resolve();
           return;
         }
-        const timer = setTimeout(() => resolve(), 400);
-        audio.oncanplay = () => {
+        // The data is already local (blob URL), so decoding is quick. A long
+        // fallback here only adds dead air, so keep the cap short.
+        const timer = setTimeout(() => resolve(), 150);
+        const ready = () => {
           clearTimeout(timer);
           resolve();
         };
+        audio.oncanplay = ready;
+        audio.onloadeddata = ready;
         audio.onerror = () => {
           clearTimeout(timer);
           reject(new Error('Audio preload error'));
@@ -563,20 +593,18 @@ export class TTSFeedback {
         return;
       }
 
-      // Give React/Avatar3D one tiny frame to open lip-sync before the first syllable.
-      this.onSpeakingChange?.(true);
-      await new Promise((resolve) => setTimeout(resolve, 120));
-
-      if (token !== this.playbackToken || !this.speaking || this.currentText !== text) {
-        URL.revokeObjectURL(url);
-        return;
-      }
+      // Route through the analyser before playback starts, otherwise the first
+      // moments come out of the default output and then jump into the graph.
+      this.attachTTSLevelEmitter(audio);
 
       await new Promise<void>((resolve, reject) => {
         audio.onended = () => resolve();
         audio.onerror = () => reject(new Error('Audio playback error'));
+        // Subtitle, lip-sync and the first syllable all begin in the same tick.
+        this.onTextChange?.(text);
+        this.onSpeakingChange?.(true);
         audio.play().catch(reject);
-        this.startTTSLevelEmitter(audio, text);
+        this.runTTSLevelLoop(audio, text);
       });
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -590,13 +618,82 @@ export class TTSFeedback {
         this.abortController = null;
         this.stopTTSLevelEmitter();
 
-        void this.prefetchNext();
+        this.prefetchQueued();
         this.processQueue();
       }
     }
   }
 
-  private async startTTSLevelEmitter(audio: HTMLAudioElement, text: string): Promise<void> {
+  /**
+   * Offline path. Uses the platform speech engine, which needs no network, and
+   * still drives the subtitle plus the avatar's mouth. If even that is missing,
+   * the line is at least displayed long enough to read.
+   */
+  private speakWithBrowserVoice(text: string): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const wordCount = text.split(/\s+/).filter(Boolean).length;
+      const estimatedMs = Math.max(1800, wordCount * 380);
+
+      this.onTextChange?.(text);
+      this.onSpeakingChange?.(true);
+      this.runSyntheticLevelLoop(text);
+
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        if (this.browserVoiceTimer) {
+          clearTimeout(this.browserVoiceTimer);
+          this.browserVoiceTimer = null;
+        }
+        if (this.browserVoiceFinish === finish) this.browserVoiceFinish = null;
+        resolve();
+      };
+      this.browserVoiceFinish = finish;
+
+      const synth = typeof window !== 'undefined' ? window.speechSynthesis : undefined;
+      if (!synth) {
+        this.browserVoiceTimer = setTimeout(finish, estimatedMs);
+        return;
+      }
+
+      try {
+        synth.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1;
+        utterance.pitch = 1;
+        utterance.onend = finish;
+        utterance.onerror = finish;
+        this.browserUtterance = utterance;
+        synth.speak(utterance);
+        // Some browsers silently drop onend; never hang the queue on it.
+        this.browserVoiceTimer = setTimeout(finish, estimatedMs + 8000);
+      } catch {
+        this.browserVoiceTimer = setTimeout(finish, estimatedMs);
+      }
+    });
+  }
+
+  private runSyntheticLevelLoop(text: string): void {
+    const startedAt = performance.now();
+    const tick = () => {
+      const t = (performance.now() - startedAt) / 1000;
+      const level = 0.28 + 0.22 * Math.abs(Math.sin(t * 9));
+      window.dispatchEvent(new CustomEvent('eeknova-tts-audio', {
+        detail: { isSpeaking: true, level, text, currentTime: t, duration: 0 },
+      }));
+      this.ttsAudioFrame = requestAnimationFrame(tick);
+    };
+    tick();
+  }
+
+  /**
+   * Wires the audio element into the analyser graph. Synchronous on purpose:
+   * it has to complete before play() so no audio escapes to the default output
+   * first. The AudioContext is created once and kept - building and closing one
+   * per utterance cost tens of milliseconds every single line.
+   */
+  private attachTTSLevelEmitter(audio: HTMLAudioElement): void {
     this.stopTTSLevelEmitter(false);
 
     try {
@@ -604,10 +701,16 @@ export class TTSFeedback {
         window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AudioContextCtor) return;
 
-      const ctx = new AudioContextCtor();
-      this.ttsAudioContext = ctx;
-      if (ctx.state === 'suspended') {
-        await ctx.resume().catch(() => undefined);
+      if (!this.ttsAudioContext || this.ttsAudioContext.state === 'closed') {
+        this.ttsAudioContext = new AudioContextCtor();
+      }
+      const ctx = this.ttsAudioContext;
+      if (ctx.state !== 'running') {
+        // Kick it off for the next utterance, but do NOT route this one through
+        // a suspended graph - that would make it inaudible. runTTSLevelLoop
+        // falls back to a synthetic level so the mouth still moves.
+        void ctx.resume().catch(() => undefined);
+        return;
       }
 
       const source = ctx.createMediaElementSource(audio);
@@ -617,38 +720,55 @@ export class TTSFeedback {
       source.connect(analyser);
       analyser.connect(ctx.destination);
 
-      const data = new Uint8Array(analyser.fftSize);
-      const tick = () => {
-        analyser.getByteTimeDomainData(data);
-        let sum = 0;
-        for (let i = 0; i < data.length; i += 1) {
-          const centered = (data[i] - 128) / 128;
-          sum += centered * centered;
-        }
-        const rms = Math.sqrt(sum / data.length);
-        const level = Math.min(1, Math.max(0, rms * 5.5));
-        window.dispatchEvent(new CustomEvent('eeknova-tts-audio', {
-          detail: {
-            isSpeaking: true,
-            level,
-            text,
-            currentTime: audio.currentTime,
-            duration: Number.isFinite(audio.duration) ? audio.duration : 0,
-          },
-        }));
-
-        if (!audio.paused && !audio.ended) {
-          this.ttsAudioFrame = requestAnimationFrame(tick);
-        }
-      };
-
-      tick();
+      this.ttsMediaSource = source;
+      this.ttsAnalyser = analyser;
     } catch (error) {
       console.warn('TTS audio level analyser unavailable:', error);
-      window.dispatchEvent(new CustomEvent('eeknova-tts-audio', {
-        detail: { isSpeaking: true, level: 0.45, text, currentTime: 0, duration: 0 },
-      }));
+      this.ttsMediaSource = null;
+      this.ttsAnalyser = null;
     }
+  }
+
+  private runTTSLevelLoop(audio: HTMLAudioElement, text: string): void {
+    const analyser = this.ttsAnalyser;
+    const data = analyser ? new Uint8Array(analyser.fftSize) : null;
+    const startedAt = performance.now();
+
+    const measure = (): number => {
+      if (!analyser || !data) {
+        // No analyser available (context still suspended). Drive the mouth with
+        // a plausible syllable rhythm rather than freezing it open.
+        const t = (performance.now() - startedAt) / 1000;
+        return 0.28 + 0.22 * Math.abs(Math.sin(t * 9));
+      }
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i += 1) {
+        const centered = (data[i] - 128) / 128;
+        sum += centered * centered;
+      }
+      const rms = Math.sqrt(sum / data.length);
+      return Math.min(1, Math.max(0, rms * 5.5));
+    };
+
+    const tick = () => {
+      const level = measure();
+      window.dispatchEvent(new CustomEvent('eeknova-tts-audio', {
+        detail: {
+          isSpeaking: true,
+          level,
+          text,
+          currentTime: audio.currentTime,
+          duration: Number.isFinite(audio.duration) ? audio.duration : 0,
+        },
+      }));
+
+      if (!audio.ended) {
+        this.ttsAudioFrame = requestAnimationFrame(tick);
+      }
+    };
+
+    tick();
   }
 
   private stopTTSLevelEmitter(dispatchEnded: boolean = true): void {
@@ -663,11 +783,14 @@ export class TTSFeedback {
       }));
     }
 
-    const ctx = this.ttsAudioContext;
-    this.ttsAudioContext = null;
-    if (ctx) {
-      void ctx.close().catch(() => undefined);
-    }
+    // Detach the previous utterance's nodes but keep the context alive for the
+    // next one.
+    try {
+      this.ttsMediaSource?.disconnect();
+      this.ttsAnalyser?.disconnect();
+    } catch {}
+    this.ttsMediaSource = null;
+    this.ttsAnalyser = null;
   }
 
   private stopCurrentPlayback(): void {
@@ -678,6 +801,19 @@ export class TTSFeedback {
       } catch {}
       this.currentAudio = null;
     }
+
+    // Also silence the offline fallback voice, if that is what is running.
+    if (this.browserUtterance) {
+      this.browserUtterance = null;
+      try {
+        window.speechSynthesis?.cancel();
+      } catch {}
+    }
+    // Release the waiter last, so it does not observe a half-torn-down state.
+    const finishBrowserVoice = this.browserVoiceFinish;
+    this.browserVoiceFinish = null;
+    finishBrowserVoice?.();
+
     this.stopTTSLevelEmitter();
     
     // Reset speaking state

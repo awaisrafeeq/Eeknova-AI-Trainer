@@ -25,9 +25,14 @@ export async function POST(req: Request) {
     }
 
     const body = (await req.json().catch(() => ({}))) as { model?: string; voice?: string };
-    const cheapDefaultModel = 'gpt-4o-mini-realtime-preview';
-    const fallbackModel = 'gpt-4o-realtime-preview';
-    let model = body.model || cheapDefaultModel;
+    // The preview realtime models and the POST /v1/realtime/sessions endpoint
+    // were retired; the GA flow is POST /v1/realtime/client_secrets with a
+    // nested session object. Callers may still pass a preview model name, so
+    // map anything preview-shaped onto the GA model.
+    const defaultModel = 'gpt-realtime';
+    const fallbackModel = 'gpt-realtime-2.1';
+    const requestedModel = body.model || defaultModel;
+    let model = /realtime-preview/i.test(requestedModel) ? defaultModel : requestedModel;
     const requestedVoice = body.voice || 'alloy';
     const voice = REALTIME_VOICES.has(requestedVoice) ? requestedVoice : 'alloy';
 
@@ -37,15 +42,18 @@ export async function POST(req: Request) {
     let lastFetchError: string | null = null;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        openaiRes = await fetch('https://api.openai.com/v1/realtime/sessions', {
+        openaiRes = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model,
-            voice,
+            session: {
+              type: 'realtime',
+              model,
+              audio: { output: { voice } },
+            },
           }),
         });
         lastFetchError = null;
@@ -74,7 +82,7 @@ export async function POST(req: Request) {
       if (
         openaiRes.status >= 400 &&
         openaiRes.status < 500 &&
-        model === cheapDefaultModel &&
+        model === defaultModel &&
         /invalid_model|model_not_found|unsupported_model/i.test(lastDetails)
       ) {
         console.error('Realtime model not available; falling back', {
@@ -132,9 +140,13 @@ export async function POST(req: Request) {
       );
     }
 
-    let data: { client_secret?: { value?: string } } | null = null;
+    // GA returns the ephemeral key at the top level ("value", an ek_… string).
+    // The retired sessions endpoint nested it under client_secret.value, so keep
+    // reading that as a fallback.
+    type ClientSecretResponse = { value?: string; client_secret?: { value?: string } };
+    let data: ClientSecretResponse | null = null;
     try {
-      data = (await openaiRes.json()) as { client_secret?: { value?: string } };
+      data = (await openaiRes.json()) as ClientSecretResponse;
     } catch (e) {
       const raw = await openaiRes.text().catch(() => '');
       console.error('Realtime session create JSON parse failed', {
@@ -149,10 +161,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const token = data.client_secret?.value;
+    const token = data.value || data.client_secret?.value;
     if (!token) {
-      console.error('Realtime session create missing client_secret', { model, voice, data });
-      return NextResponse.json({ error: 'Missing client_secret in response' }, { status: 500 });
+      console.error('Realtime session create missing client secret', { model, voice, data });
+      return NextResponse.json({ error: 'Missing client secret in response' }, { status: 500 });
     }
 
     return NextResponse.json({ token, model });
