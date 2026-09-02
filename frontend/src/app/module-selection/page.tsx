@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Avatar3D from '@/components/Avatar3D';
 import Walktour from '@/components/Walktour';
 import AuthGuard from '@/components/AuthGuard';
+import { TTSFeedback } from '@/lib/yogaApi';
 
 export default function Page() {
     const [showWalktour, setShowWalktour] = useState(false);
@@ -124,6 +125,58 @@ export default function Page() {
         fetchProfile();
     }, []);
 
+    // Spoken welcome, timed to land with the avatar's wave.
+    //
+    // Generating the speech takes a round trip to the TTS service, which is why
+    // the greeting used to arrive long after the avatar had already waved. So
+    // the audio is fetched into the cache as soon as the name is known, and is
+    // only played once the avatar is actually on screen: by then the blob is
+    // ready and playback starts immediately, in step with the wave.
+    const ttsRef = React.useRef<TTSFeedback | null>(null);
+    const [avatarReady, setAvatarReady] = useState(false);
+    const greeting = userProfile.full_name || userProfile.username
+        ? `Hi ${userProfile.full_name || userProfile.username}, Welcome. I am Eeknova, Your Community Assistant`
+        : '';
+
+    // Warm the audio as early as possible.
+    useEffect(() => {
+        if (!greeting) return;
+        if (!ttsRef.current) ttsRef.current = new TTSFeedback();
+        ttsRef.current.prefetch(greeting);
+    }, [greeting]);
+
+    const greetedRef = React.useRef(false);
+    useEffect(() => {
+        if (greetedRef.current || !greeting || !avatarReady) return;
+        greetedRef.current = true;
+
+        const tts = ttsRef.current;
+        if (!tts) return;
+
+        // Browsers refuse audio before the page has been interacted with, and
+        // TTSFeedback swallows that rejection internally, so a failed greeting
+        // cannot be detected afterwards. Check activation up front instead;
+        // this also stops the greeting from being spoken twice.
+        const activation = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } })
+            .userActivation;
+        // Undefined on browsers without the API: attempt playback as before.
+        if (activation?.hasBeenActive !== false) {
+            tts.speak(greeting, true);
+            return;
+        }
+
+        const speakOnce = () => tts.speak(greeting, true);
+        window.addEventListener('pointerdown', speakOnce, { once: true });
+        window.addEventListener('keydown', speakOnce, { once: true });
+        return () => {
+            window.removeEventListener('pointerdown', speakOnce);
+            window.removeEventListener('keydown', speakOnce);
+        };
+    }, [greeting, avatarReady]);
+
+    // Stop any in-flight speech when leaving the page.
+    useEffect(() => () => ttsRef.current?.stop(), []);
+
     if (!mounted) return null;
 
     return (
@@ -142,11 +195,14 @@ export default function Page() {
                                     selectedPose=""
                                     onlyInAnimation={false}
                                     staticModelPath="/smile_greet_compressed.glb"
-                                    cameraManualDistanceFactor={1.50}
+                                    // 3 mouse-wheel zoom steps closer. OrbitControls dollies by
+                                    // 0.95 per notch, so 1.50 * 0.95^3 = 1.29.
+                                    cameraManualDistanceFactor={1.29}
                                     cameraManualTargetYOffsetFactor={0.08}
                                     cameraManualTargetXOffsetFactor={-0.08}
                                     lockCamera={true}
                                     showGroundShadow={true}
+                                    onReadyChange={setAvatarReady}
                                 />
                                 {/* Fake shadow removed to stop float illusion */}
                             </div>

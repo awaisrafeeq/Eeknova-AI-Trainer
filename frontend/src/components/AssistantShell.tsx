@@ -674,7 +674,7 @@ export default function AssistantShell() {
     const tokenRes = await fetch('/api/realtime/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'gpt-4o-mini-realtime-preview', voice: 'alloy' }),
+      body: JSON.stringify({ model: 'gpt-realtime', voice: 'alloy' }),
     });
 
     if (realtimeAttemptRef.current !== attemptId) return;
@@ -690,7 +690,6 @@ export default function AssistantShell() {
 
     const tokenJson = (await tokenRes.json()) as { token: string; model?: string };
     const token = tokenJson.token;
-    const model = tokenJson.model || 'gpt-4o-realtime-preview';
 
     const pc = new RTCPeerConnection();
     rtcRef.current = pc;
@@ -1007,7 +1006,10 @@ export default function AssistantShell() {
 
     if (realtimeAttemptRef.current !== attemptId || isPcClosed(pc) || rtcRef.current !== pc) return;
 
-    const sdpRes = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`, {
+    // GA WebRTC endpoint. The old `/v1/realtime?model=…` form was retired along
+    // with the preview session endpoint; the model now comes from the session
+    // that the ephemeral key was minted for.
+    const sdpRes = await fetch('https://api.openai.com/v1/realtime/calls', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,

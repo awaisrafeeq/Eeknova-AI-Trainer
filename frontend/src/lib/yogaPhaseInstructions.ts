@@ -38,8 +38,10 @@ export const YOGA_PHASE_INSTRUCTIONS: Record<string, YogaPhaseInstruction> = {
     out: "Return to the original position.",
   },
   "Cat And Camel Pose": {
-    in: "Come into all fours with your hands under your shoulders and knees under your hips. Make sure your elbows do not bend.",
-    mainIntro: "Round your spine up into Cat, then lower your belly and lift your chest into Camel. Keep coordinating between Cat and Camel.",
+    // Both halves are spoken while entering the pose. They used to be split, so
+    // the movement itself was only explained after the hold had already begun -
+    // by which point the user was expected to be doing it.
+    in: "Come into all fours with your hands under your shoulders and knees under your hips. Make sure your elbows do not bend. Then round your spine up into Cat, lower your belly and lift your chest into Camel, and keep moving between the two.",
     out: "Return to the original position.",
   },
   "Seated Forward": {

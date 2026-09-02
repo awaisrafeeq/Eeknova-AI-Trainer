@@ -4,6 +4,31 @@ export type YogaPoseAnimation = {
   outPath: string;
 };
 
+/**
+ * How a pose behaves while it is being held.
+ *
+ * MAIN clips loop for the whole hold by default, which is right for a pose that
+ * keeps moving (Cat and Camel alternates between the two shapes). For a static
+ * hold the looping motion is wrong - the authored clip drifts, so the body
+ * visibly keeps shifting when it should have settled. `freezeMain` plays the
+ * clip once and holds its final frame instead.
+ */
+export type YogaPoseHold = {
+  freezeMain?: boolean;
+};
+
+export const YOGA_POSE_HOLD: Record<string, YogaPoseHold> = {
+  // Reported: the belly and hips keep moving through the whole hold.
+  "Cobra Pose": { freezeMain: true },
+  // Reported: the held position never settles.
+  "Warrior 1": { freezeMain: true },
+};
+
+export function shouldFreezeMainPose(poseName: string | undefined): boolean {
+  if (!poseName) return false;
+  return YOGA_POSE_HOLD[poseName]?.freezeMain === true;
+}
+
 export const YOGA_POSE_ANIMATIONS: Record<string, YogaPoseAnimation> = {
   "Downward Dog": {
     inPath: "/Downward Dog Pose/in_compressed.glb",

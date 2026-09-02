@@ -51,6 +51,12 @@ class ChessExerciseResponse(BaseModel):
     pieces_inventory: Optional[Dict[str, Dict[str, Any]]] = None
     placed_pieces: Optional[Dict[str, Dict[str, Any]]] = None
     current_piece_type: Optional[str] = None
+    # Gameplay only: the board right after the player's move, before the AI
+    # replied in the same request. Lets the client show the two moves in turn.
+    pre_ai_board_position: Optional[BoardPosition] = None
+    pre_ai_feedback_message: Optional[str] = None
+    ai_move_san: Optional[str] = None
+    ai_move_uci: Optional[str] = None
 
 class ChessActionRequest(BaseModel):
     type: str
@@ -227,7 +233,14 @@ class ChessSessionManager:
             raise HTTPException(status_code=400, detail="No active exercise")
         
         session["total_attempts"] += 1
-        
+
+        # Per-action fields; stale values from the previous action would make the
+        # client replay an old AI reply.
+        exercise.pre_ai_board_position = None
+        exercise.pre_ai_feedback_message = None
+        exercise.ai_move_san = None
+        exercise.ai_move_uci = None
+
         if action_type == "set_game_mode":
             game_mode = payload.get("game_mode")
             if game_mode in ["human_vs_ai", "ai_vs_ai", "human_vs_human"]:
@@ -818,6 +831,13 @@ class ChessSessionManager:
             if exercise.exercise_completed:
                 print("Game is already over, skipping AI move")
             elif is_ai_turn:
+                # Snapshot the board as it stands after the player's move. The AI
+                # replies below in this same request, so without this the client
+                # only ever receives the position with both moves already on it
+                # and the player never sees their own move land.
+                exercise.pre_ai_board_position = exercise.board_position
+                exercise.pre_ai_feedback_message = exercise.feedback_message
+
                 # Make AI move automatically
                 print("Making AI move...")
                 ai_success = self.lesson_engine.make_ai_move()
@@ -826,8 +846,15 @@ class ChessSessionManager:
                     exercise.board_position = self.lesson_engine.engine.get_board_position()
                     # Clear selected piece after AI move
                     exercise.selected_square = None
-                    exercise.feedback_message = "🤖 AI made its move!"
+                    exercise.ai_move_san = self.lesson_engine.last_ai_move_san
+                    exercise.ai_move_uci = self.lesson_engine.last_ai_move_uci
+                    if exercise.ai_move_san:
+                        exercise.feedback_message = f"🤖 AI played {exercise.ai_move_san}."
+                    else:
+                        exercise.feedback_message = "🤖 AI made its move!"
                 else:
+                    exercise.pre_ai_board_position = None
+                    exercise.pre_ai_feedback_message = None
                     exercise.feedback_message = "❌ AI has no valid moves!"
                     print("AI move failed - no valid moves or error occurred")
         else:
@@ -953,7 +980,11 @@ def exercise_state_to_response(exercise: ExerciseState, session_id: str) -> Ches
         # Board setup specific properties
         pieces_inventory=exercise.pieces_inventory,
         placed_pieces=exercise.placed_pieces,
-        current_piece_type=exercise.current_piece_type
+        current_piece_type=exercise.current_piece_type,
+        pre_ai_board_position=exercise.pre_ai_board_position,
+        pre_ai_feedback_message=exercise.pre_ai_feedback_message,
+        ai_move_san=exercise.ai_move_san,
+        ai_move_uci=exercise.ai_move_uci
     )
 
 def board_position_to_model(position: BoardPosition) -> BoardPosition:

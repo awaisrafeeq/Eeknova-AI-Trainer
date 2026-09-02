@@ -2,16 +2,29 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { ChessExerciseState } from '@/lib/chessApi';
 
 interface EnhancedChessBoardProps {
     exercise: ChessExerciseState;
     onSquareClick: (square: string) => void;
     onAction: (type: string, payload?: any) => void;
+    /** Squares the AI just moved between, so its piece can be seen travelling. */
+    aiMove?: { from: string; to: string } | null;
 }
 
-export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }: EnhancedChessBoardProps) {
+/** Squares are a fixed 60px grid, files a-h left to right and ranks 8-1 top to bottom. */
+const SQUARE_PX = 60;
+
+function squareToPoint(square: string): { x: number; y: number } | null {
+    if (!square || square.length < 2) return null;
+    const file = square.charCodeAt(0) - 'a'.charCodeAt(0);
+    const rank = Number(square[1]);
+    if (file < 0 || file > 7 || !Number.isFinite(rank) || rank < 1 || rank > 8) return null;
+    return { x: file * SQUARE_PX, y: (8 - rank) * SQUARE_PX };
+}
+
+export default function EnhancedChessBoard({ exercise, onSquareClick, onAction, aiMove }: EnhancedChessBoardProps) {
     const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
     const [hoveredSquare, setHoveredSquare] = useState<string | null>(null);
     const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
@@ -299,6 +312,15 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
         const isSelected = selectedSquare === square.name;
         const isHighlighted = isHighlightedSquare(square.name);
 
+        // Offset this square's piece back to where the AI's move started, so the
+        // animation below can carry it home.
+        const isAiDestination = !!aiMove && aiMove.to === square.name;
+        const aiFromPoint = isAiDestination ? squareToPoint(aiMove!.from) : null;
+        const aiToPoint = isAiDestination ? squareToPoint(aiMove!.to) : null;
+        const aiTravel = aiFromPoint && aiToPoint
+            ? { x: aiFromPoint.x - aiToPoint.x, y: aiFromPoint.y - aiToPoint.y }
+            : null;
+
         return (
             <motion.div
                 key={square.name}
@@ -366,16 +388,38 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
                     />
                 )}
 
+                {/* Where the AI's piece came from. */}
+                {aiMove?.from === square.name && (
+                    <motion.div
+                        className="absolute inset-0 pointer-events-none"
+                        style={{ backgroundColor: 'rgba(255, 196, 0, 0.45)' }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                    />
+                )}
+
                 {/* Chess piece */}
                 {piece && (
-                    <span style={{ 
-                        color: piece.color === 'white' ? '#FFFFFF' : '#000000',
-                        textShadow: piece.color === 'white' ? '0 0 3px rgba(0,0,0,0.8)' : '0 0 3px rgba(255,255,255,0.8)',
-                        fontSize: '32px',
-                        fontWeight: 'bold'
-                    }}>
+                    <motion.span
+                        // The AI's piece slides in from the square it left, so the
+                        // move can actually be followed. Every other piece renders
+                        // in place. zIndex keeps the traveller above its neighbours.
+                        key={isAiDestination ? `ai-${aiMove!.from}-${aiMove!.to}` : 'static'}
+                        initial={aiTravel ? { x: aiTravel.x, y: aiTravel.y } : false}
+                        animate={aiTravel ? { x: 0, y: 0 } : undefined}
+                        transition={{ duration: 0.75, ease: 'easeInOut' }}
+                        style={{
+                            color: piece.color === 'white' ? '#FFFFFF' : '#000000',
+                            textShadow: piece.color === 'white' ? '0 0 3px rgba(0,0,0,0.8)' : '0 0 3px rgba(255,255,255,0.8)',
+                            fontSize: '32px',
+                            fontWeight: 'bold',
+                            position: 'relative',
+                            zIndex: isAiDestination ? 20 : 1,
+                        }}
+                    >
                         {getPieceSymbol(piece)}
-                    </span>
+                    </motion.span>
                 )}
 
                 {/* Highlight border for identify pieces */}
@@ -597,7 +641,10 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
                             whileTap={{ scale: 0.95 }}
                             onClick={() => onAction('next')}
                         >
-                            ➡️ Next Exercise
+                            {/* Once the whole lesson is done there is no next
+                                exercise left - the button moves on to the lesson
+                                this one just unlocked. */}
+                            {exercise.module_completed ? '➡️ Next Lesson' : '➡️ Next Exercise'}
                         </motion.button>
                     )}
                 </div>
@@ -658,26 +705,8 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction }
                 </div>
             )}
 
-            {/* Feedback message */}
-            <AnimatePresence>
-                {exercise.feedback_message && (
-                    <motion.div
-                        className={`px-6 py-3 rounded-lg font-semibold text-center ${
-                            exercise.is_correct === true 
-                                ? 'bg-green-100 text-green-800 border-2 border-green-300' 
-                                : exercise.is_correct === false 
-                                ? 'bg-red-100 text-red-800 border-2 border-red-300'
-                                : 'bg-blue-100 text-blue-800 border-2 border-blue-300'
-                        }`}
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 20 }}
-                        transition={{ type: "spring", stiffness: 300 }}
-                    >
-                        {exercise.feedback_message}
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {/* Feedback is not repeated here - it is shown once as the avatar's
+                caption, which is also where it is spoken from. */}
         </div>
     );
 }

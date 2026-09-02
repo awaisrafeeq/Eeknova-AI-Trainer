@@ -19,6 +19,7 @@ import {
 } from 'react';
 import * as THREE from 'three';
 import { ZumbaAssetCache } from '@/lib/zumbaAssetCache';
+import { IDLE_VISEME, getTextViseme, followFactor, LIP_SYNC_RATES } from '@/lib/lipSync';
 import type {
   ZumbaMappingsJson,
   ZumbaMoveAsset,
@@ -113,6 +114,18 @@ type ZumbaAvatarPlayerProps = {
   skinToneStrength?: number;
   cameraDistanceFactor?: number;
   cameraTargetYOffsetFactor?: number;
+  /**
+   * Move to show as a small live "coming up" clip in the canvas's top-right
+   * corner. It reuses the runtime instance already preloaded for the timeline,
+   * so nothing extra is downloaded and no second WebGL context is created - the
+   * corner is drawn as an extra scissored viewport of the same scene.
+   */
+  previewMoveKey?: string | null;
+  /**
+   * Where that corner ended up, in viewport coordinates, so the page can line
+   * its label and frame up with it. Null when no preview is being drawn.
+   */
+  onPreviewRectChange?: (rect: { left: number; top: number; width: number; height: number } | null) => void;
 };
 
 type MoveInstance = {
@@ -122,11 +135,70 @@ type MoveInstance = {
   loop: boolean;
   /** Facial morph weights to clamp after each mixer update. */
   morphCaps: MorphCap[];
+  /** Mouth morphs the coach's voice drives. Null if the model has none. */
+  mouthRig: MouthRig | null;
   /** Removes a pending 'finished' listener (e.g. intro -> main handoff). */
   clearFinished?: () => void;
 };
 
 type MorphCap = { mesh: THREE.Mesh; index: number; max: number };
+
+/**
+ * The face morphs a spoken line takes over. Everything else the dance clip
+ * drives - blinks, brows, cheeks - is left alone, so the avatar keeps its
+ * expression while it talks.
+ */
+type MouthRig = {
+  mesh: THREE.Mesh;
+  jawOpen?: number;
+  mouthClose?: number;
+  mouthFunnel?: number;
+  mouthPucker?: number;
+  smileLeft?: number;
+  smileRight?: number;
+  upperUpLeft?: number;
+  upperUpRight?: number;
+  lowerDownLeft?: number;
+  lowerDownRight?: number;
+};
+
+/** Smoothed mouth state, kept per player rather than read back off the mesh. */
+type MouthState = {
+  jaw: number;
+  close: number;
+  round: number;
+  smile: number;
+  upper: number;
+  lower: number;
+  envelope: number;
+  /** 0 = the dance clip owns the mouth, 1 = speech does. */
+  takeover: number;
+};
+
+function findMouthRig(root: THREE.Object3D): MouthRig | null {
+  let best: MouthRig | null = null;
+  root.traverse((child) => {
+    if (best) return;
+    if (!(child instanceof THREE.Mesh)) return;
+    const dict = child.morphTargetDictionary;
+    if (!dict || !child.morphTargetInfluences) return;
+    if (typeof dict.jawOpen !== 'number') return;
+    best = {
+      mesh: child,
+      jawOpen: dict.jawOpen,
+      mouthClose: dict.mouthClose,
+      mouthFunnel: dict.mouthFunnel,
+      mouthPucker: dict.mouthPucker,
+      smileLeft: dict.mouthSmileLeft,
+      smileRight: dict.mouthSmileRight,
+      upperUpLeft: dict.mouthUpperUpLeft,
+      upperUpRight: dict.mouthUpperUpRight,
+      lowerDownLeft: dict.mouthLowerDownLeft,
+      lowerDownRight: dict.mouthLowerDownRight,
+    };
+  });
+  return best;
+}
 
 /**
  * Upper limits for facial morph weights baked into the dance clips.
@@ -242,6 +314,8 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       skinToneStrength = 0.45,
       cameraDistanceFactor = 1.65,
       cameraTargetYOffsetFactor = 0.04,
+      previewMoveKey = null,
+      onPreviewRectChange,
     },
     ref,
   ) {
@@ -278,6 +352,53 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
     // Calling dispose()/delete on them poisons the restored context
     // ("object does not belong to this context"), so disposal is skipped.
     const contextLostRef = useRef(false);
+    // --- "Coming up" corner preview ---
+    // The render loop is created once, so everything it needs lives in refs.
+    const previewMoveKeyRef = useRef<string | null>(previewMoveKey);
+    const previewInstanceRef = useRef<MoveInstance | null>(null);
+    const previewCameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+    // `${moveKey}|${width}x${height}` of the last framing, so the preview camera
+    // is only re-fitted when the move or the box size actually changes.
+    const previewFitKeyRef = useRef('');
+    const previewRectRef = useRef<string>('');
+    const onPreviewRectChangeRef = useRef(onPreviewRectChange);
+    useEffect(() => {
+      onPreviewRectChangeRef.current = onPreviewRectChange;
+    }, [onPreviewRectChange]);
+    useEffect(() => {
+      previewMoveKeyRef.current = previewMoveKey;
+    }, [previewMoveKey]);
+
+    // --- Lip sync ---
+    // The dance clips animate the whole face, so the mouth is not stripped out
+    // of them. It is overwritten after the mixer has run instead, and only while
+    // the coach is speaking - blinks, brows and cheeks keep their choreography,
+    // and the clip takes the mouth straight back when the line ends.
+    const speechRef = useRef({ speaking: false, level: 0, text: '', time: 0, duration: 0 });
+    const mouthStateRef = useRef<MouthState>({
+      jaw: 0, close: 0, round: 0, smile: 0, upper: 0, lower: 0, envelope: 0, takeover: 0,
+    });
+
+    useEffect(() => {
+      const onSpeechAudio = (event: Event) => {
+        const detail = (event as CustomEvent).detail as
+          | { isSpeaking?: boolean; level?: number; text?: string; currentTime?: number; duration?: number }
+          | undefined;
+        if (!detail) return;
+        const speech = speechRef.current;
+        speech.speaking = !!detail.isSpeaking;
+        speech.level = Math.max(0, Math.min(1, typeof detail.level === 'number' ? detail.level : 0));
+        speech.text = typeof detail.text === 'string' ? detail.text : '';
+        speech.time = Math.max(0, typeof detail.currentTime === 'number' ? detail.currentTime : 0);
+        speech.duration =
+          typeof detail.duration === 'number' && Number.isFinite(detail.duration) && detail.duration > 0
+            ? detail.duration
+            : 0;
+      };
+      window.addEventListener('eeknova-tts-audio', onSpeechAudio);
+      return () => window.removeEventListener('eeknova-tts-audio', onSpeechAudio);
+    }, []);
+
     const statusRef = useRef<ZumbaPreloadStatus>({ state: 'idle', total: 0, loaded: 0, failed: [] });
     const onPreloadStatusRef = useRef(onPreloadStatus);
     useEffect(() => {
@@ -312,6 +433,12 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       clearInstanceFinished(inst);
       try { inst.mixer.stopAllAction(); } catch { /* noop */ }
       if (activeRef.current === inst) activeRef.current = null;
+      // The corner preview must let go too, or the render loop would keep
+      // drawing an instance whose GPU resources have just been released.
+      if (previewInstanceRef.current === inst) {
+        previewInstanceRef.current = null;
+        previewFitKeyRef.current = '';
+      }
       sceneRef.current?.remove(inst.container);
       // Skip GL deletes while the context is lost — those handles are dead and
       // deleting them poisons a subsequently restored context.
@@ -449,6 +576,8 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         }
         instancesRef.current.clear();
         activeRef.current = null;
+        previewInstanceRef.current = null;
+        previewFitKeyRef.current = '';
         cacheRef.current = new ZumbaAssetCache();
         cacheRef.current.attachRenderer(renderer);
         contextLostRef.current = false;
@@ -461,6 +590,138 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
 
       clockRef.current.start();
       const instances = instancesRef.current;
+
+      const previewCamera = new THREE.PerspectiveCamera(50, 1, 0.01, 1000);
+      previewCameraRef.current = previewCamera;
+
+      /**
+       * Resolves which instance the corner should be showing and keeps its
+       * animation running. Never previews the move that is already on screen -
+       * there would be nothing to preview, and both passes would fight over the
+       * same instance's visibility.
+       */
+      const syncPreviewInstance = (active: MoveInstance | null): MoveInstance | null => {
+        const wantKey = previewMoveKeyRef.current;
+        let wanted = wantKey ? instances.get(instanceId(wantKey, 'main')) ?? null : null;
+        if (wanted && wanted === active) wanted = null;
+
+        const current = previewInstanceRef.current;
+        if (wanted === current) return wanted;
+
+        // The one leaving the corner stops, unless it has meanwhile become the
+        // move being danced - then the main pass owns it.
+        if (current && current !== active) {
+          try { current.mixer.stopAllAction(); } catch { /* noop */ }
+        }
+        previewInstanceRef.current = wanted;
+        previewFitKeyRef.current = '';
+
+        if (wanted) {
+          const timeScale = THREE.MathUtils.clamp(currentMotionTempo(), TIME_SCALE_MIN, TIME_SCALE_MAX);
+          for (const action of wanted.actions) {
+            action.reset();
+            action.timeScale = timeScale;
+            action.play();
+          }
+          wanted.mixer.update(0);
+          applyMorphCaps(wanted);
+        }
+        return wanted;
+      };
+
+      /**
+       * Writes the spoken mouth shape over whatever the dance clip just set.
+       * Runs after mixer.update, and blends in and out via `takeover` so the
+       * mouth is handed back to the choreography rather than snapping.
+       */
+      const applyLipSync = (inst: MoveInstance | null, delta: number) => {
+        const rig = inst?.mouthRig;
+        if (!rig) return;
+        const influences = rig.mesh.morphTargetInfluences;
+        if (!influences) return;
+
+        const state = mouthStateRef.current;
+        const speech = speechRef.current;
+        const speaking = speech.speaking;
+
+        state.takeover = THREE.MathUtils.lerp(
+          state.takeover,
+          speaking ? 1 : 0,
+          followFactor(speaking ? 18 : 7, delta),
+        );
+        // Fully handed back: leave the clip's own face completely alone.
+        if (state.takeover < 0.002 && !speaking) return;
+
+        const viseme = speaking
+          ? getTextViseme(speech.text, speech.time, speech.duration)
+          : IDLE_VISEME;
+
+        const rawLevel = speaking ? Math.max(speech.level * 1.35, viseme.energy * 0.55) : 0;
+        state.envelope = THREE.MathUtils.lerp(
+          state.envelope,
+          rawLevel,
+          followFactor(
+            rawLevel > state.envelope ? LIP_SYNC_RATES.envelopeAttack : LIP_SYNC_RATES.envelopeRelease,
+            delta,
+          ),
+        );
+        const envelope = Math.max(0, Math.min(1, state.envelope));
+        const drive = THREE.MathUtils.clamp(speech.level * 2.8, 0.42, 1);
+
+        // Driven far harder than the yoga/chess avatars, on purpose. Those are
+        // framed head-and-shoulders; a Zumba session shows the whole dancing
+        // body, so the mouth is only a handful of pixels tall. The rig has no
+        // jaw bone either (checked - the export is morph targets only), so
+        // amplitude on these morphs is the only thing that can carry the motion
+        // that far. Subtle values simply do not register at this distance.
+        const jawTarget = THREE.MathUtils.clamp(0.06 + viseme.open * 0.95 * drive, 0.04, 1);
+        // Kept low: this pulls the lips shut and fights the jaw, so only the
+        // real closures (p/b/m) should bring it up.
+        const closeTarget = THREE.MathUtils.clamp(viseme.close * 0.55 * drive, 0, 0.6);
+        const roundTarget = envelope * THREE.MathUtils.clamp(viseme.round * 0.9 * drive, 0.02, 0.75);
+        const wideTarget = envelope * THREE.MathUtils.clamp(viseme.wide * 0.7 * drive, 0.02, 0.55);
+        const upperTarget = envelope * THREE.MathUtils.clamp(viseme.open * 0.5 * drive, 0.02, 0.45);
+        const lowerTarget = THREE.MathUtils.clamp(jawTarget * 0.3 + viseme.lowerLip * 0.35 * drive, 0, 0.5);
+
+        state.jaw = THREE.MathUtils.lerp(state.jaw, jawTarget, followFactor(LIP_SYNC_RATES.jaw, delta));
+        state.close = THREE.MathUtils.lerp(state.close, closeTarget, followFactor(LIP_SYNC_RATES.close, delta));
+        state.round = THREE.MathUtils.lerp(state.round, roundTarget, followFactor(LIP_SYNC_RATES.lips, delta));
+        state.upper = THREE.MathUtils.lerp(state.upper, upperTarget, followFactor(LIP_SYNC_RATES.lips, delta));
+        state.lower = THREE.MathUtils.lerp(state.lower, lowerTarget, followFactor(LIP_SYNC_RATES.lips, delta));
+        state.smile = THREE.MathUtils.lerp(
+          state.smile,
+          0.02 + wideTarget * 0.45,
+          followFactor(LIP_SYNC_RATES.expression, delta),
+        );
+
+        const blend = Math.max(0, Math.min(1, state.takeover));
+        const write = (index: number | undefined, value: number) => {
+          if (typeof index !== 'number') return;
+          const fromClip = influences[index] || 0;
+          influences[index] = fromClip + (value - fromClip) * blend;
+        };
+
+        write(rig.jawOpen, state.jaw);
+        write(rig.mouthClose, state.close);
+        write(rig.mouthFunnel, state.round);
+        write(rig.mouthPucker, state.round * 0.8);
+        write(rig.upperUpLeft, state.upper);
+        write(rig.upperUpRight, state.upper);
+        write(rig.lowerDownLeft, state.lower);
+        write(rig.lowerDownRight, state.lower);
+        // The smile is nudged rather than replaced - the dance clip's own
+        // expression should still come through underneath a spoken line.
+        write(rig.smileLeft, Math.max(influences[rig.smileLeft ?? -1] || 0, state.smile));
+        write(rig.smileRight, Math.max(influences[rig.smileRight ?? -1] || 0, state.smile));
+      };
+
+      const publishPreviewRect = (rect: { left: number; top: number; width: number; height: number } | null) => {
+        const key = rect ? `${rect.left}|${rect.top}|${rect.width}|${rect.height}` : '';
+        if (key === previewRectRef.current) return;
+        previewRectRef.current = key;
+        onPreviewRectChangeRef.current?.(rect);
+      };
+
       const renderLoop = () => {
         const delta = clockRef.current.getDelta();
         const active = activeRef.current;
@@ -470,8 +731,73 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
           // facial ones before they reach the GPU.
           applyMorphCaps(active);
         }
+        // Last word on the mouth, so the clip cannot overwrite a spoken shape.
+        applyLipSync(active, delta);
 
+        const preview = syncPreviewInstance(active);
+        if (preview) {
+          preview.mixer.update(delta);
+          applyMorphCaps(preview);
+        }
+
+        const canvasWidth = mount.clientWidth || 1;
+        const canvasHeight = mount.clientHeight || 1;
+
+        renderer.setScissorTest(false);
+        renderer.setViewport(0, 0, canvasWidth, canvasHeight);
         renderer.render(scene, camera);
+
+        if (preview) {
+          const boxWidth = Math.round(Math.min(240, Math.max(130, canvasWidth * 0.22)));
+          const boxHeight = Math.round(boxWidth * 1.15);
+          const margin = 16;
+          const boxX = canvasWidth - margin - boxWidth;
+          // WebGL viewports start at the bottom-left, so the top edge is
+          // measured back from the canvas height.
+          const boxYFromBottom = canvasHeight - margin - boxHeight;
+
+          previewCamera.aspect = boxWidth / boxHeight;
+          const fitKey = `${previewMoveKeyRef.current}|${boxWidth}x${boxHeight}`;
+          if (previewFitKeyRef.current !== fitKey) {
+            // Framed a little wider than the main view so the whole move stays
+            // inside such a small box.
+            if (fitCamera(previewCamera, preview.container, 1.85, 0.02)) {
+              previewFitKeyRef.current = fitKey;
+            }
+          }
+
+          const shadowPlaneWasVisible = shadowPlane.visible;
+          const activeWasVisible = active ? active.container.visible : false;
+          const previewWasVisible = preview.container.visible;
+          // Only the previewed avatar belongs in this pass, and re-rendering the
+          // shadow map for a 240px box is not worth the cost.
+          if (active) active.container.visible = false;
+          preview.container.visible = true;
+          shadowPlane.visible = false;
+          renderer.shadowMap.autoUpdate = false;
+
+          renderer.setScissorTest(true);
+          renderer.setViewport(boxX, boxYFromBottom, boxWidth, boxHeight);
+          renderer.setScissor(boxX, boxYFromBottom, boxWidth, boxHeight);
+          renderer.render(scene, previewCamera);
+          renderer.setScissorTest(false);
+
+          renderer.shadowMap.autoUpdate = true;
+          shadowPlane.visible = shadowPlaneWasVisible;
+          preview.container.visible = previewWasVisible;
+          if (active) active.container.visible = activeWasVisible;
+
+          const canvasRect = renderer.domElement.getBoundingClientRect();
+          publishPreviewRect({
+            left: Math.round(canvasRect.left + boxX),
+            top: Math.round(canvasRect.top + margin),
+            width: boxWidth,
+            height: boxHeight,
+          });
+        } else {
+          publishPreviewRect(null);
+        }
+
         rafRef.current = requestAnimationFrame(renderLoop);
       };
       rafRef.current = requestAnimationFrame(renderLoop);
@@ -497,6 +823,9 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         }
         instances.clear();
         activeRef.current = null;
+        previewInstanceRef.current = null;
+        previewCameraRef.current = null;
+        previewFitKeyRef.current = '';
         fittedContainerRef.current = null;
         if (!contextLostRef.current) {
           try { shadowGeometry.dispose(); } catch { /* noop */ }
@@ -514,22 +843,25 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       };
     }, []);
 
-    function fitCameraTo(container: THREE.Group) {
-      const camera = cameraRef.current;
-      if (!camera) return;
+    function fitCamera(
+      camera: THREE.PerspectiveCamera,
+      container: THREE.Group,
+      distanceFactor: number,
+      yOffsetFactor: number,
+    ): boolean {
       const box = new THREE.Box3().setFromObject(container);
-      if (box.isEmpty()) return;
+      if (box.isEmpty()) return false;
       const size = new THREE.Vector3();
       const center = new THREE.Vector3();
       box.getSize(size);
       box.getCenter(center);
 
       const target = center.clone();
-      target.y = box.min.y + size.y * (0.5 + cameraTargetYOffsetFactorRef.current);
+      target.y = box.min.y + size.y * (0.5 + yOffsetFactor);
       target.x = 0;
 
       // Height-driven zoom is the tuning knob (smaller factor = bigger avatar).
-      const heightDistance = size.y * cameraDistanceFactorRef.current;
+      const heightDistance = size.y * distanceFactor;
 
       // Width guard: the bounding box comes from the animation's first frame,
       // but moves like Jumping Jacks / Side Punches reach much wider. On narrow
@@ -546,6 +878,19 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
       camera.near = Math.max(0.01, distance / 100);
       camera.far = Math.max(1000, distance * 100);
       camera.updateProjectionMatrix();
+      return true;
+    }
+
+    function fitCameraTo(container: THREE.Group) {
+      const camera = cameraRef.current;
+      if (!camera) return;
+      const fitted = fitCamera(
+        camera,
+        container,
+        cameraDistanceFactorRef.current,
+        cameraTargetYOffsetFactorRef.current,
+      );
+      if (!fitted) return;
       cameraFittedRef.current = true;
       fittedContainerRef.current = container;
     }
@@ -604,6 +949,7 @@ const ZumbaAvatarPlayer = forwardRef<ZumbaAvatarPlayerHandle, ZumbaAvatarPlayerP
         actions,
         loop,
         morphCaps: collectMorphCaps(clone),
+        mouthRig: findMouthRig(clone),
       };
       instancesRef.current.set(id, inst);
 
