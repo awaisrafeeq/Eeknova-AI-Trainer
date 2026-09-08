@@ -512,6 +512,7 @@ async def process_frame(frame_data: str, session_id: str) -> Dict[str, Any]:
                                 if res["calculated"] is not None]) if comparison_results else 0),
             'keypoints': [[float(x), float(y), float(conf)] for x, y, conf in keypoints[0].tolist()],
             'angles': {k: float(v) if v is not None else None for k, v in pose_angles[0].items()},
+            'reference_angles': {k: float(v) if v is not None else None for k, v in gt_angles.items()},
             'corrections': corrections[:3],
             'angle_status': {k: {
                 'within_tolerance': bool(v['within_tolerance']),

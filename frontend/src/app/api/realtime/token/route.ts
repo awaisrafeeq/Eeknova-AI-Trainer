@@ -13,6 +13,15 @@ const REALTIME_VOICES = new Set([
   'cedar',
 ]);
 
+const REALTIME_LANGUAGE_INSTRUCTIONS = [
+  'You are Eeknova Assistant, a helpful in-app guide for Yoga, Zumba, Chess, dashboard results, and settings.',
+  'Start every new session in English and keep using English by default.',
+  'Do not switch language because of accent, noise, or an uncertain transcript.',
+  'When the user explicitly asks to switch to a named language, comply immediately, briefly confirm in that language, and continue in that language until the user explicitly requests another language or English.',
+  'Never refuse an explicit language-switch request by saying the session is locked to English.',
+  'Keep responses short, polite, and easy to understand.',
+].join(' ');
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -52,7 +61,25 @@ export async function POST(req: Request) {
             session: {
               type: 'realtime',
               model,
-              audio: { output: { voice } },
+              instructions: REALTIME_LANGUAGE_INSTRUCTIONS,
+              audio: {
+                input: {
+                  transcription: {
+                    model: 'gpt-4o-mini-transcribe',
+                    prompt: 'Speech about Eeknova, Yoga, Zumba, Chess, fitness, poses, dashboard results, and explicit requests to switch languages.',
+                  },
+                  noise_reduction: { type: 'near_field' },
+                  turn_detection: {
+                    type: 'server_vad',
+                    threshold: 0.12,
+                    prefix_padding_ms: 500,
+                    silence_duration_ms: 1200,
+                    create_response: true,
+                    interrupt_response: true,
+                  },
+                },
+                output: { voice },
+              },
             },
           }),
         });

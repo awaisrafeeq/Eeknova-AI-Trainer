@@ -94,6 +94,7 @@ class ChessSessionManager:
             "completed_exercises": 0,
             "correct_answers": 0,
             "total_attempts": 0,
+            "hint_count": 0,
             "current_exercise_state": None,
             "completed": False
         }
@@ -737,8 +738,10 @@ class ChessSessionManager:
                     exercise.feedback_message = f"Wrong. That is not a {answer}."
         
         elif action_type == "hint":
-            exercise.feedback_message = f"Hint: {self._get_hint_for_exercise(exercise)}"
+            session["hint_count"] = session.get("hint_count", 0) + 1
+            exercise.feedback_message = f"Hint: {self._get_hint_for_exercise(exercise, session['hint_count'])}"
             exercise.is_correct = None
+            exercise.hint_available = True
         
         elif action_type == "skip":
             exercise.feedback_message = "Skipping to next exercise."
@@ -875,11 +878,40 @@ class ChessSessionManager:
         else:
             return "Unknown game mode"
 
-    def _get_hint_for_exercise(self, exercise: ExerciseState) -> str:
+    def _get_hint_for_exercise(self, exercise: ExerciseState, hint_number: int = 1) -> str:
         """Get hint message for an exercise"""
+        def square_name(square: Any) -> str:
+            if isinstance(square, ChessSquare):
+                return f"{square.file}{square.rank}"
+            if isinstance(square, int) and 0 <= square <= 63:
+                return chess.square_name(square)
+            return str(square)
+
+        target_squares = [square_name(square) for square in (exercise.target_squares or [])]
+        target_text = ", ".join(target_squares[:2])
+
+        if exercise.exercise_type == "identify_pieces":
+            highlighted = {square_name(square) for square in (exercise.highlighted_squares or [])}
+            piece = next(
+                (
+                    item for item in getattr(exercise.board_position, "pieces", [])
+                    if square_name(getattr(item, "square", None)) in highlighted
+                ),
+                None,
+            )
+            if piece:
+                raw_piece_name = getattr(piece, "type", "piece")
+                raw_color = getattr(piece, "color", "")
+                piece_name = str(getattr(raw_piece_name, "value", raw_piece_name)).replace("_", " ").lower()
+                color = str(getattr(raw_color, "value", raw_color)).lower()
+                square = square_name(getattr(piece, "square", "the marked square"))
+                if hint_number % 2 == 0:
+                    return f"The highlighted {color} {piece_name} is on {square}. Choose its piece name."
+                return f"Focus on the silhouette of the highlighted {color} {piece_name}; it is on the marked square."
+
         # Pawn movement lesson types
         if exercise.exercise_type == "basic_forward":
-            return "Pawns move forward one square toward the opponent."
+            return f"Pawns move forward one square toward the opponent.{(' Try ' + target_text + '.') if target_text else ''}"
         elif exercise.exercise_type == "initial_double":
             return "From the starting position, pawns can move one or two squares forward."
         elif exercise.exercise_type == "capture":
@@ -889,10 +921,6 @@ class ChessSessionManager:
         elif exercise.exercise_type == "en_passant":
             return "En passant is a special capture when an enemy pawn moves two squares."
 
-        # Piece identification
-        elif exercise.exercise_type == "identify_pieces":
-            return "Look at the shape and position of the highlighted piece."
-
         # Board setup
         elif exercise.exercise_type == "board_setup":
             return "Remember: Rooks in corners, knights next to them, then bishops, queen on her color."
@@ -900,13 +928,13 @@ class ChessSessionManager:
         # Movement modules often use generic exercise_type values like "basic" / "capture".
         # Use module_id to provide accurate hints.
         if exercise.module_id == "rook_movement":
-            return "Rooks move any number of squares in straight lines (up, down, left, right). They cannot jump over pieces."
+            return f"Use the rook: it moves in straight ranks or files and cannot jump over pieces.{(' The legal target is ' + target_text + '.') if target_text else ''}"
         if exercise.module_id == "knight_movement":
-            return "Knights move in an L-shape (2 squares then 1). Knights CAN jump over pieces."
+            return f"Use the knight: move two squares one way and one perpendicular. It can jump over pieces.{(' Try ' + target_text + '.') if target_text else ''}"
         if exercise.module_id == "bishop_movement":
-            return "Bishops move diagonally any number of squares. They stay on the same color squares and cannot jump over pieces."
+            return f"Use the bishop: move diagonally on the same square color and do not jump over pieces.{(' The diagonal target is ' + target_text + '.') if target_text else ''}"
         if exercise.module_id == "queen_movement":
-            return "The queen moves like a rook + bishop combined: straight lines or diagonals, any number of squares."
+            return f"Use the queen like a rook or bishop: any clear straight line or diagonal.{(' Try ' + target_text + '.') if target_text else ''}"
         if exercise.module_id == "king_movement":
             return "The king moves exactly 1 square in any direction. Don’t move into check."
 

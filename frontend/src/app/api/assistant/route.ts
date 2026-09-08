@@ -28,7 +28,7 @@ export async function POST(req: Request) {
 
     const body = (await req.json()) as { transcript?: string; language?: AssistantLanguage };
     const transcript = (body.transcript || '').trim();
-    const language = (body.language || 'auto') as AssistantLanguage;
+    const language = (body.language || 'en') as AssistantLanguage;
 
     if (!transcript) {
       return NextResponse.json({ error: 'Missing transcript' }, { status: 400 });
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
       'Reply in simple layman language.',
       'Use slow polite tone.',
       language === 'auto'
-        ? 'If user requested a native language, reply in that language; else reply in English.'
+        ? 'Reply in English unless the user explicitly requests another language. Never switch language because of a partial or noisy transcript.'
         : `Reply in ${languageLabel(language)}.`,
     ].join(' ');
 

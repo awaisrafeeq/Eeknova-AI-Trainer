@@ -140,6 +140,21 @@ export default function ChessPage() {
     return t;
   };
 
+  const getFeedbackSpeech = (state: Pick<ChessExerciseState, 'feedback_message' | 'current_piece_type'>): string => {
+    const msg = String(state.feedback_message || '').trim();
+    if (!msg) return '';
+
+    const isHint = msg.toLowerCase().startsWith('hint:');
+    let speakText = sanitizeTtsText(isHint ? msg.replace(/^hint:\s*/i, '').trim() : msg);
+    if (!isHint) return speakText;
+
+    const pieceType = String(state.current_piece_type || '').toLowerCase();
+    if (pieceType.includes('pawn')) {
+      return `Hint: Focus on the pawn's shape and its forward movement rules. ${speakText}`;
+    }
+    return `Hint: ${speakText}`;
+  };
+
   // TTS for chess feedback
   const ttsRef = useRef<TTSFeedback | null>(null);
 
@@ -211,33 +226,18 @@ export default function ChessPage() {
 
   useEffect(() => {
     if (view !== 'lesson' || !exercise || !ttsRef.current) return;
-    const msg = String(exercise.feedback_message || '').trim();
-    if (!msg) return;
 
     const type = String((exercise as any).exercise_type || '').toLowerCase();
     if (exercise.is_correct === true && exercise.exercise_completed === true && (type === 'identify_pieces' || type === 'board_setup')) {
       return;
     }
 
-    const normalized = msg.toLowerCase();
-    const isHint = normalized.startsWith('hint:');
-    let speakText = isHint ? msg.replace(/^hint:\s*/i, '').trim() : msg;
-    speakText = sanitizeTtsText(speakText);
-
-    if (isHint) {
-      const pieceType = String((exercise as any).current_piece_type || '').toLowerCase();
-      const isPawn = pieceType.includes('pawn');
-      if (isPawn) {
-        speakText = `Hint: Focus on the pawn's shape and its forward movement rules. ${speakText}`;
-      } else {
-        speakText = `Hint: ${speakText}`;
-      }
-    }
-
+    const msg = String(exercise.feedback_message || '').trim();
+    const speakText = getFeedbackSpeech(exercise);
     if (!speakText) return;
     if (lastSpokenMessageRef.current === speakText) return;
     lastSpokenMessageRef.current = speakText;
-    ttsRef.current.speak(speakText, true);
+    ttsRef.current.speak(speakText, !msg.toLowerCase().startsWith('hint:'));
   }, [view, exercise?.feedback_message, exercise?.current_piece_type]);
 
   // Congratulate the learner by name when a lesson is finished, and point at
@@ -246,11 +246,13 @@ export default function ChessPage() {
   useEffect(() => {
     if (view !== 'lesson' || !exercise?.module_completed || !ttsRef.current) return;
     if (completionSpokenRef.current === exercise.module_id) return;
-    completionSpokenRef.current = exercise.module_id;
-
     const finishedIndex = modules.findIndex((m) => m.id === exercise.module_id);
-    const finishedName = finishedIndex >= 0 ? modules[finishedIndex].name : null;
-    if (!finishedName) return;
+    // A module can finish before the modules request returns. Do not mark the
+    // completion as spoken until the name is available, otherwise that one
+    // render permanently swallowed the avatar's congratulations.
+    const finishedName = finishedIndex >= 0
+      ? modules[finishedIndex].name
+      : exercise.module_id.replace(/_/g, ' ');
 
     const nextModule = modules[finishedIndex + 1];
 
@@ -258,6 +260,7 @@ export default function ChessPage() {
       ? `Well done! You have completed the ${finishedName} lesson. ${nextModule.name} is now unlocked, whenever you are ready.`
       : `Well done! You have completed the ${finishedName} lesson. That was the last one, you have finished every chess lesson.`;
 
+    completionSpokenRef.current = exercise.module_id;
     // Queued rather than priority so it follows the move feedback that is
     // usually still being spoken, instead of cutting it off.
     ttsRef.current.speak(line);
@@ -838,6 +841,17 @@ export default function ChessPage() {
       });
       
       applyExerciseState(state);
+
+      // Hint clicks are repeatable actions. Speak each returned hint directly;
+      // the effect above intentionally deduplicates ordinary feedback between
+      // renders, which would otherwise swallow repeated clicks on one exercise.
+      if (type === 'hint') {
+        const hintText = getFeedbackSpeech(state);
+        if (hintText && ttsRef.current) {
+          lastSpokenMessageRef.current = hintText;
+          ttsRef.current.speak(hintText, false);
+        }
+      }
 
       // Auto-progress if exercise is completed BUT module is not completed
       if (state.exercise_completed && !state.module_completed && state.exercise_type !== 'identify_pieces') {
