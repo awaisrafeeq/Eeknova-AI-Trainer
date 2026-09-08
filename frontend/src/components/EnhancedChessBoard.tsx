@@ -1,7 +1,7 @@
 // EnhancedChessBoard.tsx - Complete chess board with proper labels and pygame functionality
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { ChessExerciseState } from '@/lib/chessApi';
 
@@ -30,6 +30,11 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction, 
     const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
     const [showFeedback, setShowFeedback] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const onActionRef = useRef(onAction);
+
+    useEffect(() => {
+        onActionRef.current = onAction;
+    }, [onAction]);
 
     useEffect(() => {
         // console.log('🔍 DEBUG: useEffect triggered with:', {
@@ -49,7 +54,7 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction, 
             console.log('🔍 DEBUG: Correct answer detected, setting 2s timeout for next');
             const t = setTimeout(() => {
                 console.log('🔍 DEBUG: 2s timeout finished, calling next');
-                onAction('next');
+                onActionRef.current('next');
             }, 2000);
             return () => clearTimeout(t);
         }
@@ -61,10 +66,10 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction, 
                 setShowFeedback(false);
                 setSelectedAnswer(null);
                 setIsSubmitting(false);
-            }, 3000);
+            }, 900);
             return () => clearTimeout(t);
         }
-    }, [exercise?.is_correct, exercise?.exercise_completed, exercise?.module_completed, onAction, selectedAnswer, showFeedback]);
+    }, [exercise?.is_correct, exercise?.exercise_completed, exercise?.module_completed, selectedAnswer, showFeedback]);
 
     // Reset states when exercise changes
     useEffect(() => {
@@ -476,7 +481,7 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction, 
                                 <motion.button
                                     key={option}
                                     onClick={() => handleAnswerSelect(option)}
-                                    disabled={showFeedback || exercise.module_completed || (exercise.exercise_completed && exercise.progress_current === exercise.progress_total)}
+                                    disabled={isSubmitting || exercise.module_completed || (exercise.exercise_completed && exercise.progress_current === exercise.progress_total)}
                                     className={`p-4 rounded-lg font-semibold text-lg transition-all duration-300 ${
                                         showFeedback
                                             ? isCorrect
@@ -488,7 +493,7 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction, 
                                                 ? 'bg-gray-300 text-gray-600 border-2 border-gray-400 cursor-not-allowed'
                                                 : 'bg-blue-500 text-white border-2 border-blue-600 hover:bg-blue-600 hover:border-blue-700 shadow-lg hover:shadow-xl'
                                     }`}
-                                    whileHover={!showFeedback && !exercise.module_completed && !(exercise.exercise_completed && exercise.progress_current === exercise.progress_total) ? { scale: 1.05 } : {}}
+                                    whileHover={!isSubmitting && !exercise.module_completed && !(exercise.exercise_completed && exercise.progress_current === exercise.progress_total) ? { scale: 1.05 } : {}}
                                 >
                                     {option}
                                     {showFeedback && isCorrect && (
@@ -620,7 +625,7 @@ export default function EnhancedChessBoard({ exercise, onSquareClick, onAction, 
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => onAction('hint')}
-                        disabled={!exercise.hint_available}
+                        disabled={exercise.module_completed || exercise.exercise_completed}
                     >
                         💡 Hint
                     </motion.button>

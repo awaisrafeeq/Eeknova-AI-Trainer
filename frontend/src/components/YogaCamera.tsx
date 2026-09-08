@@ -45,6 +45,11 @@ interface YogaCameraProps {
   onSessionEnd: (summary: SessionSummary | null) => void;
   onAccuracyUpdate: (accuracy: number) => void;
   onCorrectionsUpdate: (corrections: string[]) => void;
+  onAngleComparisonUpdate?: (
+    angles: Record<string, number | null>,
+    referenceAngles: Record<string, number | null>,
+    angleStatus: Record<string, { within_tolerance: boolean; difference: number | null }>,
+  ) => void;
   onPhaseChange?: (phase: 'in' | 'hold' | 'out' | 'idle', timeLeft: number) => void;
   currentPhase?: 'in' | 'hold' | 'out';
   onTTSSpeakingChange?: (speaking: boolean) => void;
@@ -73,6 +78,7 @@ export default function YogaCamera({
   onSessionEnd,
   onAccuracyUpdate,
   onCorrectionsUpdate,
+  onAngleComparisonUpdate,
   onPhaseChange,
   currentPhase,
   onTTSSpeakingChange,
@@ -106,6 +112,11 @@ export default function YogaCamera({
   const [avgAccuracy, setAvgAccuracy] = useState(0);
   const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
   const [instructionSet, setInstructionSet] = useState<{ entry: string[]; release: string[] } | null>(null);
+  const stableCorrectionRef = useRef<{ signature: string; count: number; atMs: number }>({
+    signature: '',
+    count: 0,
+    atMs: 0,
+  });
   const entryPlayedRef = useRef(false);
   const releasePlayedRef = useRef(false);
   const instructionPoseRef = useRef<string | null>(null);
@@ -532,6 +543,12 @@ export default function YogaCamera({
           onAccuracyUpdate(result.accuracy);
         }
 
+        onAngleComparisonUpdate?.(
+          result.angles || {},
+          result.reference_angles || {},
+          result.angle_status || {},
+        );
+
         const phaseInstructionActive = Date.now() < phaseInstructionSuppressUntilRef.current;
 
         // Corrections are generated text, so the very first time one comes up it
@@ -547,15 +564,36 @@ export default function YogaCamera({
           }
         }
 
-        if (result.corrections && result.corrections.length > 0 && !suppressFeedbackRef.current && !phaseInstructionActive && !isPausedRef.current) {
-          onCorrectionsUpdate(result.corrections);
+        const corrections = result.corrections || [];
+        const correctionSignature = corrections.slice(0, 2).join('|');
+        const now = Date.now();
+        if (!correctionSignature) {
+          stableCorrectionRef.current = { signature: '', count: 0, atMs: now };
+          onCorrectionsUpdate([]);
+        } else if (
+          stableCorrectionRef.current.signature === correctionSignature &&
+          now - stableCorrectionRef.current.atMs < 2500
+        ) {
+          stableCorrectionRef.current.count += 1;
+          stableCorrectionRef.current.atMs = now;
+        } else {
+          stableCorrectionRef.current = { signature: correctionSignature, count: 1, atMs: now };
+        }
+
+        // A single camera frame can be noisy, especially when a limb briefly
+        // leaves the detector frame. Require the same correction twice before
+        // showing or speaking it so users are not told to fix a pose that was
+        // already correct a moment later.
+        const hasStableCorrection = stableCorrectionRef.current.count >= 2;
+        if (hasStableCorrection && corrections.length > 0 && !suppressFeedbackRef.current && !phaseInstructionActive && !isPausedRef.current) {
+          onCorrectionsUpdate(corrections);
 
           // Speak correction feedback (if enabled)
           // During guided/release instruction phases, suppress feedback TTS to avoid overlapping.
           if (ttsEnabled && !(playGuidedInstructionsRef.current || playReleaseInstructionsRef.current) && !isPausedRef.current) {
             if (result.accuracy !== null && result.accuracy !== undefined && result.accuracy < 80) {
               // Only speak the first correction to avoid overwhelming
-              const voiceCorrection = toVoiceCorrection(result.corrections[0]);
+              const voiceCorrection = toVoiceCorrection(corrections[0]);
 
               // Count corrections based on what we actually speak (de-dupe repeated spam)
               const now = Date.now();
@@ -597,7 +635,7 @@ export default function YogaCamera({
         }
       }
     },
-    [onAccuracyUpdate, onCorrectionsUpdate, onSessionEnd, sessionStartTime, ttsEnabled]
+    [onAccuracyUpdate, onAngleComparisonUpdate, onCorrectionsUpdate, onSessionEnd, sessionStartTime, ttsEnabled]
   );
 
   // Speak entry instructions once when guided instructions phase starts

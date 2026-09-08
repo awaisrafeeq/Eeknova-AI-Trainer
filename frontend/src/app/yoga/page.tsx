@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 
 import Avatar3D, { clearYogaPhaseCache } from '@/components/Avatar3D';
 import YogaCamera from '@/components/YogaCamera';
-import { SessionSummary, TTSFeedback } from '@/lib/yogaApi';
+import { PoseAnalysisResult, SessionSummary, TTSFeedback } from '@/lib/yogaApi';
 import { YOGA_POSE_ANIMATIONS } from '@/lib/yogaPoseAnimations';
 import { estimateInstructionDurationSeconds, getYogaPhaseInstruction } from '@/lib/yogaPhaseInstructions';
 
@@ -33,6 +33,14 @@ interface UserProfile {
   preferences?: Record<string, any>;
 
 }
+
+type LiveAngle = {
+  name: string;
+  actual: number | null;
+  reference: number;
+  difference: number | null;
+  withinTolerance: boolean;
+};
 
 
 
@@ -336,6 +344,7 @@ export default function YogaPage() {
 
   // TTS feedback state
   const [currentTTSFeedback, setCurrentTTSFeedback] = useState<string>('');
+  const [liveAngles, setLiveAngles] = useState<LiveAngle[]>([]);
 
   // Pose specifications for timing
   const POSE_SPEC: Record<string, { in: number; hold: number; out: number; total: number }> = {
@@ -447,6 +456,26 @@ export default function YogaPage() {
   // TTS text handler
   const handleTTSTextChange = useCallback((text: string) => {
     setCurrentTTSFeedback(text);
+  }, []);
+
+  const handleAngleComparisonUpdate = useCallback((
+    angles: NonNullable<PoseAnalysisResult['angles']>,
+    referenceAngles: NonNullable<PoseAnalysisResult['reference_angles']>,
+    angleStatus: NonNullable<PoseAnalysisResult['angle_status']>,
+  ) => {
+    const next = Object.entries(referenceAngles)
+      .filter(([, reference]) => typeof reference === 'number')
+      .map(([name, reference]) => {
+        const status = angleStatus[name];
+        return {
+          name: name.replace(/_/g, ' '),
+          actual: angles[name] ?? null,
+          reference: reference as number,
+          difference: status?.difference ?? null,
+          withinTolerance: status?.within_tolerance ?? false,
+        };
+      });
+    setLiveAngles(next);
   }, []);
 
 
@@ -1226,11 +1255,32 @@ export default function YogaPage() {
                 stage that speaks (instructions, pose, release), not just the
                 hold phase, so guidance is never missing while a pose loads. */}
             {flowStage !== 'setup' && currentTTSFeedback && (
-              <div className="pointer-events-none fixed bottom-28 left-1/2 z-40 w-[min(920px,92vw)] -translate-x-1/2 px-4">
+              <div className="pointer-events-none fixed left-1/2 top-5 z-50 w-[92vw] -translate-x-1/2 px-4 lg:left-[calc(50%+120px)] lg:w-[min(620px,calc(100vw-390px))]">
                 <p className="rounded-2xl bg-white/85 px-8 py-5 text-center text-[30px] font-semibold leading-snug text-black shadow-[0_10px_40px_rgba(0,0,0,.18)] backdrop-blur-sm">
                   {currentTTSFeedback}
                 </p>
               </div>
+            )}
+
+            {flowStage === 'pose' && isSessionStarted && liveAngles.length > 0 && (
+              <aside className="fixed left-5 top-28 z-40 w-[min(320px,calc(100vw-2.5rem))] border border-white/30 bg-black/65 p-3 text-white shadow-lg backdrop-blur-md">
+                <div className="mb-2 flex items-center justify-between text-[12px] font-semibold uppercase tracking-[0.08em] text-white/80">
+                  <span>Live angle check</span>
+                  <span>{liveAngles.filter((angle) => angle.withinTolerance).length}/{liveAngles.length}</span>
+                </div>
+                <div className="max-h-[28vh] space-y-1 overflow-y-auto pr-1 text-[12px] tabular-nums">
+                  {liveAngles.map((angle) => (
+                    <div key={angle.name} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 border-t border-white/10 py-1.5 first:border-t-0">
+                      <span className="truncate capitalize text-white/90">{angle.name}</span>
+                      <span>{angle.actual === null ? '-' : `${Math.round(angle.actual)} deg`}</span>
+                      <span className="text-white/65">ref {Math.round(angle.reference)}</span>
+                      <span className={angle.withinTolerance ? 'text-emerald-300' : 'text-amber-300'}>
+                        {angle.difference === null ? '-' : `${Math.round(angle.difference)} deg`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </aside>
             )}
 
             {/* Session Timer & Phase - Hide During Session */}
@@ -1358,6 +1408,7 @@ export default function YogaPage() {
                 onSessionEnd={handleSessionEnd}
                 onAccuracyUpdate={setCurrentAccuracy}
                 onCorrectionsUpdate={setCorrections}
+                onAngleComparisonUpdate={handleAngleComparisonUpdate}
                 onTTSSpeakingChange={handleTTSSpeakingChange}
                 onTTSTextChange={handleTTSTextChange}
                 currentPhase={currentPhase}

@@ -28,6 +28,7 @@ export interface PoseAnalysisResult {
   total_angles?: number;
   keypoints?: number[][];
   angles?: Record<string, number | null>;
+  reference_angles?: Record<string, number | null>;
   corrections?: string[];
   angle_status?: Record<string, { within_tolerance: boolean; difference: number | null }>;
   session_stats?: {
@@ -447,6 +448,32 @@ export class TTSFeedback {
     void request.catch(() => undefined);
   }
 
+  /** Warm one line before a time-sensitive animation starts. */
+  async prepare(text: string | null | undefined): Promise<void> {
+    if (!this.enabled || !text) return;
+
+    const key = this.getCacheKey(text);
+    if (!key || this.audioCache.has(key)) return;
+
+    try {
+      let request = this.prefetchRequests.get(key);
+      if (!request) {
+        request = this.requestSpeechBlob(text)
+          .then((blob) => {
+            this.cacheAudioBlob(key, blob);
+            return blob;
+          })
+          .finally(() => {
+            this.prefetchRequests.delete(key);
+          });
+        this.prefetchRequests.set(key, request);
+      }
+      await request;
+    } catch (error) {
+      console.warn('TTS prepare failed:', error);
+    }
+  }
+
   prefetchMany(texts: Array<string | null | undefined>): void {
     texts.forEach((text) => this.prefetch(text));
   }
@@ -531,6 +558,7 @@ export class TTSFeedback {
     const token = ++this.playbackToken;
     this.speaking = true;
     this.currentText = text;
+    let audioUrl: string | null = null;
     // The subtitle and the avatar's mouth are deliberately NOT opened here.
     // Rendering the line while the audio is still being fetched is what made
     // the voice feel out of sync - the text appeared, then the speech followed
@@ -562,8 +590,8 @@ export class TTSFeedback {
         return;
       }
 
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
+      audioUrl = URL.createObjectURL(blob);
+      const audio = new Audio(audioUrl);
       audio.preload = 'auto';
       this.currentAudio = audio;
 
@@ -589,7 +617,8 @@ export class TTSFeedback {
       });
 
       if (token !== this.playbackToken || !this.speaking || this.currentText !== text) {
-        URL.revokeObjectURL(url);
+        URL.revokeObjectURL(audioUrl);
+        audioUrl = null;
         return;
       }
 
@@ -606,9 +635,26 @@ export class TTSFeedback {
         audio.play().catch(reject);
         this.runTTSLevelLoop(audio, text);
       });
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(audioUrl);
+      audioUrl = null;
     } catch (e) {
-      console.error('TTS playback error:', e);
+      // A browser can reject playback even after synthesis succeeds (for
+      // example after a tab loses its activation). Keep the avatar and voice
+      // in the same timeline by falling back to the browser voice, which also
+      // emits the synthetic mouth driver events.
+      console.warn('TTS audio unavailable, using browser voice fallback:', e);
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+        audioUrl = null;
+      }
+      if (token === this.playbackToken && this.speaking && this.currentText === text) {
+        try {
+          this.currentAudio?.pause();
+        } catch { }
+        this.currentAudio = null;
+        this.stopTTSLevelEmitter();
+        await this.speakWithBrowserVoice(text);
+      }
     } finally {
       if (token === this.playbackToken) {
         this.speaking = false;

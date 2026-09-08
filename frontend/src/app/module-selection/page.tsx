@@ -9,6 +9,8 @@ import { TTSFeedback } from '@/lib/yogaApi';
 export default function Page() {
     const [showWalktour, setShowWalktour] = useState(false);
     const [selectedPose, setSelectedPose] = useState('');
+    const [isTTSSpeaking, setIsTTSSpeaking] = useState(false);
+    const [ttsText, setTtsText] = useState('');
 
     useEffect(() => {
         console.log('Walktour useEffect triggered');
@@ -141,7 +143,9 @@ export default function Page() {
     // Warm the audio as early as possible.
     useEffect(() => {
         if (!greeting) return;
-        if (!ttsRef.current) ttsRef.current = new TTSFeedback();
+        if (!ttsRef.current) {
+            ttsRef.current = new TTSFeedback(setIsTTSSpeaking, setTtsText);
+        }
         ttsRef.current.prefetch(greeting);
     }, [greeting]);
 
@@ -202,6 +206,9 @@ export default function Page() {
                                     cameraManualTargetXOffsetFactor={-0.08}
                                     lockCamera={true}
                                     showGroundShadow={true}
+                                    isTTSSpeaking={isTTSSpeaking}
+                                    ttsText={ttsText}
+                                    useTextVisemes={true}
                                     onReadyChange={setAvatarReady}
                                 />
                                 {/* Fake shadow removed to stop float illusion */}

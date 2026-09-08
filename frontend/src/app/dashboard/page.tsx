@@ -1,11 +1,12 @@
 'use client';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Avatar3D from '@/components/Avatar3D';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AuthGuard from '@/components/AuthGuard';
 import { useAuthenticatedFetch } from '@/hooks/useAuth';
+import { TTSFeedback } from '@/lib/yogaApi';
 
 type CardStats = {
     progress: number;
@@ -20,11 +21,23 @@ type DashboardStats = {
     chess: CardStats;
 };
 
+const DASHBOARD_GREETING = 'Welcome to Eeknova. I am your AI trainer. Let us get started.';
+
 export default function Page() {
     const router = useRouter();
     const authenticatedFetch = useAuthenticatedFetch();
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [loadingStats, setLoadingStats] = useState(false);
+    const [isTTSSpeaking, setIsTTSSpeaking] = useState(false);
+    const [ttsText, setTtsText] = useState('');
+    const greetingTtsRef = useRef<TTSFeedback | null>(null);
+    const greetingStartedRef = useRef(false);
+
+    // Create this before the avatar's loader effect can fire, so the gesture
+    // start callback can never miss its speech trigger.
+    if (!greetingTtsRef.current) {
+        greetingTtsRef.current = new TTSFeedback(setIsTTSSpeaking, setTtsText);
+    }
 
     const apiBaseUrl = process.env.NEXT_PUBLIC_YOGA_API_URL || 'http://localhost:8002';
 
@@ -57,6 +70,13 @@ export default function Page() {
     }, [loadStats]);
 
     useEffect(() => {
+        const tts = greetingTtsRef.current;
+        if (!tts) return;
+        void tts.prepare(DASHBOARD_GREETING);
+        return () => tts.stop();
+    }, []);
+
+    useEffect(() => {
         const onFocus = () => void loadStats();
         const onVisibility = () => {
             if (document.visibilityState === 'visible') void loadStats();
@@ -84,19 +104,32 @@ export default function Page() {
             >
             <Particles />
 
-            <div className="mx-auto max-w-[1080px] px-6 md:px-8 py-6 md:py-8">
-                <section className="relative grid grid-cols-12 gap-4 md:gap-6">
+            <div className="mx-auto max-w-[1280px]">
+                <section className="relative grid grid-cols-12">
                     {/* Avatar Section */}
-                    <div className="col-span-12 lg:col-span-5 xl:col-span-5 relative">
+                    <div className="col-span-12 lg:col-span-7 xl:col-span-7 relative flex items-center justify-start">
                         <div
-                            className="avatar-wrap relative h-[72vh] rounded-[var(--radius-lg)] border border-[var(--glass-stroke)]"
-                            style={{
-                                background:
-                                    'linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02))',
-                                backdropFilter: 'blur(12px)',
-                            }}
+                            className="avatar-wrap relative h-[78vh] w-full overflow-visible"
+                            style={{ background: 'transparent' }}
                         >
-                            <Avatar3D selectedPose="" onlyInAnimation={false} staticModelPath="/smile_greet_compressed.glb" />
+                            <Avatar3D
+                                selectedPose=""
+                                onlyInAnimation={false}
+                                staticModelPath="/smile_greet_compressed.glb"
+                                cameraManualDistanceFactor={1.29}
+                                cameraManualTargetYOffsetFactor={0.08}
+                                cameraManualTargetXOffsetFactor={-0.08}
+                                lockCamera={true}
+                                showGroundShadow={true}
+                                isTTSSpeaking={isTTSSpeaking}
+                                ttsText={ttsText}
+                                useTextVisemes={true}
+                                onAnimationStart={() => {
+                                    if (greetingStartedRef.current) return;
+                                    greetingStartedRef.current = true;
+                                    greetingTtsRef.current?.speak(DASHBOARD_GREETING, true);
+                                }}
+                            />
                             {/* Fake shadow removed to stop float illusion */}
                         </div>
                     </div>
@@ -107,7 +140,7 @@ export default function Page() {
                     </div>
 
                     {/* Dashboard Cards */}
-                    <aside className="col-span-12 lg:col-span-6 xl:col-span-6 content-center">
+                    <aside className="col-span-12 lg:col-span-4 xl:col-span-4 content-center lg:-ml-8 xl:-ml-10 lg:max-w-[390px]">
                         <div className="mb-6 relative">
                             <div className="flex items-center gap-4 mb-2">
                                 <div className="h-39 w-39 rounded-full border border-[var(--glass-stroke)] bg-[var(--glass)] grid place-items-center shadow-[var(--glow-neo)]">
@@ -163,7 +196,7 @@ export default function Page() {
                         </div>
                         {/* === Back Button === */}
                         <button
-                            onClick={() => router.back()}
+                            onClick={() => router.push('/module-selection')}
                             className="absolute top-0 left-0 px-4 py-2 rounded-[var(--radius-md)] border border-[var(--glass-stroke)] bg-[rgba(255,255,255,.06)] text-[var(--brand-neo)] font-semibold text-[16px] tracking-wide transition-all hover:shadow-[0_0_12px_rgba(25,227,255,.65)] hover:scale-105 active:scale-95"
                         >
                             ← Back

@@ -15,13 +15,48 @@ const LANGUAGE_OPTIONS: Array<{ value: AssistantLanguage; label: string }> = [
   { value: 'kn', label: 'ಕನ್ನಡ' },
 ];
 
+const WAKE_NAME_VARIANTS = [
+  'eeknova',
+  'eknova',
+  'iknova',
+  'ignova',
+  'eeknava',
+  'eeknoba',
+  'ekanova',
+  'anova',
+];
+
+function normalizeWakeTranscript(value: string): { words: string; compact: string } {
+  const words = value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  return { words, compact: words.replace(/\s+/g, '') };
+}
+
+function matchesWakePhrase(value: string): boolean {
+  const { words, compact } = normalizeWakeTranscript(value);
+  if (!words) return false;
+
+  const hasGreeting = /\b(hi|hey|hello|hay|he|hai)\b/.test(words);
+  const hasFullName = WAKE_NAME_VARIANTS.some((variant) => compact.includes(variant));
+  const hasNova = /\bnova\b/.test(words);
+
+  // Keep the existing "hello" shortcut, accept common phonetic spellings of
+  // Eeknova, and avoid waking on the generic word "nova" without a greeting.
+  return /\bhello\b/.test(words) || (hasGreeting && (hasFullName || hasNova)) || hasFullName;
+}
+
 export default function AssistantShell() {
   const USE_REALTIME = true;
-  const DEBUG_MODE = true;
+  const DEBUG_MODE = false;
 
   const [open, setOpen] = useState(false);
   const openRef = useRef(false);
-  const [language, setLanguage] = useState<AssistantLanguage>('auto');
+  // Keep a predictable language for a new session. Auto-detecting every turn
+  // let short/misheard transcripts make the assistant switch languages.
+  const [language, setLanguage] = useState<AssistantLanguage>('en');
   const startedAtRef = useRef<number | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
@@ -296,6 +331,7 @@ export default function AssistantShell() {
       const rec = new SR();
       rec.continuous = true;
       rec.interimResults = true;
+      rec.maxAlternatives = 5;
       rec.lang = 'en-US';
 
       rec.onstart = () => {
@@ -314,10 +350,17 @@ export default function AssistantShell() {
           }
 
           let text = '';
+          const alternatives: string[] = [];
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const res = event.results[i];
             const t = res?.[0]?.transcript;
             if (typeof t === 'string') text += ` ${t}`;
+            for (let j = 0; j < (res?.length || 0); j++) {
+              const alternative = res?.[j]?.transcript;
+              if (typeof alternative === 'string' && alternative.trim()) {
+                alternatives.push(alternative.trim());
+              }
+            }
           }
           const norm = text.trim().toLowerCase();
           if (!norm) return;
@@ -333,10 +376,7 @@ export default function AssistantShell() {
             .replace(/ignova/g, 'eeknova')
             .replace(/eekn0va/g, 'eeknova');
 
-          const wantsOpen = /\b(hi|hey|hello|hay|he)\b/.test(norm2);
           const wantsClose = /\b(bye|by|exit)\b/.test(norm2);
-
-          const hasName = /\beeknova\b/.test(norm2) || /\bnova\b/.test(norm2);
 
           if (wantsClose && openRef.current) {
             const now = Date.now();
@@ -347,12 +387,8 @@ export default function AssistantShell() {
             return;
           }
 
-          const isHello = /\bhello\b/.test(norm2);
-          const isHiHey = /\b(hi|hey)\b/.test(norm2);
-          // Wake rules:
-          // - "hello" alone is enough
-          // - otherwise require "hi/hey" + name (eeknova/nova)
-          if (!(isHello || (isHiHey && hasName))) return;
+          const wakeCandidates = [norm2, ...alternatives];
+          if (!wakeCandidates.some(matchesWakePhrase)) return;
           const now = Date.now();
           if (now - lastWakeTriggerAtRef.current < 8000) return;
           lastWakeTriggerAtRef.current = now;
@@ -639,12 +675,14 @@ export default function AssistantShell() {
   const getLanguageInstruction = useCallback((lang: AssistantLanguage) => {
     if (lang === 'auto') {
       return [
-        'Reply in the same language the user is speaking/writing.',
-        'Do NOT ask the user to choose a language (do not offer options like English/Urdu/Hindi).',
-        'If the user explicitly says things like "speak in Hindi / Telugu / English" then lock to that language and continue replying in that language until the assistant session is closed.',
+        'Start in English and continue in English unless the user explicitly asks to switch to a named language.',
+        'If the user explicitly requests a language, switch immediately and keep using it until another explicit language request.',
+        'Do NOT change language because of a partial, noisy, or misheard transcript.',
       ].join(' ');
     }
-    if (lang === 'en') return 'Reply in English.';
+    if (lang === 'en') {
+      return 'Start in English. Honor an explicit request to switch to Urdu, Hindi, Spanish, or another named language, and keep that requested language until the user explicitly switches again.';
+    }
     if (lang === 'hi') return 'Reply in Hindi.';
     if (lang === 'te') return 'Reply in Telugu.';
     if (lang === 'ta') return 'Reply in Tamil.';
@@ -816,7 +854,10 @@ export default function AssistantShell() {
         dc.send(
           JSON.stringify({
             type: 'response.create',
-            response: { modalities: ['text', 'audio'] },
+            response: {
+              output_modalities: ['audio'],
+              instructions: 'Follow the session language policy: use English by default, but honor the user\'s latest explicit request to switch to a named language and continue in that language.',
+            },
           })
         );
         setIsProcessing(true);
@@ -867,6 +908,11 @@ export default function AssistantShell() {
         const msg = JSON.parse(raw) as any;
         if (msg?.type) {
           console.log('[Realtime] event:', msg.type);
+        }
+        if (msg?.type === 'error') {
+          const realtimeMessage = String(msg?.error?.message || 'Realtime configuration error');
+          console.error('[Realtime] server error:', realtimeMessage, msg?.error);
+          setError(realtimeMessage);
         }
         if (msg?.type === 'input_audio_buffer.speech_started') {
           setIsUserSpeaking(true);
@@ -1077,6 +1123,7 @@ export default function AssistantShell() {
       'If you are unsure about something specific, ask 1 short clarifying question and keep the conversation anchored to Eeknova.',
       'Reply in simple layman language.',
       'Use slow polite tone.',
+      'Start the session in English. Do not switch because of accent, background noise, or uncertain language detection. If the user explicitly asks to switch to Urdu, Hindi, Spanish, Telugu, Tamil, Kannada, or another named language, comply immediately and continue in that language until the user explicitly requests another language or English. Never claim that the session is locked to English.',
       getLanguageInstruction(language),
     ].join(' ');
 
@@ -1086,15 +1133,25 @@ export default function AssistantShell() {
           JSON.stringify({
             type: 'session.update',
             session: {
+              type: 'realtime',
               instructions,
-              input_audio_transcription: { model: 'whisper-1' },
-              // Let server VAD auto-create responses when user stops speaking
-              turn_detection: {
-                type: 'server_vad',
-                threshold: 0.12,
-                prefix_padding_ms: 500,
-                silence_duration_ms: 1200,
-                create_response: true,
+              audio: {
+                input: {
+                  transcription: {
+                    model: 'gpt-4o-mini-transcribe',
+                    prompt: 'Speech about Eeknova, Yoga, Zumba, Chess, fitness, poses, dashboard results, and explicit requests to switch languages.',
+                  },
+                  noise_reduction: { type: 'near_field' },
+                  // Let server VAD auto-create responses when user stops speaking.
+                  turn_detection: {
+                    type: 'server_vad',
+                    threshold: 0.12,
+                    prefix_padding_ms: 500,
+                    silence_duration_ms: 1200,
+                    create_response: true,
+                    interrupt_response: true,
+                  },
+                },
               },
             },
           })
@@ -1225,10 +1282,36 @@ export default function AssistantShell() {
           const url = URL.createObjectURL(audioBlob);
           const audio = new Audio(url);
           currentAudioRef.current = audio;
+          let avatarAudioFrame: number | null = null;
+          const stopAvatarLipSync = () => {
+            if (avatarAudioFrame !== null) {
+              cancelAnimationFrame(avatarAudioFrame);
+              avatarAudioFrame = null;
+            }
+            window.dispatchEvent(new CustomEvent('eeknova-assistant-audio', {
+              detail: { level: 0, isSpeaking: false, source: 'fallback-tts' },
+            }));
+          };
+          const driveAvatarLipSync = () => {
+            if (audio.paused || audio.ended) {
+              stopAvatarLipSync();
+              return;
+            }
+            // The fallback route does not expose a WebRTC track to analyse.
+            // Give the avatar a stable syllable envelope so it still speaks
+            // visibly instead of freezing when realtime is unavailable.
+            const level = 0.34 + 0.2 * Math.abs(Math.sin(audio.currentTime * 9));
+            window.dispatchEvent(new CustomEvent('eeknova-assistant-audio', {
+              detail: { level, isSpeaking: true, source: 'fallback-tts' },
+            }));
+            avatarAudioFrame = requestAnimationFrame(driveAvatarLipSync);
+          };
           audio.onended = () => {
+            stopAvatarLipSync();
             URL.revokeObjectURL(url);
           };
           await audio.play();
+          driveAvatarLipSync();
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Unexpected error');
